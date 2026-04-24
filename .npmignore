@@ -1,3 +1,4 @@
+.vscodeignore
 .vscode/**
 src/**
 tsconfig.json
@@ -7,9 +8,12 @@ tsconfig.webview.json
 2.png
 .prettierrc.js
 .gitignore
+.npmignore
+package-lock.json
 out/test/**
 **/*.map
 svn-graph-*.vsix
+media/history-panel-webview.bundle.js
 node_modules/@vscode/codicons/_iconCloud/**
 node_modules/@vscode/codicons/.devcontainer/**
 node_modules/@vscode/codicons/.husky/**

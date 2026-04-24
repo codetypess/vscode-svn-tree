@@ -199,18 +199,25 @@
   "scripts": {
     "vscode:prepublish": "npm run compile",
     "format": "prettier --write src",
-    "compile": "tsc -p ./",
+    "compile": "tsc -p ./ && npm run compile:webview",
+    "typecheck:webview": "tsc -p ./tsconfig.webview.json --noEmit",
+    "compile:webview": "npm run typecheck:webview && esbuild src/history/history-panel-webview.tsx --bundle --format=iife --platform=browser --target=es2022 --minify --outfile=media/history-panel-webview.js",
     "watch": "tsc -watch -p ./",
     "pretest": "npm run compile",
     "test": "node --test ./out/test/**/*.test.js"
   },
   "dependencies": {
     "@vscode/codicons": "^0.0.45",
-    "fast-xml-parser": "^4.5.1"
+    "fast-xml-parser": "^4.5.1",
+    "react": "^19.2.5",
+    "react-dom": "^19.2.5"
   },
   "devDependencies": {
     "@types/node": "^22.10.1",
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
     "@types/vscode": "^1.95.0",
+    "esbuild": "^0.28.0",
     "prettier": "^3.8.3",
     "typescript": "^5.7.2"
   }
