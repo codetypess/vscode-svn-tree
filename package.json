@@ -5,6 +5,15 @@
   "version": "0.0.1",
   "publisher": "codetypess",
   "license": "MIT",
+  "icon": "media/icon.png",
+  "homepage": "https://github.com/codetypess/vscode-svn-graph#readme",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/codetypess/vscode-svn-graph.git"
+  },
+  "bugs": {
+    "url": "https://github.com/codetypess/vscode-svn-graph/issues"
+  },
   "engines": {
     "vscode": "^1.95.0"
   },
@@ -12,6 +21,17 @@
     "SCM Providers",
     "Other"
   ],
+  "keywords": [
+    "svn",
+    "scm",
+    "source control",
+    "history",
+    "diff"
+  ],
+  "galleryBanner": {
+    "color": "#08111d",
+    "theme": "dark"
+  },
   "activationEvents": [
     "onStartupFinished"
   ],
@@ -138,6 +158,7 @@
     }
   },
   "scripts": {
+    "vscode:prepublish": "npm run compile",
     "format": "prettier --write src",
     "compile": "tsc -p ./",
     "watch": "tsc -watch -p ./",

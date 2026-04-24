@@ -65,9 +65,24 @@ export class SvnRepository implements vscode.Disposable {
         this.remoteChangesGroup.hideWhenEmpty = false;
         this.sourceControl.count = 0;
         this.sourceControl.statusBarCommands = [
-            { command: "svn-graph.refresh", title: "Refresh", arguments: [this] },
-            { command: "svn-graph.update", title: "Update", arguments: [this] },
-            { command: "svn-graph.open-history", title: "History", arguments: [this] },
+            {
+                command: "svn-graph.refresh",
+                title: "$(refresh)",
+                tooltip: "Refresh",
+                arguments: [this],
+            },
+            {
+                command: "svn-graph.update",
+                title: "$(cloud-download)",
+                tooltip: "Update",
+                arguments: [this],
+            },
+            {
+                command: "svn-graph.open-history",
+                title: "$(history)",
+                tooltip: "History",
+                arguments: [this],
+            },
         ];
     }
 

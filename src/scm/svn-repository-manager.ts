@@ -253,6 +253,48 @@ export class SvnRepositoryManager implements vscode.Disposable {
     }
 
     private async openDiff(arg: unknown): Promise<void> {
+        if (
+            typeof arg === "object" &&
+            arg !== null &&
+            "rootPath" in arg &&
+            "revision" in arg &&
+            "path" in arg &&
+            "action" in arg
+        ) {
+            const payload = arg as {
+                rootPath?: unknown;
+                revision?: unknown;
+                path?: unknown;
+                action?: unknown;
+            };
+
+            if (
+                typeof payload.rootPath !== "string" ||
+                typeof payload.revision !== "number" ||
+                typeof payload.path !== "string" ||
+                typeof payload.action !== "string"
+            ) {
+                return;
+            }
+
+            const repository = this.repositories.get(payload.rootPath);
+            if (!repository) {
+                return;
+            }
+
+            try {
+                await repository.openHistoryDiff(
+                    payload.revision,
+                    payload.path,
+                    payload.action
+                );
+            } catch (error) {
+                this.showError(error);
+            }
+
+            return;
+        }
+
         if (arg instanceof ScmResource) {
             try {
                 await arg.repository.openResourceDiff(arg);

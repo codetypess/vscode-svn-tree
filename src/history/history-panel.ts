@@ -51,6 +51,7 @@ export class HistoryPanel implements vscode.Disposable {
             vscode.ViewColumn.Active,
             {
                 enableScripts: true,
+                enableCommandUris: ["svn-graph.open-history-diff"],
                 retainContextWhenHidden: true,
                 localResourceRoots: [
                     this.extensionUri,
@@ -175,8 +176,13 @@ export class HistoryPanel implements vscode.Disposable {
         --details-border: var(--vscode-widget-border, var(--border));
         --row-hover: var(--vscode-list-hoverBackground, rgba(255, 255, 255, 0.04));
         --row-active: var(--vscode-list-inactiveSelectionBackground, rgba(255, 255, 255, 0.06));
-        --timeline: color-mix(in srgb, var(--vscode-textLink-foreground, #3794ff) 40%, transparent);
         --graph-node: var(--vscode-textLink-foreground, #3794ff);
+        --graph-column-width: 56px;
+        --graph-center: calc(var(--graph-column-width) / 2);
+        --graph-rail-width: 2px;
+        --graph-dot-size: 10px;
+        --timeline: color-mix(in srgb, var(--graph-node) 88%, transparent);
+        --timeline-strong: var(--graph-node);
         --added: var(--vscode-gitDecoration-addedResourceForeground, #81b88b);
         --modified: var(--vscode-gitDecoration-modifiedResourceForeground, #e2c08d);
         --deleted: var(--vscode-gitDecoration-deletedResourceForeground, #c74e39);
@@ -264,7 +270,7 @@ export class HistoryPanel implements vscode.Disposable {
       .table-header,
       .commit-row {
         display: grid;
-        grid-template-columns: 46px minmax(0, 1fr) 180px 140px 96px;
+        grid-template-columns: var(--graph-column-width) minmax(0, 1fr) 180px 140px 96px;
         gap: 10px;
         align-items: center;
       }
@@ -282,12 +288,24 @@ export class HistoryPanel implements vscode.Disposable {
         text-transform: uppercase;
       }
 
+      .table-header > :first-child {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        align-self: stretch;
+        color: var(--vscode-editor-foreground);
+        font-size: 13px;
+        font-weight: 700;
+        letter-spacing: 0.01em;
+        text-transform: none;
+      }
+
       .commit {
       }
 
       .commit-row {
         padding: 0 16px;
-        min-height: 32px;
+        min-height: 28px;
         cursor: pointer;
         transition: background-color 120ms ease;
       }
@@ -305,39 +323,49 @@ export class HistoryPanel implements vscode.Disposable {
         display: flex;
         align-items: center;
         justify-content: center;
-        min-height: 32px;
-        padding-left: 0;
+        min-height: 28px;
+        padding: 2px 0;
       }
 
-      .graph-column::before {
-        content: "";
+      .graph-stem {
         position: absolute;
-        left: 22px;
+        left: var(--graph-center);
+        transform: translateX(-50%);
+        width: var(--graph-rail-width);
+        border-radius: 999px;
+        background: linear-gradient(180deg, var(--timeline-strong), var(--timeline));
+      }
+
+      .graph-stem-top {
         top: -1px;
-        bottom: -1px;
-        width: 2px;
-        background: var(--timeline);
-        opacity: 0.85;
-      }
-
-      .commit:first-child .graph-column::before {
-        top: 50%;
-      }
-
-      .commit:last-child .graph-column::before {
         bottom: 50%;
+      }
+
+      .graph-stem-bottom {
+        top: 50%;
+        bottom: -1px;
+      }
+
+      .commit:first-child .graph-stem-top,
+      .commit:last-child .graph-stem-bottom {
+        display: none;
       }
 
       .graph-dot {
         position: relative;
         z-index: 1;
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        font-size: 12px;
-        color: var(--graph-node);
-        width: 12px;
-        height: 12px;
+        width: var(--graph-dot-size);
+        height: var(--graph-dot-size);
+        border-radius: 999px;
+        background: var(--graph-node);
+        border: 1px solid color-mix(in srgb, black 16%, var(--graph-node));
+        box-shadow: 0 0 0 1px color-mix(in srgb, black 20%, transparent);
+      }
+
+      .commit.expanded .graph-dot {
+        box-shadow:
+          0 0 0 1px color-mix(in srgb, black 20%, transparent),
+          0 0 0 4px color-mix(in srgb, var(--graph-node) 36%, transparent);
       }
 
       .description-cell {
@@ -348,17 +376,10 @@ export class HistoryPanel implements vscode.Disposable {
       .summary {
         display: flex;
         align-items: center;
-        gap: 6px;
+        gap: 4px;
         min-width: 0;
         white-space: nowrap;
-        min-height: 32px;
-      }
-
-      .summary-expander {
-        width: 12px;
-        font-size: 12px;
-        color: var(--muted);
-        flex: none;
+        min-height: 28px;
       }
 
       .summary-message {
@@ -393,7 +414,7 @@ export class HistoryPanel implements vscode.Disposable {
 
       .cell-text {
         padding: 0;
-        line-height: 32px;
+        line-height: 28px;
         font-size: 13px;
         white-space: nowrap;
         overflow: hidden;
@@ -406,7 +427,7 @@ export class HistoryPanel implements vscode.Disposable {
 
       .details-row {
         display: grid;
-        grid-template-columns: 46px minmax(0, 1fr);
+        grid-template-columns: var(--graph-column-width) minmax(0, 1fr);
         gap: 10px;
         padding: 0 16px 0;
       }
@@ -418,12 +439,13 @@ export class HistoryPanel implements vscode.Disposable {
       .details-rail::before {
         content: "";
         position: absolute;
-        left: 22px;
+        left: var(--graph-center);
+        transform: translateX(-50%);
         top: 0;
         bottom: 0;
-        width: 2px;
-        background: var(--timeline);
-        opacity: 0.85;
+        width: var(--graph-rail-width);
+        border-radius: 999px;
+        background: linear-gradient(180deg, var(--timeline-strong), var(--timeline));
       }
 
       .details-panel {
@@ -510,6 +532,19 @@ export class HistoryPanel implements vscode.Disposable {
 
       .change-row {
         background: transparent;
+        cursor: pointer;
+        color: inherit;
+        text-decoration: none;
+      }
+
+      .change-row:hover {
+        background: var(--row-hover);
+      }
+
+      .change-row:focus-visible {
+        outline: 1px solid var(--vscode-focusBorder, var(--graph-node));
+        outline-offset: -1px;
+        background: var(--row-hover);
       }
 
       .change-icon {
@@ -570,28 +605,19 @@ export class HistoryPanel implements vscode.Disposable {
         text-overflow: ellipsis;
       }
 
-      .diff-button {
-        padding: 1px 8px;
-        font-size: 11px;
-        color: var(--secondary-button-fg);
-        background: var(--secondary-button-bg);
-        border-color: var(--border);
-        line-height: 18px;
-      }
-
       .empty-state {
         padding: 28px 20px;
         color: var(--muted);
       }
 
       @media (max-width: 1160px) {
-        .table-header,
-        .commit-row {
-          grid-template-columns: 42px minmax(0, 1fr) 160px 120px 88px;
+        :root {
+          --graph-column-width: 48px;
         }
 
-        .details-row {
-          grid-template-columns: 42px minmax(0, 1fr);
+        .table-header,
+        .commit-row {
+          grid-template-columns: var(--graph-column-width) minmax(0, 1fr) 160px 120px 88px;
         }
 
         .details-panel {
@@ -600,12 +626,17 @@ export class HistoryPanel implements vscode.Disposable {
       }
 
       @media (max-width: 900px) {
+        :root {
+          --graph-column-width: 44px;
+          --graph-dot-size: 8px;
+        }
+
         .table-header {
           display: none;
         }
 
         .commit-row {
-          grid-template-columns: 42px minmax(0, 1fr) auto;
+          grid-template-columns: var(--graph-column-width) minmax(0, 1fr) auto;
           gap: 8px;
         }
 
@@ -620,10 +651,6 @@ export class HistoryPanel implements vscode.Disposable {
         .summary-meta,
         .summary-separator {
           display: none;
-        }
-
-        .details-row {
-          grid-template-columns: 42px minmax(0, 1fr);
         }
 
         .details-panel {
@@ -697,6 +724,31 @@ export class HistoryPanel implements vscode.Disposable {
       const search = document.getElementById('search');
       const refresh = document.getElementById('refresh');
       const rootPath = document.getElementById('root-path');
+
+      function getEventElement(eventTarget) {
+        if (eventTarget instanceof Element) {
+          return eventTarget;
+        }
+
+        if (eventTarget instanceof Node) {
+          return eventTarget.parentElement;
+        }
+
+        return null;
+      }
+
+      function createCommandUri(command, args) {
+        return 'command:' + command + '?' + encodeURIComponent(JSON.stringify(args));
+      }
+
+      function createHistoryDiffCommandUri(revision, path, action) {
+        return createCommandUri('svn-graph.open-history-diff', [{
+          rootPath: state.rootPath,
+          revision,
+          path,
+          action
+        }]);
+      }
 
       function formatDate(value, style = 'summary') {
         if (!value) {
@@ -897,16 +949,20 @@ export class HistoryPanel implements vscode.Disposable {
           }
 
           return \`
-            <div class="tree-row change-row" style="--depth: \${depth}">
-              <div class="tree-main change-body">
+            <a
+              class="tree-row change-row"
+              style="--depth: \${depth}"
+              title="Open diff"
+              href="\${escapeAttribute(createHistoryDiffCommandUri(revision, change.path, change.action))}"
+            >
+              <span class="tree-main change-body">
                 <span class="tree-icon change-icon codicon \${actionToIconClass(action)} action-\${String(change.action).toLowerCase()}" title="\${escapeAttribute(action)}"></span>
                 <span class="tree-label change-path">\${escape(node.name)}</span>
-              </div>
-              <div class="tree-actions">
+              </span>
+              <span class="tree-actions">
                 <span class="change-note">\${escape(noteSegments.join(' • '))}</span>
-                <button type="button" class="diff-button" data-diff-path="\${escapeAttribute(change.path)}" data-diff-action="\${escapeAttribute(change.action)}">Diff</button>
-              </div>
-            </div>
+              </span>
+            </a>
           \`;
         }).join('');
       }
@@ -951,11 +1007,12 @@ export class HistoryPanel implements vscode.Disposable {
               <article class="commit \${isExpanded ? 'expanded' : ''}" data-revision="\${entry.revision}">
                 <div class="commit-row" data-revision-toggle="\${entry.revision}">
                   <div class="graph-column">
-                    <span class="graph-dot codicon codicon-circle-filled"></span>
+                    <span class="graph-stem graph-stem-top" aria-hidden="true"></span>
+                    <span class="graph-dot" aria-hidden="true"></span>
+                    <span class="graph-stem graph-stem-bottom" aria-hidden="true"></span>
                   </div>
                   <div class="description-cell">
                     <div class="summary">
-                      <span class="summary-expander codicon \${isExpanded ? 'codicon-chevron-down' : 'codicon-chevron-right'}"></span>
                       <span class="summary-message">\${escape(summarizeMessage(entry.message))}</span>
                       <span class="summary-separator">•</span>
                       <span class="summary-meta">\${formatPathCount(entry.changes.length)}</span>
@@ -970,40 +1027,36 @@ export class HistoryPanel implements vscode.Disposable {
             \`;
           })
           .join('');
-
-        for (const element of historyList.querySelectorAll('[data-revision-toggle]')) {
-          element.addEventListener('click', () => {
-            const revision = Number(element.getAttribute('data-revision-toggle'));
-            state.expandedRevision = state.expandedRevision === revision ? undefined : revision;
-            renderList();
-          });
-        }
-
-        for (const element of historyList.querySelectorAll('[data-directory-toggle]')) {
-          element.addEventListener('click', () => {
-            const fullPath = element.getAttribute('data-directory-toggle');
-            const revision = Number(element.getAttribute('data-directory-revision'));
-            if (!fullPath || Number.isNaN(revision)) {
-              return;
-            }
-
-            toggleDirectoryCollapsed(revision, fullPath);
-            renderList();
-          });
-        }
-
-        for (const button of historyList.querySelectorAll('button[data-diff-path]')) {
-          button.addEventListener('click', (clickEvent) => {
-            clickEvent.stopPropagation();
-            vscode.postMessage({
-              type: 'open-diff',
-              revision: state.expandedRevision,
-              path: button.getAttribute('data-diff-path'),
-              action: button.getAttribute('data-diff-action')
-            });
-          });
-        }
       }
+
+      historyList.addEventListener('click', (clickEvent) => {
+        const target = getEventElement(clickEvent.target);
+        if (!target) {
+          return;
+        }
+
+        const directoryRow = target.closest('[data-directory-toggle]');
+        if (directoryRow) {
+          const fullPath = directoryRow.getAttribute('data-directory-toggle');
+          const revision = Number(directoryRow.getAttribute('data-directory-revision'));
+          if (!fullPath || Number.isNaN(revision)) {
+            return;
+          }
+
+          toggleDirectoryCollapsed(revision, fullPath);
+          renderList();
+          return;
+        }
+
+        const revisionRow = target.closest('[data-revision-toggle]');
+        if (!revisionRow) {
+          return;
+        }
+
+        const revision = Number(revisionRow.getAttribute('data-revision-toggle'));
+        state.expandedRevision = state.expandedRevision === revision ? undefined : revision;
+        renderList();
+      });
 
       function sync() {
         filterEntries();

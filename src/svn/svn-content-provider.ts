@@ -39,6 +39,9 @@ export class SvnContentProvider implements vscode.TextDocumentContentProvider {
             label: descriptor.label,
             source: descriptor.source,
         });
+        const uriPath = descriptor.label.startsWith("/")
+            ? descriptor.label
+            : `/${descriptor.label}`;
 
         if (descriptor.target) {
             params.set("target", descriptor.target);
@@ -50,7 +53,7 @@ export class SvnContentProvider implements vscode.TextDocumentContentProvider {
 
         return vscode.Uri.from({
             scheme: SvnContentProvider.scheme,
-            path: `/${descriptor.label}`,
+            path: uriPath,
             query: params.toString(),
         });
     }
