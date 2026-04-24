@@ -2,7 +2,7 @@
   "name": "svn-graph",
   "displayName": "SVN Graph",
   "description": "SVN source control and history viewer for Visual Studio Code.",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "publisher": "codetypess",
   "license": "MIT",
   "icon": "media/icon.png",

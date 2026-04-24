@@ -1,5 +1,7 @@
 import * as vscode from "vscode";
 import type { SvnRepository } from "../scm/svn-repository";
+import type { SvnLogPathChange } from "../svn/svn-types";
+
 function escapeHtml(value: string): string {
     return value
         .replaceAll("&", "&amp;")
@@ -16,6 +18,10 @@ function getNonce(): string {
         value += alphabet[Math.floor(Math.random() * alphabet.length)];
     }
     return value;
+}
+
+function isSvnLogPathAction(value: unknown): value is SvnLogPathChange["action"] {
+    return value === "A" || value === "D" || value === "M" || value === "R";
 }
 
 export class HistoryPanel implements vscode.Disposable {
@@ -84,6 +90,9 @@ export class HistoryPanel implements vscode.Disposable {
                     beforeRevision?: number;
                     path?: string;
                     action?: string;
+                    message?: string;
+                    changedPaths?: string[];
+                    changes?: SvnLogPathChange[];
                 };
 
                 if (payload.type === "refresh") {
@@ -133,14 +142,133 @@ export class HistoryPanel implements vscode.Disposable {
                 }
 
                 if (
+                    payload.type === "compare-with-working-copy" &&
+                    typeof payload.revision === "number" &&
+                    Array.isArray(payload.changes)
+                ) {
+                    await repository.compareRevisionWithWorkingCopy(
+                        payload.revision,
+                        payload.changes
+                    );
+                    return;
+                }
+
+                if (
+                    payload.type === "compare-with-previous-revision" &&
+                    typeof payload.revision === "number" &&
+                    Array.isArray(payload.changes)
+                ) {
+                    await repository.compareRevisionWithPreviousRevision(
+                        payload.revision,
+                        payload.changes
+                    );
+                    return;
+                }
+
+                if (
+                    payload.type === "compare-file-with-working-copy" &&
+                    typeof payload.revision === "number" &&
+                    typeof payload.path === "string" &&
+                    isSvnLogPathAction(payload.action)
+                ) {
+                    await repository.compareFileRevisionWithWorkingCopy(
+                        payload.revision,
+                        payload.path,
+                        payload.action
+                    );
+                    return;
+                }
+
+                if (
+                    payload.type === "compare-file-with-previous-revision" &&
+                    typeof payload.revision === "number" &&
+                    typeof payload.path === "string" &&
+                    isSvnLogPathAction(payload.action)
+                ) {
+                    await repository.compareFileRevisionWithPreviousRevision(
+                        payload.revision,
+                        payload.path,
+                        payload.action
+                    );
+                    return;
+                }
+
+                if (
+                    payload.type === "revert-to-revision" &&
+                    typeof payload.revision === "number"
+                ) {
+                    await repository.revertToRevision(payload.revision);
+                    return;
+                }
+
+                if (
+                    payload.type === "revert-changes-from-revision" &&
+                    typeof payload.revision === "number"
+                ) {
+                    await repository.revertChangesFromRevision(payload.revision);
+                    return;
+                }
+
+                if (
+                    payload.type === "copy-file-path" &&
+                    typeof payload.revision === "number" &&
+                    typeof payload.path === "string"
+                ) {
+                    await this.copyToClipboard(
+                        payload.path,
+                        `Copied file path for r${payload.revision}`
+                    );
+                    return;
+                }
+
+                if (
                     payload.type === "copy-revision" &&
                     typeof payload.revision === "number"
                 ) {
-                    await vscode.env.clipboard.writeText(`r${payload.revision}`);
-                    void vscode.window.setStatusBarMessage(
-                        `Copied revision r${payload.revision}`,
-                        2000
+                    await this.copyToClipboard(
+                        `r${payload.revision}`,
+                        `Copied revision r${payload.revision}`
                     );
+                    return;
+                }
+
+                if (
+                    payload.type === "copy-message" &&
+                    typeof payload.revision === "number" &&
+                    typeof payload.message === "string"
+                ) {
+                    await this.copyToClipboard(
+                        payload.message,
+                        `Copied commit message for r${payload.revision}`
+                    );
+                    return;
+                }
+
+                if (
+                    payload.type === "copy-changed-paths" &&
+                    typeof payload.revision === "number" &&
+                    Array.isArray(payload.changedPaths)
+                ) {
+                    await this.copyToClipboard(
+                        payload.changedPaths.join("\n"),
+                        `Copied changed paths for r${payload.revision}`
+                    );
+                    return;
+                }
+
+                if (
+                    payload.type === "create-branch" &&
+                    typeof payload.revision === "number"
+                ) {
+                    await repository.createBranchFromRevision(payload.revision);
+                    return;
+                }
+
+                if (
+                    payload.type === "create-tag" &&
+                    typeof payload.revision === "number"
+                ) {
+                    await repository.createTagFromRevision(payload.revision);
                 }
             },
             null,
@@ -181,6 +309,11 @@ export class HistoryPanel implements vscode.Disposable {
                 },
             });
         }
+    }
+
+    private async copyToClipboard(value: string, message: string): Promise<void> {
+        await vscode.env.clipboard.writeText(value);
+        void vscode.window.setStatusBarMessage(message, 2000);
     }
 
     private getWebviewHtml(webview: vscode.Webview, repository: SvnRepository): string {

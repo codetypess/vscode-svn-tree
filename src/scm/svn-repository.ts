@@ -5,6 +5,7 @@ import { SvnContentProvider } from "../svn/svn-content-provider";
 import { SvnService } from "../svn/svn-service";
 import type {
     SvnLogPage,
+    SvnLogPathChange,
     SvnStatusEntry,
     SvnWorkingCopyInfo,
 } from "../svn/svn-types";
@@ -13,6 +14,8 @@ import { ScmResource } from "./scm-resource";
 interface RefreshOptions {
     forceRemote?: boolean;
 }
+
+type RepositoryReferenceKind = "branch" | "tag";
 
 function posixJoin(left: string, right: string): string {
     return `${left.replace(/\/+$/, "")}/${right.replace(/\\/g, "/").replace(/^\/+/, "")}`;
@@ -40,13 +43,22 @@ function isRemoteChange(status: SvnStatusEntry): boolean {
     return !!status.reposStatus && status.reposStatus !== "none";
 }
 
+function normalizeRepositoryPath(value: string): string {
+    const normalized = value.replace(/\\/g, "/").replace(/^\/+|\/+$/g, "");
+    return normalized ? `/${normalized}` : "/";
+}
+
+function splitRepositoryPath(value: string): string[] {
+    const normalized = normalizeRepositoryPath(value);
+    return normalized === "/" ? [] : normalized.slice(1).split("/");
+}
+
 function getCommitTargetLabel(repositoryRelativePath: string): string {
-    const normalizedPath = repositoryRelativePath.replace(/^\/+|\/+$/g, "");
-    if (!normalizedPath) {
+    const segments = splitRepositoryPath(repositoryRelativePath);
+    if (segments.length === 0) {
         return "/";
     }
 
-    const segments = normalizedPath.split("/");
     const trunkIndex = segments.indexOf("trunk");
     if (trunkIndex !== -1) {
         return "trunk";
@@ -62,13 +74,62 @@ function getCommitTargetLabel(repositoryRelativePath: string): string {
         return segments.slice(tagsIndex, tagsIndex + 2).join("/");
     }
 
-    return segments.at(-1) ?? normalizedPath;
+    return segments.at(-1) ?? "/";
 }
 
 function getCommitInputPlaceholder(repositoryRelativePath: string): string {
     const submitShortcut = process.platform === "darwin" ? "⌘Enter" : "Ctrl+Enter";
     const targetLabel = getCommitTargetLabel(repositoryRelativePath);
     return `Message (${submitShortcut} to commit on "${targetLabel}")`;
+}
+
+function getReferenceLayoutRoot(repositoryRelativePath: string): string {
+    const segments = splitRepositoryPath(repositoryRelativePath);
+    const trunkIndex = segments.indexOf("trunk");
+    if (trunkIndex !== -1) {
+        return normalizeRepositoryPath(segments.slice(0, trunkIndex).join("/"));
+    }
+
+    const branchesIndex = segments.indexOf("branches");
+    if (branchesIndex !== -1) {
+        return normalizeRepositoryPath(segments.slice(0, branchesIndex).join("/"));
+    }
+
+    const tagsIndex = segments.indexOf("tags");
+    if (tagsIndex !== -1) {
+        return normalizeRepositoryPath(segments.slice(0, tagsIndex).join("/"));
+    }
+
+    return "/";
+}
+
+function getReferenceLocationLabel(kind: RepositoryReferenceKind): string {
+    return kind === "branch" ? "branches" : "tags";
+}
+
+function buildReferenceDestinationPath(
+    repositoryRelativePath: string,
+    kind: RepositoryReferenceKind,
+    name: string
+): string {
+    const rootSegments = splitRepositoryPath(getReferenceLayoutRoot(repositoryRelativePath));
+    const nameSegments = name
+        .replace(/\\/g, "/")
+        .split("/")
+        .map((segment) => segment.trim())
+        .filter(Boolean);
+
+    return normalizeRepositoryPath(
+        [...rootSegments, getReferenceLocationLabel(kind), ...nameSegments].join("/")
+    );
+}
+
+function getReferenceNameSuggestion(repositoryRelativePath: string, revision: number): string {
+    const baseLabel = getCommitTargetLabel(repositoryRelativePath)
+        .replace(/[\\/]+/g, "-")
+        .replace(/\s+/g, "-");
+    const normalizedBase = baseLabel && baseLabel !== "/" ? baseLabel : "revision";
+    return `${normalizedBase}-r${revision}`;
 }
 
 export class SvnRepository implements vscode.Disposable {
@@ -244,6 +305,136 @@ export class SvnRepository implements vscode.Disposable {
         await this.revealCreatedPath(
             destinationPath,
             `Exported r${revision} to ${destinationPath}.`
+        );
+    }
+
+    public async compareRevisionWithWorkingCopy(
+        revision: number,
+        changes: SvnLogPathChange[]
+    ): Promise<void> {
+        const change = await this.pickHistoryFileChange(
+            revision,
+            changes,
+            "compare with the working copy"
+        );
+        if (!change) {
+            return;
+        }
+
+        await this.compareRevisionFileWithWorkingCopy(revision, change);
+    }
+
+    public async compareFileRevisionWithWorkingCopy(
+        revision: number,
+        repositoryPath: string,
+        action: SvnLogPathChange["action"]
+    ): Promise<void> {
+        const change: SvnLogPathChange = {
+            action,
+            kind: "file",
+            path: repositoryPath,
+        };
+
+        await this.compareRevisionFileWithWorkingCopy(revision, change);
+    }
+
+    public async compareRevisionWithPreviousRevision(
+        revision: number,
+        changes: SvnLogPathChange[]
+    ): Promise<void> {
+        const change = await this.pickHistoryFileChange(
+            revision,
+            changes,
+            "compare with the previous revision"
+        );
+        if (!change) {
+            return;
+        }
+
+        await this.openHistoryDiff(revision, change.path, change.action);
+    }
+
+    public async compareFileRevisionWithPreviousRevision(
+        revision: number,
+        repositoryPath: string,
+        action: SvnLogPathChange["action"]
+    ): Promise<void> {
+        await this.openHistoryDiff(revision, repositoryPath, action);
+    }
+
+    public async createBranchFromRevision(revision: number): Promise<void> {
+        await this.createRepositoryReferenceFromRevision("branch", revision);
+    }
+
+    public async createTagFromRevision(revision: number): Promise<void> {
+        await this.createRepositoryReferenceFromRevision("tag", revision);
+    }
+
+    public async revertToRevision(revision: number): Promise<void> {
+        const confirmed = await this.confirmReverseMerge(
+            "revert-to-revision",
+            revision
+        );
+        if (!confirmed) {
+            return;
+        }
+
+        const sourceUrl = buildRepositoryUrl(
+            this.info.repositoryRoot,
+            this.info.repositoryRelativePath
+        );
+
+        await vscode.window.withProgress(
+            {
+                location: vscode.ProgressLocation.Notification,
+                title: `Reverting working copy to r${revision}...`,
+            },
+            async () => {
+                await this.svnService.reverseMergeToRevision(
+                    this.rootPath,
+                    sourceUrl,
+                    revision
+                );
+            }
+        );
+
+        await this.refresh();
+        void vscode.window.showInformationMessage(
+            `Reverted working copy to r${revision}. Review the changes and commit when ready.`
+        );
+    }
+
+    public async revertChangesFromRevision(revision: number): Promise<void> {
+        const confirmed = await this.confirmReverseMerge(
+            "revert-changes-from-revision",
+            revision
+        );
+        if (!confirmed) {
+            return;
+        }
+
+        const sourceUrl = buildRepositoryUrl(
+            this.info.repositoryRoot,
+            this.info.repositoryRelativePath
+        );
+
+        await vscode.window.withProgress(
+            {
+                location: vscode.ProgressLocation.Notification,
+                title: `Reverting changes from r${revision}...`,
+            },
+            async () => {
+                await this.svnService.reverseMergeRevision(
+                    this.rootPath,
+                    sourceUrl,
+                    revision
+                );
+            }
+        );
+
+        await this.refresh();
+        void vscode.window.showInformationMessage(
+            `Reverted changes from r${revision}. Review the changes and commit when ready.`
         );
     }
 
@@ -442,6 +633,129 @@ export class SvnRepository implements vscode.Disposable {
         );
     }
 
+    private async pickHistoryFileChange(
+        revision: number,
+        changes: SvnLogPathChange[],
+        actionLabel: string
+    ): Promise<SvnLogPathChange | undefined> {
+        const fileChanges = changes.filter((change) => change.kind === "file");
+        if (fileChanges.length === 0) {
+            void vscode.window.showInformationMessage(
+                `Revision r${revision} has no file changes to ${actionLabel}.`
+            );
+            return undefined;
+        }
+
+        if (fileChanges.length === 1) {
+            return fileChanges[0];
+        }
+
+        const selection = await vscode.window.showQuickPick(
+            fileChanges.map((change) => ({
+                label: nodePath.posix.basename(change.path),
+                description: change.path,
+                detail: `${this.describeHistoryChangeAction(change.action)} in r${revision}`,
+                change,
+            })),
+            {
+                placeHolder: `Select a file to ${actionLabel}`,
+            }
+        );
+
+        return selection?.change;
+    }
+
+    private async compareRevisionFileWithWorkingCopy(
+        revision: number,
+        change: SvnLogPathChange
+    ): Promise<void> {
+        const absolutePath = this.getWorkingCopyPathForRepositoryPath(change.path);
+        if (!absolutePath) {
+            void vscode.window.showWarningMessage(
+                `Cannot map ${change.path} into the current working copy.`
+            );
+            return;
+        }
+
+        const repositoryUrl = buildRepositoryUrl(this.info.repositoryRoot, change.path);
+        const workingCopyExists = await this.pathExists(absolutePath);
+        const relativeLabel =
+            nodePath.relative(this.rootPath, absolutePath) || nodePath.basename(absolutePath);
+        const leftUri =
+            change.action === "D"
+                ? this.contentProvider.createUri({
+                      label: `${relativeLabel} (r${revision}, deleted)`,
+                      source: "empty",
+                  })
+                : this.contentProvider.createUri({
+                      label: `${relativeLabel} (r${revision})`,
+                      source: "svn",
+                      target: repositoryUrl,
+                      revision: String(revision),
+                  });
+        const rightUri = workingCopyExists
+            ? vscode.Uri.file(absolutePath)
+            : this.contentProvider.createUri({
+                  label: `${relativeLabel} (working copy missing)`,
+                  source: "empty",
+              });
+
+        await vscode.commands.executeCommand(
+            "vscode.diff",
+            leftUri,
+            rightUri,
+            `${relativeLabel} (r${revision} vs working copy)`
+        );
+    }
+
+    private describeHistoryChangeAction(action: SvnLogPathChange["action"]): string {
+        if (action === "A") {
+            return "Added";
+        }
+
+        if (action === "D") {
+            return "Deleted";
+        }
+
+        if (action === "R") {
+            return "Replaced";
+        }
+
+        return "Modified";
+    }
+
+    private getWorkingCopyPathForRepositoryPath(repositoryPath: string): string | undefined {
+        const workingCopyRepositoryPath = normalizeRepositoryPath(this.info.repositoryRelativePath);
+        const targetRepositoryPath = normalizeRepositoryPath(repositoryPath);
+
+        if (workingCopyRepositoryPath === "/") {
+            const relativeSegments = splitRepositoryPath(targetRepositoryPath);
+            return relativeSegments.length === 0
+                ? this.rootPath
+                : nodePath.join(this.rootPath, ...relativeSegments);
+        }
+
+        if (targetRepositoryPath === workingCopyRepositoryPath) {
+            return this.rootPath;
+        }
+
+        if (!targetRepositoryPath.startsWith(`${workingCopyRepositoryPath}/`)) {
+            return undefined;
+        }
+
+        const relativePath = targetRepositoryPath.slice(workingCopyRepositoryPath.length + 1);
+        return nodePath.join(this.rootPath, ...relativePath.split("/"));
+    }
+
+    private async pathExists(targetPath: string): Promise<boolean> {
+        try {
+            await vscode.workspace.fs.stat(vscode.Uri.file(targetPath));
+            return true;
+        } catch {
+            return false;
+        }
+    }
+
     private async promptRevisionDestination(
         operation: "checkout" | "export",
         revision: number
@@ -512,5 +826,121 @@ export class SvnRepository implements vscode.Disposable {
         }
 
         await vscode.commands.executeCommand("revealFileInOS", vscode.Uri.file(destinationPath));
+    }
+
+    private async createRepositoryReferenceFromRevision(
+        kind: RepositoryReferenceKind,
+        revision: number
+    ): Promise<void> {
+        const destinationPath = await this.promptReferenceDestination(kind, revision);
+        if (!destinationPath) {
+            return;
+        }
+
+        const sourceUrl = this.resolveRepositoryUrl(this.rootPath);
+        const destinationUrl = buildRepositoryUrl(this.info.repositoryRoot, destinationPath);
+        const message = `Create ${kind} ${destinationPath} from r${revision}`;
+
+        await vscode.window.withProgress(
+            {
+                location: vscode.ProgressLocation.Notification,
+                title: `Creating ${kind} from r${revision}...`,
+            },
+            async () => {
+                await this.svnService.copy(
+                    sourceUrl,
+                    destinationUrl,
+                    message,
+                    String(revision)
+                );
+            }
+        );
+
+        const selection = await vscode.window.showInformationMessage(
+            `Created ${kind} from r${revision}: ${destinationPath}`,
+            "Copy Path"
+        );
+        if (selection === "Copy Path") {
+            await vscode.env.clipboard.writeText(destinationPath);
+            void vscode.window.setStatusBarMessage(`Copied ${kind} path ${destinationPath}`, 2000);
+        }
+    }
+
+    private async promptReferenceDestination(
+        kind: RepositoryReferenceKind,
+        revision: number
+    ): Promise<string | undefined> {
+        const locationLabel = getReferenceLocationLabel(kind);
+        const layoutRoot = getReferenceLayoutRoot(this.info.repositoryRelativePath);
+        const locationPath = normalizeRepositoryPath(
+            [layoutRoot, locationLabel].filter((segment) => segment !== "/").join("/")
+        );
+        const referencePath = await vscode.window.showInputBox({
+            prompt: `New ${kind} path under ${locationPath} for r${revision}`,
+            value: getReferenceNameSuggestion(this.info.repositoryRelativePath, revision),
+            validateInput: (value) => {
+                const normalizedValue = value.trim().replace(/\\/g, "/");
+                if (!normalizedValue) {
+                    return `${kind === "branch" ? "Branch" : "Tag"} name is required.`;
+                }
+
+                if (normalizedValue.startsWith("/")) {
+                    return `Use a path relative to ${locationPath}.`;
+                }
+
+                if (normalizedValue.split("/").some((segment) => segment.trim().length === 0)) {
+                    return "Avoid empty path segments.";
+                }
+
+                return undefined;
+            },
+        });
+        const trimmedReferencePath = referencePath?.trim();
+        if (!trimmedReferencePath) {
+            return undefined;
+        }
+
+        return buildReferenceDestinationPath(
+            this.info.repositoryRelativePath,
+            kind,
+            trimmedReferencePath
+        );
+    }
+
+    private async confirmReverseMerge(
+        mode: "revert-to-revision" | "revert-changes-from-revision",
+        revision: number
+    ): Promise<boolean> {
+        const hasLocalChanges =
+            this.changesGroup.resourceStates.length > 0 ||
+            this.unversionedGroup.resourceStates.length > 0;
+        const message =
+            mode === "revert-to-revision"
+                ? `Revert working copy to r${revision}?`
+                : `Revert changes from r${revision}?`;
+        const detailLines = [
+            mode === "revert-to-revision"
+                ? `This will reverse-merge all revisions newer than r${revision} into the current working copy.`
+                : `This will reverse-merge only revision r${revision} into the current working copy.`,
+            "A clean, up-to-date working copy is recommended.",
+            "The operation only changes your working copy. You still need to commit the result.",
+        ];
+
+        if (hasLocalChanges) {
+            detailLines.push(
+                "This working copy already has local changes, so conflicts are more likely."
+            );
+        }
+
+        const selection = await vscode.window.showWarningMessage(
+            message,
+            {
+                modal: true,
+                detail: detailLines.join("\n"),
+            },
+            "Continue"
+        );
+
+        return selection === "Continue";
     }
 }

@@ -89,6 +89,43 @@ export class SvnService {
         await this.run(args);
     }
 
+    public async copy(
+        source: string,
+        destination: string,
+        message: string,
+        revision?: string
+    ): Promise<void> {
+        const args = ["copy"];
+        if (revision) {
+            args.push("-r", revision);
+        }
+
+        args.push("-m", message, source, destination);
+        await this.run(args);
+    }
+
+    public async reverseMergeRevision(
+        rootPath: string,
+        source: string,
+        revision: number
+    ): Promise<void> {
+        await this.run(
+            ["merge", "--accept", "postpone", "-c", `-${revision}`, source, "."],
+            { cwd: rootPath }
+        );
+    }
+
+    public async reverseMergeToRevision(
+        rootPath: string,
+        source: string,
+        revision: number
+    ): Promise<void> {
+        await this.run(
+            ["merge", "--accept", "postpone", "-r", `HEAD:${revision}`, source, "."],
+            { cwd: rootPath }
+        );
+    }
+
     public async cleanup(rootPath: string): Promise<void> {
         await this.run(["cleanup", "."], { cwd: rootPath });
     }

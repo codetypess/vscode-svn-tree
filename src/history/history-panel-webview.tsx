@@ -2,7 +2,24 @@ import React from "react";
 import { createRoot } from "react-dom/client";
 
 type HistoryViewStyle = "summary" | "detail";
-type ContextActionType = "checkout-revision" | "export-revision" | "copy-revision";
+type ContextActionType =
+    | "checkout-revision"
+    | "export-revision"
+    | "compare-with-working-copy"
+    | "compare-with-previous-revision"
+    | "revert-to-revision"
+    | "revert-changes-from-revision"
+    | "copy-revision"
+    | "copy-message"
+    | "copy-changed-paths"
+    | "create-branch"
+    | "create-tag";
+
+type FileContextActionType =
+    | "open-file-diff"
+    | "compare-file-with-working-copy"
+    | "compare-file-with-previous-revision"
+    | "copy-file-path";
 
 interface HistoryBootstrap {
     repositoryLabel: string;
@@ -59,15 +76,59 @@ type HistoryRequestMessage =
           beforeRevision: number;
       }
     | {
-          type: ContextActionType;
+          type:
+              | "checkout-revision"
+              | "export-revision"
+              | "revert-to-revision"
+              | "revert-changes-from-revision"
+              | "copy-revision"
+              | "create-branch"
+              | "create-tag";
           revision: number;
+      }
+    | {
+          type: "open-diff" | "compare-file-with-working-copy" | "compare-file-with-previous-revision";
+          revision: number;
+          path: string;
+          action: string;
+      }
+    | {
+          type: "copy-file-path";
+          revision: number;
+          path: string;
+      }
+    | {
+          type: "compare-with-working-copy" | "compare-with-previous-revision";
+          revision: number;
+          changes: HistoryChange[];
+      }
+    | {
+          type: "copy-message";
+          revision: number;
+          message: string;
+      }
+    | {
+          type: "copy-changed-paths";
+          revision: number;
+          changedPaths: string[];
       };
 
-interface ContextMenuState {
+interface RevisionContextMenuState {
+    kind: "revision";
     revision: number;
     x: number;
     y: number;
 }
+
+interface FileContextMenuState {
+    kind: "file";
+    revision: number;
+    x: number;
+    y: number;
+    change: HistoryChange;
+}
+
+type ContextMenuState = RevisionContextMenuState | FileContextMenuState;
 
 type CollapsedDirectories = Record<string, boolean>;
 
@@ -107,6 +168,12 @@ interface ChangeTreeNodeProps {
     rootPath: string;
     collapsedDirectories: CollapsedDirectories;
     onToggleDirectory: (revision: number, fullPath: string) => void;
+    onOpenFileContextMenu: (
+        revision: number,
+        change: HistoryChange,
+        clientX: number,
+        clientY: number
+    ) => void;
 }
 
 interface CommitDetailsProps {
@@ -114,13 +181,20 @@ interface CommitDetailsProps {
     rootPath: string;
     collapsedDirectories: CollapsedDirectories;
     onToggleDirectory: (revision: number, fullPath: string) => void;
+    onOpenFileContextMenu: (
+        revision: number,
+        change: HistoryChange,
+        clientX: number,
+        clientY: number
+    ) => void;
 }
 
 interface ContextMenuProps {
     menu?: ContextMenuState;
     entry?: HistoryEntry;
     onClose: () => void;
-    onAction: (type: ContextActionType, revision: number) => void;
+    onAction: (type: ContextActionType, entry: HistoryEntry) => void;
+    onFileAction: (type: FileContextActionType, revision: number, change: HistoryChange) => void;
 }
 
 interface MenuPosition {
@@ -398,6 +472,7 @@ function isHistoryErrorMessage(
                               rootPath: props.rootPath,
                               collapsedDirectories: props.collapsedDirectories,
                               onToggleDirectory: props.onToggleDirectory,
+                              onOpenFileContextMenu: props.onOpenFileContextMenu,
                           });
                       })
             );
@@ -435,6 +510,15 @@ function isHistoryErrorMessage(
                     change.path,
                     change.action
                 ),
+                onContextMenu: function (event: React.MouseEvent<HTMLAnchorElement>) {
+                    event.preventDefault();
+                    props.onOpenFileContextMenu(
+                        props.revision,
+                        change,
+                        event.clientX,
+                        event.clientY
+                    );
+                },
             },
             h(
                 "span",
@@ -479,6 +563,7 @@ function isHistoryErrorMessage(
                           rootPath: props.rootPath,
                           collapsedDirectories: props.collapsedDirectories,
                           onToggleDirectory: props.onToggleDirectory,
+                          onOpenFileContextMenu: props.onOpenFileContextMenu,
                       });
                   });
 
@@ -542,6 +627,106 @@ function isHistoryErrorMessage(
         }
 
         const entry = props.entry;
+        if (props.menu.kind === "file") {
+            const change = props.menu.change;
+
+            return h(
+                "div",
+                { className: "context-menu-root" },
+                h("div", {
+                    className: "context-menu-backdrop",
+                    onClick: props.onClose,
+                }),
+                h(
+                    "div",
+                    {
+                        className: "context-menu",
+                        style: { left: props.menu.x + "px", top: props.menu.y + "px" },
+                    },
+                    h(
+                        "div",
+                        { className: "context-menu-header" },
+                        h("div", { className: "context-menu-title" }, change.path),
+                        h(
+                            "div",
+                            { className: "context-menu-subtitle" },
+                            "r",
+                            entry.revision,
+                            " • ",
+                            summarizeMessage(entry.message)
+                        )
+                    ),
+                    h(
+                        "div",
+                        { className: "context-menu-actions" },
+                        h(
+                            "button",
+                            {
+                                className: "context-menu-item",
+                                type: "button",
+                                onClick: function () {
+                                    props.onFileAction("open-file-diff", entry.revision, change);
+                                },
+                            },
+                            h("span", { className: "codicon codicon-diff", "aria-hidden": "true" }),
+                            h("span", { className: "context-menu-label" }, "Open Diff")
+                        ),
+                        h(
+                            "button",
+                            {
+                                className: "context-menu-item",
+                                type: "button",
+                                onClick: function () {
+                                    props.onFileAction(
+                                        "compare-file-with-working-copy",
+                                        entry.revision,
+                                        change
+                                    );
+                                },
+                            },
+                            h("span", { className: "codicon codicon-diff", "aria-hidden": "true" }),
+                            h("span", { className: "context-menu-label" }, "Compare With Working Copy")
+                        ),
+                        h(
+                            "button",
+                            {
+                                className: "context-menu-item",
+                                type: "button",
+                                onClick: function () {
+                                    props.onFileAction(
+                                        "compare-file-with-previous-revision",
+                                        entry.revision,
+                                        change
+                                    );
+                                },
+                            },
+                            h("span", {
+                                className: "codicon codicon-git-compare",
+                                "aria-hidden": "true",
+                            }),
+                            h(
+                                "span",
+                                { className: "context-menu-label" },
+                                "Compare With Previous Revision"
+                            )
+                        ),
+                        h("div", { className: "context-menu-separator", "aria-hidden": "true" }),
+                        h(
+                            "button",
+                            {
+                                className: "context-menu-item",
+                                type: "button",
+                                onClick: function () {
+                                    props.onFileAction("copy-file-path", entry.revision, change);
+                                },
+                            },
+                            h("span", { className: "codicon codicon-copy", "aria-hidden": "true" }),
+                            h("span", { className: "context-menu-label" }, "Copy File Path")
+                        )
+                    )
+                )
+            );
+        }
 
         return h(
             "div",
@@ -575,7 +760,7 @@ function isHistoryErrorMessage(
                             className: "context-menu-item",
                             type: "button",
                             onClick: function () {
-                                props.onAction("checkout-revision", entry.revision);
+                                props.onAction("checkout-revision", entry);
                             },
                         },
                         h("span", { className: "codicon codicon-repo-clone", "aria-hidden": "true" }),
@@ -587,7 +772,7 @@ function isHistoryErrorMessage(
                             className: "context-menu-item",
                             type: "button",
                             onClick: function () {
-                                props.onAction("export-revision", entry.revision);
+                                props.onAction("export-revision", entry);
                             },
                         },
                         h("span", {
@@ -596,6 +781,54 @@ function isHistoryErrorMessage(
                         }),
                         h("span", { className: "context-menu-label" }, "Export This Revision")
                     ),
+                    h(
+                        "button",
+                        {
+                            className: "context-menu-item",
+                            type: "button",
+                            onClick: function () {
+                                props.onAction("compare-with-working-copy", entry);
+                            },
+                        },
+                        h("span", { className: "codicon codicon-diff", "aria-hidden": "true" }),
+                        h("span", { className: "context-menu-label" }, "Compare With Working Copy")
+                    ),
+                    h(
+                        "button",
+                        {
+                            className: "context-menu-item",
+                            type: "button",
+                            onClick: function () {
+                                props.onAction("compare-with-previous-revision", entry);
+                            },
+                        },
+                        h("span", { className: "codicon codicon-git-compare", "aria-hidden": "true" }),
+                        h("span", { className: "context-menu-label" }, "Compare With Previous Revision")
+                    ),
+                    h(
+                        "button",
+                        {
+                            className: "context-menu-item",
+                            type: "button",
+                            onClick: function () {
+                                props.onAction("revert-to-revision", entry);
+                            },
+                        },
+                        h("span", { className: "codicon codicon-history", "aria-hidden": "true" }),
+                        h("span", { className: "context-menu-label" }, "Revert To This Revision")
+                    ),
+                    h(
+                        "button",
+                        {
+                            className: "context-menu-item",
+                            type: "button",
+                            onClick: function () {
+                                props.onAction("revert-changes-from-revision", entry);
+                            },
+                        },
+                        h("span", { className: "codicon codicon-discard", "aria-hidden": "true" }),
+                        h("span", { className: "context-menu-label" }, "Revert Changes From This Revision")
+                    ),
                     h("div", { className: "context-menu-separator", "aria-hidden": "true" }),
                     h(
                         "button",
@@ -603,11 +836,63 @@ function isHistoryErrorMessage(
                             className: "context-menu-item",
                             type: "button",
                             onClick: function () {
-                                props.onAction("copy-revision", entry.revision);
+                                props.onAction("create-branch", entry);
+                            },
+                        },
+                        h("span", {
+                            className: "codicon codicon-git-branch",
+                            "aria-hidden": "true",
+                        }),
+                        h("span", { className: "context-menu-label" }, "Create Branch From This Revision")
+                    ),
+                    h(
+                        "button",
+                        {
+                            className: "context-menu-item",
+                            type: "button",
+                            onClick: function () {
+                                props.onAction("create-tag", entry);
+                            },
+                        },
+                        h("span", { className: "codicon codicon-tag", "aria-hidden": "true" }),
+                        h("span", { className: "context-menu-label" }, "Create Tag From This Revision")
+                    ),
+                    h("div", { className: "context-menu-separator", "aria-hidden": "true" }),
+                    h(
+                        "button",
+                        {
+                            className: "context-menu-item",
+                            type: "button",
+                            onClick: function () {
+                                props.onAction("copy-revision", entry);
                             },
                         },
                         h("span", { className: "codicon codicon-copy", "aria-hidden": "true" }),
                         h("span", { className: "context-menu-label" }, "Copy Revision Number")
+                    ),
+                    h(
+                        "button",
+                        {
+                            className: "context-menu-item",
+                            type: "button",
+                            onClick: function () {
+                                props.onAction("copy-message", entry);
+                            },
+                        },
+                        h("span", { className: "codicon codicon-note", "aria-hidden": "true" }),
+                        h("span", { className: "context-menu-label" }, "Copy Commit Message")
+                    ),
+                    h(
+                        "button",
+                        {
+                            className: "context-menu-item",
+                            type: "button",
+                            onClick: function () {
+                                props.onAction("copy-changed-paths", entry);
+                            },
+                        },
+                        h("span", { className: "codicon codicon-list-unordered", "aria-hidden": "true" }),
+                        h("span", { className: "context-menu-label" }, "Copy Changed Paths")
                     )
                 )
             )
@@ -835,12 +1120,13 @@ function isHistoryErrorMessage(
             });
         }
 
-        function openContextMenu(revision: number, clientX: number, clientY: number): void {
+        function openRevisionContextMenu(revision: number, clientX: number, clientY: number): void {
             const position = getMenuPosition(clientX, clientY);
             setState(function (previous) {
                 return {
                     ...previous,
                     contextMenu: {
+                        kind: "revision",
                         revision: revision,
                         x: position.x,
                         y: position.y,
@@ -849,11 +1135,108 @@ function isHistoryErrorMessage(
             });
         }
 
-        function triggerContextAction(type: ContextActionType, revision: number): void {
+        function openFileContextMenu(
+            revision: number,
+            change: HistoryChange,
+            clientX: number,
+            clientY: number
+        ): void {
+            const position = getMenuPosition(clientX, clientY);
+            setState(function (previous) {
+                return {
+                    ...previous,
+                    contextMenu: {
+                        kind: "file",
+                        revision: revision,
+                        x: position.x,
+                        y: position.y,
+                        change: change,
+                    },
+                };
+            });
+        }
+
+        function triggerContextAction(type: ContextActionType, entry: HistoryEntry): void {
             hideContextMenu();
+            if (
+                type === "compare-with-working-copy" ||
+                type === "compare-with-previous-revision"
+            ) {
+                vscode.postMessage({
+                    type: type,
+                    revision: entry.revision,
+                    changes: entry.changes,
+                });
+                return;
+            }
+
+            if (type === "copy-message") {
+                vscode.postMessage({
+                    type: "copy-message",
+                    revision: entry.revision,
+                    message: entry.message,
+                });
+                return;
+            }
+
+            if (type === "copy-changed-paths") {
+                vscode.postMessage({
+                    type: "copy-changed-paths",
+                    revision: entry.revision,
+                    changedPaths: entry.changes.map(function (change) {
+                        return `${change.action} ${change.path}`;
+                    }),
+                });
+                return;
+            }
+
             vscode.postMessage({
                 type: type,
+                revision: entry.revision,
+            });
+        }
+
+        function triggerFileContextAction(
+            type: FileContextActionType,
+            revision: number,
+            change: HistoryChange
+        ): void {
+            hideContextMenu();
+
+            if (type === "open-file-diff") {
+                vscode.postMessage({
+                    type: "open-diff",
+                    revision: revision,
+                    path: change.path,
+                    action: change.action,
+                });
+                return;
+            }
+
+            if (type === "compare-file-with-working-copy") {
+                vscode.postMessage({
+                    type: "compare-file-with-working-copy",
+                    revision: revision,
+                    path: change.path,
+                    action: change.action,
+                });
+                return;
+            }
+
+            if (type === "compare-file-with-previous-revision") {
+                vscode.postMessage({
+                    type: "compare-file-with-previous-revision",
+                    revision: revision,
+                    path: change.path,
+                    action: change.action,
+                });
+                return;
+            }
+
+            vscode.postMessage({
+                type: "copy-file-path",
                 revision: revision,
+                path: change.path,
             });
         }
 
@@ -925,7 +1308,7 @@ function isHistoryErrorMessage(
                                 },
                                 onContextMenu: function (event: React.MouseEvent<HTMLDivElement>) {
                                     event.preventDefault();
-                                    openContextMenu(
+                                    openRevisionContextMenu(
                                         entry.revision,
                                         event.clientX,
                                         event.clientY
@@ -986,6 +1369,7 @@ function isHistoryErrorMessage(
                                   rootPath: state.rootPath,
                                   collapsedDirectories: state.collapsedDirectories,
                                   onToggleDirectory: toggleDirectory,
+                                  onOpenFileContextMenu: openFileContextMenu,
                               })
                             : null
                     );
@@ -1134,6 +1518,7 @@ function isHistoryErrorMessage(
                 entry: contextEntry,
                 onClose: hideContextMenu,
                 onAction: triggerContextAction,
+                onFileAction: triggerFileContextAction,
             })
         );
     }
