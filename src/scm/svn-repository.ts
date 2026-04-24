@@ -40,53 +40,35 @@ function isRemoteChange(status: SvnStatusEntry): boolean {
     return !!status.reposStatus && status.reposStatus !== "none";
 }
 
-function getRepositoryReferenceDisplay(repositoryRelativePath: string): {
-    icon: string;
-    label: string;
-    fullPath: string;
-} {
+function getCommitTargetLabel(repositoryRelativePath: string): string {
     const normalizedPath = repositoryRelativePath.replace(/^\/+|\/+$/g, "");
     if (!normalizedPath) {
-        return {
-            icon: "repo",
-            label: "/",
-            fullPath: "/",
-        };
+        return "/";
     }
 
     const segments = normalizedPath.split("/");
     const trunkIndex = segments.indexOf("trunk");
     if (trunkIndex !== -1) {
-        return {
-            icon: "git-branch",
-            label: "trunk",
-            fullPath: `/${normalizedPath}`,
-        };
+        return "trunk";
     }
 
     const branchesIndex = segments.indexOf("branches");
     if (branchesIndex !== -1 && branchesIndex + 1 < segments.length) {
-        return {
-            icon: "git-branch",
-            label: segments.slice(branchesIndex, branchesIndex + 2).join("/"),
-            fullPath: `/${normalizedPath}`,
-        };
+        return segments.slice(branchesIndex, branchesIndex + 2).join("/");
     }
 
     const tagsIndex = segments.indexOf("tags");
     if (tagsIndex !== -1 && tagsIndex + 1 < segments.length) {
-        return {
-            icon: "tag",
-            label: segments.slice(tagsIndex, tagsIndex + 2).join("/"),
-            fullPath: `/${normalizedPath}`,
-        };
+        return segments.slice(tagsIndex, tagsIndex + 2).join("/");
     }
 
-    return {
-        icon: "repo",
-        label: segments.at(-1) ?? normalizedPath,
-        fullPath: `/${normalizedPath}`,
-    };
+    return segments.at(-1) ?? normalizedPath;
+}
+
+function getCommitInputPlaceholder(repositoryRelativePath: string): string {
+    const submitShortcut = process.platform === "darwin" ? "⌘Enter" : "Ctrl+Enter";
+    const targetLabel = getCommitTargetLabel(repositoryRelativePath);
+    return `Message (${submitShortcut} to commit on "${targetLabel}")`;
 }
 
 export class SvnRepository implements vscode.Disposable {
@@ -94,12 +76,9 @@ export class SvnRepository implements vscode.Disposable {
     private readonly changesGroup: vscode.SourceControlResourceGroup;
     private readonly unversionedGroup: vscode.SourceControlResourceGroup;
     private readonly remoteChangesGroup: vscode.SourceControlResourceGroup;
-    private readonly repositoryReference: ReturnType<typeof getRepositoryReferenceDisplay>;
     private readonly sourceControl: vscode.SourceControl;
-    private remoteChangeCount = 0;
     private lastRemoteRefreshAt = 0;
     private isRefreshing = false;
-    private isRefreshingRemoteCount = false;
 
     public constructor(
         public readonly info: SvnWorkingCopyInfo,
@@ -117,10 +96,13 @@ export class SvnRepository implements vscode.Disposable {
             title: "Commit",
             arguments: [this],
         };
+        this.sourceControl.inputBox.placeholder = getCommitInputPlaceholder(
+            info.repositoryRelativePath
+        );
         this.sourceControl.quickDiffProvider = {
             provideOriginalResource: (uri) => this.provideOriginalResource(uri),
         };
-        this.repositoryReference = getRepositoryReferenceDisplay(info.repositoryRelativePath);
+        this.sourceControl.statusBarCommands = [];
 
         this.changesGroup = this.sourceControl.createResourceGroup("svn-graph.changes", "Changes");
         this.unversionedGroup = this.sourceControl.createResourceGroup(
@@ -141,7 +123,6 @@ export class SvnRepository implements vscode.Disposable {
         this.remoteChangesGroup.contextValue = "svn-remote-changes-group";
         this.remoteChangesGroup.resourceStates = [];
         this.sourceControl.count = 0;
-        this.updateStatusBarCommands(0);
     }
 
     public get rootPath(): string {
@@ -168,11 +149,6 @@ export class SvnRepository implements vscode.Disposable {
 
         try {
             const includeRemote = this.shouldIncludeRemote(options.forceRemote === true);
-            if (includeRemote) {
-                this.isRefreshingRemoteCount = true;
-                this.updateStatusBarCommands(this.remoteChangeCount);
-            }
-
             const statuses = await this.svnService.getStatus(this.rootPath, includeRemote);
             const changeResources = statuses
                 .filter(isLocalChange)
@@ -195,18 +171,9 @@ export class SvnRepository implements vscode.Disposable {
             this.sourceControl.count = changeResources.length + unversionedResources.length;
 
             if (includeRemote) {
-                this.remoteChangeCount = remoteResources.length;
-                this.isRefreshingRemoteCount = false;
                 this.lastRemoteRefreshAt = Date.now();
             }
-
-            this.updateStatusBarCommands(this.remoteChangeCount);
         } finally {
-            if (this.isRefreshingRemoteCount) {
-                this.isRefreshingRemoteCount = false;
-                this.updateStatusBarCommands(this.remoteChangeCount);
-            }
-
             this.isRefreshing = false;
         }
     }
@@ -545,40 +512,5 @@ export class SvnRepository implements vscode.Disposable {
         }
 
         await vscode.commands.executeCommand("revealFileInOS", vscode.Uri.file(destinationPath));
-    }
-
-    private updateStatusBarCommands(remoteCount: number): void {
-        const countSuffix = remoteCount > 0 ? ` ${remoteCount}` : "";
-        const changeLabel = remoteCount === 1 ? "change" : "changes";
-        const updateIcon = this.isRefreshingRemoteCount ? "loading~spin" : "cloud-download";
-        const updateTitle = this.isRefreshingRemoteCount
-            ? "$(loading~spin)"
-            : `$(${updateIcon})${countSuffix}`;
-        const updateTooltip = this.isRefreshingRemoteCount
-            ? "Checking for incoming changes..."
-            : remoteCount > 0
-              ? `Update (${remoteCount} incoming ${changeLabel})`
-              : "Update";
-
-        this.sourceControl.statusBarCommands = [
-            {
-                command: "svn-graph.open-history",
-                title: `$(${this.repositoryReference.icon}) ${this.repositoryReference.label}`,
-                tooltip: `Repository path: ${this.repositoryReference.fullPath}\nOpen SVN History`,
-                arguments: [this],
-            },
-            {
-                command: "svn-graph.update",
-                title: updateTitle,
-                tooltip: updateTooltip,
-                arguments: [this],
-            },
-            {
-                command: "svn-graph.open-repository-actions",
-                title: "$(ellipsis)",
-                tooltip: "More SVN Actions",
-                arguments: [this],
-            },
-        ];
     }
 }
