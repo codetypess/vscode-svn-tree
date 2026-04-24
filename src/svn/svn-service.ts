@@ -79,6 +79,20 @@ export class SvnService {
         await this.run(args, { cwd: rootPath });
     }
 
+    public async checkout(target: string, revision: string, destinationPath: string): Promise<void> {
+        const args = ["checkout", "-r", revision, target, destinationPath];
+        await this.run(args);
+    }
+
+    public async export(target: string, revision: string, destinationPath: string): Promise<void> {
+        const args = ["export", "-r", revision, target, destinationPath];
+        await this.run(args);
+    }
+
+    public async cleanup(rootPath: string): Promise<void> {
+        await this.run(["cleanup", "."], { cwd: rootPath });
+    }
+
     public async revert(rootPath: string, paths: string[]): Promise<void> {
         const targets = this.toRelativeTargets(rootPath, paths);
         const args = ["revert", "-R", ...targets];

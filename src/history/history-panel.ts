@@ -113,6 +113,34 @@ export class HistoryPanel implements vscode.Disposable {
                         payload.path,
                         payload.action
                     );
+                    return;
+                }
+
+                if (
+                    payload.type === "checkout-revision" &&
+                    typeof payload.revision === "number"
+                ) {
+                    await repository.checkoutRevision(payload.revision);
+                    return;
+                }
+
+                if (
+                    payload.type === "export-revision" &&
+                    typeof payload.revision === "number"
+                ) {
+                    await repository.exportRevision(payload.revision);
+                    return;
+                }
+
+                if (
+                    payload.type === "copy-revision" &&
+                    typeof payload.revision === "number"
+                ) {
+                    await vscode.env.clipboard.writeText(`r${payload.revision}`);
+                    void vscode.window.setStatusBarMessage(
+                        `Copied revision r${payload.revision}`,
+                        2000
+                    );
                 }
             },
             null,
@@ -651,6 +679,91 @@ export class HistoryPanel implements vscode.Disposable {
         color: var(--muted);
       }
 
+      .context-menu-root {
+        position: fixed;
+        inset: 0;
+        z-index: 30;
+        pointer-events: none;
+      }
+
+      .context-menu-backdrop {
+        position: absolute;
+        inset: 0;
+        pointer-events: auto;
+      }
+
+      .context-menu {
+        position: absolute;
+        min-width: 240px;
+        max-width: min(320px, calc(100vw - 16px));
+        padding: 6px;
+        border: 1px solid var(--details-border);
+        border-radius: 10px;
+        background: var(--vscode-menu-background, var(--details-bg));
+        box-shadow: 0 12px 28px rgba(0, 0, 0, 0.32);
+        pointer-events: auto;
+      }
+
+      .context-menu-header {
+        padding: 8px 10px 10px;
+        border-bottom: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
+      }
+
+      .context-menu-title {
+        font-size: 12px;
+        font-weight: 700;
+      }
+
+      .context-menu-subtitle {
+        margin-top: 4px;
+        color: var(--muted);
+        font-size: 11px;
+        line-height: 1.35;
+      }
+
+      .context-menu-actions {
+        padding-top: 4px;
+      }
+
+      .context-menu-item {
+        width: 100%;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 8px 10px;
+        border: 0;
+        border-radius: 8px;
+        background: transparent;
+        color: inherit;
+        cursor: pointer;
+        text-align: left;
+      }
+
+      .context-menu-item:hover,
+      .context-menu-item:focus-visible {
+        background: var(--row-hover);
+        outline: none;
+      }
+
+      .context-menu-item .codicon {
+        width: 16px;
+        flex: none;
+        color: var(--muted);
+      }
+
+      .context-menu-label {
+        flex: 1;
+        min-width: 0;
+        font-size: 12px;
+        line-height: 1.35;
+      }
+
+      .context-menu-separator {
+        height: 1px;
+        margin: 4px 6px;
+        background: color-mix(in srgb, var(--border) 70%, transparent);
+      }
+
       @media (max-width: 1160px) {
         :root {
           --graph-column-width: 48px;
@@ -750,6 +863,7 @@ export class HistoryPanel implements vscode.Disposable {
         <div class="history-list" id="history-list"></div>
       </section>
     </div>
+    <div class="context-menu-root" id="context-menu-root"></div>
     <script nonce="${nonce}">
       const vscode = acquireVsCodeApi();
       let state = {
@@ -760,11 +874,13 @@ export class HistoryPanel implements vscode.Disposable {
         loadMoreError: undefined,
         expandedRevision: undefined,
         collapsedDirectories: {},
+        contextMenu: undefined,
         repositoryLabel: ${JSON.stringify(repository.label)},
         rootPath: ${JSON.stringify(repository.rootPath)}
       };
 
       const historyList = document.getElementById('history-list');
+      const contextMenuRoot = document.getElementById('context-menu-root');
       const search = document.getElementById('search');
       const refresh = document.getElementById('refresh');
       const rootPath = document.getElementById('root-path');
@@ -823,6 +939,10 @@ export class HistoryPanel implements vscode.Disposable {
         return count === 1 ? '1 changed path' : count + ' changed paths';
       }
 
+      function getEntryByRevision(revision) {
+        return state.entries.find((entry) => entry.revision === revision);
+      }
+
       function actionToIconClass(action) {
         return action === 'A'
           ? 'codicon-diff-added'
@@ -831,6 +951,74 @@ export class HistoryPanel implements vscode.Disposable {
             : action === 'R'
               ? 'codicon-diff-renamed'
               : 'codicon-diff-modified';
+      }
+
+      function hideContextMenu() {
+        if (!state.contextMenu) {
+          return;
+        }
+
+        state = {
+          ...state,
+          contextMenu: undefined
+        };
+        renderContextMenu();
+      }
+
+      function openContextMenu(revision, clientX, clientY) {
+        const menuWidth = 248;
+        const menuHeight = 196;
+        state = {
+          ...state,
+          contextMenu: {
+            revision,
+            x: Math.max(8, Math.min(clientX, window.innerWidth - menuWidth)),
+            y: Math.max(8, Math.min(clientY, window.innerHeight - menuHeight))
+          }
+        };
+        renderContextMenu();
+      }
+
+      function renderContextMenu() {
+        if (!contextMenuRoot) {
+          return;
+        }
+
+        if (!state.contextMenu) {
+          contextMenuRoot.innerHTML = '';
+          return;
+        }
+
+        const entry = getEntryByRevision(state.contextMenu.revision);
+        if (!entry) {
+          contextMenuRoot.innerHTML = '';
+          return;
+        }
+
+        contextMenuRoot.innerHTML = \`
+          <div class="context-menu-backdrop" data-close-context-menu="true"></div>
+          <div class="context-menu" style="left: \${state.contextMenu.x}px; top: \${state.contextMenu.y}px;">
+            <div class="context-menu-header">
+              <div class="context-menu-title">r\${entry.revision}</div>
+              <div class="context-menu-subtitle">\${escape(summarizeMessage(entry.message))}</div>
+            </div>
+            <div class="context-menu-actions">
+              <button class="context-menu-item" type="button" data-history-action="checkout-revision" data-history-revision="\${entry.revision}">
+                <span class="codicon codicon-repo-clone" aria-hidden="true"></span>
+                <span class="context-menu-label">Checkout To This Revision</span>
+              </button>
+              <button class="context-menu-item" type="button" data-history-action="export-revision" data-history-revision="\${entry.revision}">
+                <span class="codicon codicon-folder-opened" aria-hidden="true"></span>
+                <span class="context-menu-label">Export This Revision</span>
+              </button>
+              <div class="context-menu-separator" aria-hidden="true"></div>
+              <button class="context-menu-item" type="button" data-history-action="copy-revision" data-history-revision="\${entry.revision}">
+                <span class="codicon codicon-copy" aria-hidden="true"></span>
+                <span class="context-menu-label">Copy Revision Number</span>
+              </button>
+            </div>
+          </div>
+        \`;
       }
 
       function directoryKey(revision, fullPath) {
@@ -1041,6 +1229,7 @@ export class HistoryPanel implements vscode.Disposable {
       function renderList() {
         if (state.entries.length === 0 && state.isLoading) {
           historyList.innerHTML = '<div class="empty-state">Loading history…</div>';
+          renderContextMenu();
           return;
         }
 
@@ -1055,10 +1244,12 @@ export class HistoryPanel implements vscode.Disposable {
         if (state.filteredEntries.length === 0) {
           if (search.value.trim() && state.hasMore) {
             historyList.innerHTML = '<div class="empty-state">No loaded revisions match the current filter yet.</div>' + footerMarkup;
+            renderContextMenu();
             return;
           }
 
           historyList.innerHTML = '<div class="empty-state">No revisions match the current filter.</div>';
+          renderContextMenu();
           return;
         }
 
@@ -1089,6 +1280,7 @@ export class HistoryPanel implements vscode.Disposable {
             \`;
           })
           .join('') + footerMarkup;
+        renderContextMenu();
       }
 
       function requestMoreEntries() {
@@ -1168,11 +1360,65 @@ export class HistoryPanel implements vscode.Disposable {
         renderList();
       });
 
+      historyList.addEventListener('contextmenu', (contextMenuEvent) => {
+        const target = getEventElement(contextMenuEvent.target);
+        if (!target) {
+          return;
+        }
+
+        const revisionRow = target.closest('[data-revision-toggle]');
+        if (!revisionRow) {
+          return;
+        }
+
+        const revision = Number(revisionRow.getAttribute('data-revision-toggle'));
+        if (Number.isNaN(revision)) {
+          return;
+        }
+
+        contextMenuEvent.preventDefault();
+        openContextMenu(revision, contextMenuEvent.clientX, contextMenuEvent.clientY);
+      });
+
+      contextMenuRoot?.addEventListener('click', (clickEvent) => {
+        const target = getEventElement(clickEvent.target);
+        if (!target) {
+          return;
+        }
+
+        if (target.closest('[data-close-context-menu]')) {
+          hideContextMenu();
+          return;
+        }
+
+        const actionButton = target.closest('[data-history-action]');
+        if (!actionButton) {
+          return;
+        }
+
+        const action = actionButton.getAttribute('data-history-action');
+        const revision = Number(actionButton.getAttribute('data-history-revision'));
+        hideContextMenu();
+
+        if (!action || Number.isNaN(revision)) {
+          return;
+        }
+
+        vscode.postMessage({
+          type: action,
+          revision
+        });
+      });
+
       function sync() {
         filterEntries();
 
         if (state.expandedRevision && !state.filteredEntries.some((entry) => entry.revision === state.expandedRevision)) {
           state.expandedRevision = undefined;
+        }
+
+        if (state.contextMenu && !getEntryByRevision(state.contextMenu.revision)) {
+          state.contextMenu = undefined;
         }
 
         renderList();
@@ -1203,7 +1449,16 @@ export class HistoryPanel implements vscode.Disposable {
         renderList();
         vscode.postMessage({ type: 'refresh' });
       });
-      historyList.addEventListener('scroll', maybeLoadMoreOnScroll);
+      historyList.addEventListener('scroll', () => {
+        hideContextMenu();
+        maybeLoadMoreOnScroll();
+      });
+      window.addEventListener('resize', hideContextMenu);
+      window.addEventListener('keydown', (keyboardEvent) => {
+        if (keyboardEvent.key === 'Escape') {
+          hideContextMenu();
+        }
+      });
 
       window.addEventListener('message', (event) => {
         const { type, payload } = event.data;

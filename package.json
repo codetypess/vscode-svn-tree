@@ -57,10 +57,22 @@
         "icon": "$(cloud-download)"
       },
       {
+        "command": "svn-graph.cleanup",
+        "title": "Cleanup SVN Working Copy",
+        "category": "SVN Graph",
+        "icon": "$(tools)"
+      },
+      {
         "command": "svn-graph.open-history",
         "title": "Open SVN History",
         "category": "SVN Graph",
         "icon": "$(history)"
+      },
+      {
+        "command": "svn-graph.open-repository-actions",
+        "title": "More SVN Actions",
+        "category": "SVN Graph",
+        "icon": "$(ellipsis)"
       },
       {
         "command": "svn-graph.open-diff",
@@ -68,14 +80,34 @@
         "category": "SVN Graph"
       },
       {
+        "command": "svn-graph.open-file",
+        "title": "Open File",
+        "category": "SVN Graph",
+        "icon": "$(go-to-file)"
+      },
+      {
         "command": "svn-graph.revert-resource",
         "title": "Revert Resource",
-        "category": "SVN Graph"
+        "category": "SVN Graph",
+        "icon": "$(discard)"
+      },
+      {
+        "command": "svn-graph.revert-group",
+        "title": "Revert All Changes",
+        "category": "SVN Graph",
+        "icon": "$(discard)"
       },
       {
         "command": "svn-graph.add-resource",
         "title": "Add Resource",
-        "category": "SVN Graph"
+        "category": "SVN Graph",
+        "icon": "$(add)"
+      },
+      {
+        "command": "svn-graph.add-group",
+        "title": "Add All Unversioned",
+        "category": "SVN Graph",
+        "icon": "$(add)"
       },
       {
         "command": "svn-graph.delete-resource",
@@ -105,6 +137,11 @@
         {
           "command": "svn-graph.open-diff",
           "when": "scmProvider == svn-graph",
+          "group": "navigation@1"
+        },
+        {
+          "command": "svn-graph.open-file",
+          "when": "scmProvider == svn-graph && scmResourceState != svn-remote-change",
           "group": "inline@1"
         },
         {
@@ -115,12 +152,24 @@
         {
           "command": "svn-graph.revert-resource",
           "when": "scmProvider == svn-graph && scmResourceState == svn-change",
-          "group": "inline@3"
+          "group": "inline@2"
         },
         {
           "command": "svn-graph.delete-resource",
           "when": "scmProvider == svn-graph && scmResourceState == svn-unversioned",
-          "group": "inline@4"
+          "group": "navigation@4"
+        }
+      ],
+      "scm/resourceGroup/context": [
+        {
+          "command": "svn-graph.revert-group",
+          "when": "scmProvider == svn-graph && scmResourceGroupState == svn-changes-group",
+          "group": "inline@1"
+        },
+        {
+          "command": "svn-graph.add-group",
+          "when": "scmProvider == svn-graph && scmResourceGroupState == svn-unversioned-group",
+          "group": "inline@1"
         }
       ]
     },

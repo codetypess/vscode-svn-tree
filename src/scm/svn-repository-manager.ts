@@ -6,6 +6,10 @@ import { SvnService } from "../svn/svn-service";
 import { ScmResource } from "./scm-resource";
 import { SvnRepository } from "./svn-repository";
 
+interface RepositoryActionItem extends vscode.QuickPickItem {
+    readonly run: (repository: SvnRepository) => Promise<void>;
+}
+
 export class SvnRepositoryManager implements vscode.Disposable {
     private readonly disposables: vscode.Disposable[] = [];
     private readonly repositories = new Map<string, SvnRepository>();
@@ -44,17 +48,33 @@ export class SvnRepositoryManager implements vscode.Disposable {
             vscode.commands.registerCommand("svn-graph.update", async (arg?: unknown) =>
                 this.runForRepository(arg, (repository) => repository.update())
             ),
+            vscode.commands.registerCommand("svn-graph.cleanup", async (arg?: unknown) =>
+                this.runForRepository(arg, (repository) => repository.cleanup())
+            ),
             vscode.commands.registerCommand("svn-graph.open-history", async (arg?: unknown) =>
                 this.runForRepository(arg, (repository) => repository.showHistory())
+            ),
+            vscode.commands.registerCommand(
+                "svn-graph.open-repository-actions",
+                async (arg?: unknown) => this.openRepositoryActions(arg)
             ),
             vscode.commands.registerCommand("svn-graph.open-diff", async (arg?: unknown) =>
                 this.openDiff(arg)
             ),
+            vscode.commands.registerCommand("svn-graph.open-file", async (arg?: unknown) =>
+                this.openFile(arg)
+            ),
             vscode.commands.registerCommand("svn-graph.revert-resource", async (arg?: unknown) =>
                 this.revertResource(arg)
             ),
+            vscode.commands.registerCommand("svn-graph.revert-group", async (arg?: unknown) =>
+                this.revertGroup(arg)
+            ),
             vscode.commands.registerCommand("svn-graph.add-resource", async (arg?: unknown) =>
                 this.addResource(arg)
+            ),
+            vscode.commands.registerCommand("svn-graph.add-group", async (arg?: unknown) =>
+                this.addGroup(arg)
             ),
             vscode.commands.registerCommand("svn-graph.delete-resource", async (arg?: unknown) =>
                 this.deleteResource(arg)
@@ -217,6 +237,10 @@ export class SvnRepositoryManager implements vscode.Disposable {
     }
 
     private async resolveRepository(arg: unknown): Promise<SvnRepository | undefined> {
+        if (Array.isArray(arg) && arg.length > 0) {
+            return this.resolveRepository(arg[0]);
+        }
+
         if (arg instanceof SvnRepository) {
             return arg;
         }
@@ -227,6 +251,10 @@ export class SvnRepositoryManager implements vscode.Disposable {
 
         if (arg instanceof vscode.Uri) {
             return this.getRepositoryForUri(arg);
+        }
+
+        if (this.hasRootUri(arg) && arg.rootUri instanceof vscode.Uri) {
+            return this.getRepositoryForUri(arg.rootUri);
         }
 
         const activeUri = vscode.window.activeTextEditor?.document.uri;
@@ -262,6 +290,10 @@ export class SvnRepositoryManager implements vscode.Disposable {
         return selection?.repository;
     }
 
+    private hasRootUri(arg: unknown): arg is { rootUri?: vscode.Uri } {
+        return typeof arg === "object" && arg !== null && "rootUri" in arg;
+    }
+
     private updateHistoryStatusBarVisibility(): void {
         if (this.repositories.size > 0) {
             this.historyStatusBarItem.show();
@@ -269,6 +301,59 @@ export class SvnRepositoryManager implements vscode.Disposable {
         }
 
         this.historyStatusBarItem.hide();
+    }
+
+    private async openRepositoryActions(arg: unknown): Promise<void> {
+        const repository = await this.resolveRepository(arg);
+        if (!repository) {
+            return;
+        }
+
+        const selection = await vscode.window.showQuickPick<RepositoryActionItem>(
+            [
+                {
+                    label: "Open SVN History",
+                    description: "Show commit history for this working copy",
+                    run: async (targetRepository) => targetRepository.showHistory(),
+                },
+                {
+                    label: "Refresh SVN Status",
+                    description: "Reload local and incoming changes",
+                    run: async (targetRepository) =>
+                        targetRepository.refresh({ forceRemote: true }),
+                },
+                {
+                    label: "Update Working Copy",
+                    description: "Download incoming changes from the repository",
+                    run: async (targetRepository) => targetRepository.update(),
+                },
+                {
+                    label: "Cleanup Working Copy",
+                    description: "Run svn cleanup for this working copy",
+                    run: async (targetRepository) => targetRepository.cleanup(),
+                },
+                {
+                    label: "Show SVN Output",
+                    description: "Open the extension output channel",
+                    run: async () => {
+                        this.outputChannel.show(true);
+                    },
+                },
+            ],
+            {
+                placeHolder: `SVN actions for ${repository.label}`,
+            }
+        );
+
+        if (!selection) {
+            return;
+        }
+
+        try {
+            await selection.run(repository);
+        } catch (error) {
+            this.showError(error);
+        }
     }
 
     private async openDiff(arg: unknown): Promise<void> {
@@ -344,6 +429,35 @@ export class SvnRepositoryManager implements vscode.Disposable {
         }
     }
 
+    private async openFile(arg: unknown): Promise<void> {
+        const resource = arg instanceof ScmResource ? arg : undefined;
+        const uri = resource?.resourceUri ?? (arg instanceof vscode.Uri ? arg : undefined);
+        if (!uri) {
+            return;
+        }
+
+        try {
+            if (resource?.status.kind === "dir") {
+                await vscode.commands.executeCommand("revealInExplorer", uri);
+                return;
+            }
+
+            if (
+                resource &&
+                (resource.status.wcStatus === "deleted" || resource.status.wcStatus === "missing")
+            ) {
+                void vscode.window.showWarningMessage(
+                    `Cannot open ${resource.status.relativePath} because it is ${resource.status.wcStatus}.`
+                );
+                return;
+            }
+
+            await vscode.window.showTextDocument(uri, { preview: true });
+        } catch (error) {
+            this.showError(error);
+        }
+    }
+
     private async revertResource(arg: unknown): Promise<void> {
         if (!(arg instanceof ScmResource)) {
             return;
@@ -366,6 +480,31 @@ export class SvnRepositoryManager implements vscode.Disposable {
         }
     }
 
+    private async revertGroup(arg: unknown): Promise<void> {
+        const resources = this.getGroupResources(arg, "svn-changes-group");
+        if (resources.length === 0) {
+            return;
+        }
+
+        const repository = resources[0].repository;
+        const label = resources.length === 1 ? "1 item" : `${resources.length} items`;
+        const confirmation = await vscode.window.showWarningMessage(
+            `Revert changes in ${label}?`,
+            { modal: true },
+            "Revert All"
+        );
+
+        if (confirmation !== "Revert All") {
+            return;
+        }
+
+        try {
+            await repository.revert(resources.map((resource) => resource.status.absolutePath));
+        } catch (error) {
+            this.showError(error);
+        }
+    }
+
     private async addResource(arg: unknown): Promise<void> {
         if (!(arg instanceof ScmResource)) {
             return;
@@ -373,6 +512,21 @@ export class SvnRepositoryManager implements vscode.Disposable {
 
         try {
             await arg.repository.add([arg.status.absolutePath]);
+        } catch (error) {
+            this.showError(error);
+        }
+    }
+
+    private async addGroup(arg: unknown): Promise<void> {
+        const resources = this.getGroupResources(arg, "svn-unversioned-group");
+        if (resources.length === 0) {
+            return;
+        }
+
+        try {
+            await resources[0].repository.add(
+                resources.map((resource) => resource.status.absolutePath)
+            );
         } catch (error) {
             this.showError(error);
         }
@@ -408,6 +562,29 @@ export class SvnRepositoryManager implements vscode.Disposable {
         const message = error instanceof Error ? error.message : String(error);
         this.outputChannel.show(true);
         void vscode.window.showErrorMessage(message);
+    }
+
+    private getGroupResources(arg: unknown, contextValue: string): ScmResource[] {
+        if (
+            typeof arg !== "object" ||
+            arg === null ||
+            !("contextValue" in arg) ||
+            !("resourceStates" in arg)
+        ) {
+            return [];
+        }
+
+        const group = arg as {
+            contextValue?: unknown;
+            resourceStates?: unknown;
+        };
+        if (group.contextValue !== contextValue || !Array.isArray(group.resourceStates)) {
+            return [];
+        }
+
+        return group.resourceStates.filter(
+            (resource): resource is ScmResource => resource instanceof ScmResource
+        );
     }
 
     private restartRemoteRefreshTimer(): void {
