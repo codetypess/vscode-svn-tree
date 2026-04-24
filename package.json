@@ -1,0 +1,157 @@
+{
+  "name": "svn-graph",
+  "displayName": "SVN Graph",
+  "description": "SVN source control and history viewer for Visual Studio Code.",
+  "version": "0.0.1",
+  "publisher": "codetypess",
+  "license": "MIT",
+  "engines": {
+    "vscode": "^1.95.0"
+  },
+  "categories": [
+    "SCM Providers",
+    "Other"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "svn-graph.refresh",
+        "title": "Refresh SVN Status",
+        "category": "SVN Graph",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "svn-graph.commit",
+        "title": "Commit SVN Changes",
+        "category": "SVN Graph",
+        "icon": "$(check)"
+      },
+      {
+        "command": "svn-graph.update",
+        "title": "Update SVN Working Copy",
+        "category": "SVN Graph",
+        "icon": "$(cloud-download)"
+      },
+      {
+        "command": "svn-graph.open-history",
+        "title": "Open SVN History",
+        "category": "SVN Graph",
+        "icon": "$(history)"
+      },
+      {
+        "command": "svn-graph.open-diff",
+        "title": "Open Diff",
+        "category": "SVN Graph"
+      },
+      {
+        "command": "svn-graph.revert-resource",
+        "title": "Revert Resource",
+        "category": "SVN Graph"
+      },
+      {
+        "command": "svn-graph.add-resource",
+        "title": "Add Resource",
+        "category": "SVN Graph"
+      },
+      {
+        "command": "svn-graph.delete-resource",
+        "title": "Delete Resource",
+        "category": "SVN Graph"
+      },
+      {
+        "command": "svn-graph.open-history-diff",
+        "title": "Open History Diff",
+        "category": "SVN Graph"
+      }
+    ],
+    "menus": {
+      "scm/title": [
+        {
+          "command": "svn-graph.refresh",
+          "when": "scmProvider == svn-graph",
+          "group": "navigation@1"
+        },
+        {
+          "command": "svn-graph.update",
+          "when": "scmProvider == svn-graph",
+          "group": "navigation@2"
+        },
+        {
+          "command": "svn-graph.open-history",
+          "when": "scmProvider == svn-graph",
+          "group": "navigation@3"
+        },
+        {
+          "command": "svn-graph.commit",
+          "when": "scmProvider == svn-graph",
+          "group": "navigation@4"
+        }
+      ],
+      "scm/resourceState/context": [
+        {
+          "command": "svn-graph.open-diff",
+          "when": "scmProvider == svn-graph",
+          "group": "inline@1"
+        },
+        {
+          "command": "svn-graph.add-resource",
+          "when": "scmProvider == svn-graph && scmResourceState == svn-unversioned",
+          "group": "inline@2"
+        },
+        {
+          "command": "svn-graph.revert-resource",
+          "when": "scmProvider == svn-graph && scmResourceState == svn-change",
+          "group": "inline@3"
+        },
+        {
+          "command": "svn-graph.delete-resource",
+          "when": "scmProvider == svn-graph && scmResourceState == svn-unversioned",
+          "group": "inline@4"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "SVN Graph",
+      "properties": {
+        "svn-graph.enable-remote-status": {
+          "type": "boolean",
+          "default": true,
+          "description": "Fetch incoming changes with `svn status -u`."
+        },
+        "svn-graph.remote-status-interval-seconds": {
+          "type": "number",
+          "default": 60,
+          "minimum": 10,
+          "description": "Interval in seconds between automatic remote status refreshes."
+        },
+        "svn-graph.max-log-entries": {
+          "type": "number",
+          "default": 200,
+          "minimum": 20,
+          "description": "Maximum number of revisions loaded into the history webview."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "format": "prettier --write src",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "pretest": "npm run compile",
+    "test": "node --test ./out/test/**/*.test.js"
+  },
+  "dependencies": {
+    "@vscode/codicons": "^0.0.45",
+    "fast-xml-parser": "^4.5.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.1",
+    "@types/vscode": "^1.95.0",
+    "prettier": "^3.8.3",
+    "typescript": "^5.7.2"
+  }
+}
