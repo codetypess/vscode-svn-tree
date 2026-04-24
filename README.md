@@ -36,7 +36,7 @@ If `svn` is not available, the extension will show a warning and stay inactive u
 
 - `svn-graph.enable-remote-status`: Fetch incoming changes with `svn status -u`.
 - `svn-graph.remote-status-interval-seconds`: Interval between automatic incoming-status refreshes.
-- `svn-graph.max-log-entries`: Maximum number of revisions loaded into the history panel.
+- `svn-graph.max-log-entries`: Number of revisions loaded per batch in the history panel. Default: `200`. Older history is fetched automatically as you scroll.
 
 ## Notes
 

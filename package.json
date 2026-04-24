@@ -2,7 +2,7 @@
   "name": "svn-graph",
   "displayName": "SVN Graph",
   "description": "SVN source control and history viewer for Visual Studio Code.",
-  "version": "0.0.1",
+  "version": "0.1.0",
   "publisher": "codetypess",
   "license": "MIT",
   "icon": "media/icon.png",
@@ -91,24 +91,14 @@
     "menus": {
       "scm/title": [
         {
-          "command": "svn-graph.refresh",
+          "command": "svn-graph.commit",
           "when": "scmProvider == svn-graph",
           "group": "navigation@1"
         },
         {
-          "command": "svn-graph.update",
+          "command": "svn-graph.refresh",
           "when": "scmProvider == svn-graph",
           "group": "navigation@2"
-        },
-        {
-          "command": "svn-graph.open-history",
-          "when": "scmProvider == svn-graph",
-          "group": "navigation@3"
-        },
-        {
-          "command": "svn-graph.commit",
-          "when": "scmProvider == svn-graph",
-          "group": "navigation@4"
         }
       ],
       "scm/resourceState/context": [
@@ -152,7 +142,7 @@
           "type": "number",
           "default": 200,
           "minimum": 20,
-          "description": "Maximum number of revisions loaded into the history webview."
+          "description": "Number of revisions loaded per batch in the history webview. Older history is fetched automatically as you scroll."
         }
       }
     }

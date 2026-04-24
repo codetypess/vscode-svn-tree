@@ -55,3 +55,8 @@ export interface SvnLogEntry {
     message: string;
     changes: SvnLogPathChange[];
 }
+
+export interface SvnLogPage {
+    entries: SvnLogEntry[];
+    hasMore: boolean;
+}

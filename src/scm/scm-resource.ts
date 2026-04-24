@@ -5,27 +5,6 @@ import type { SvnStatusEntry } from "../svn/svn-types";
 
 export type ScmResourceKind = "change" | "remote-change";
 
-function toLetter(status: string | undefined): string {
-    switch (status) {
-        case "added":
-            return "A";
-        case "deleted":
-            return "D";
-        case "conflicted":
-            return "C";
-        case "modified":
-            return "M";
-        case "replaced":
-            return "R";
-        case "missing":
-            return "!";
-        case "unversioned":
-            return "U";
-        default:
-            return "?";
-    }
-}
-
 function toColor(kind: ScmResourceKind, status: string | undefined): vscode.ThemeColor {
     if (status === "added" || status === "unversioned") {
         return new vscode.ThemeColor("gitDecoration.addedResourceForeground");

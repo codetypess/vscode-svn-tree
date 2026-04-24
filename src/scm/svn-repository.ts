@@ -3,7 +3,11 @@ import * as vscode from "vscode";
 import { HistoryPanel } from "../history/history-panel";
 import { SvnContentProvider } from "../svn/svn-content-provider";
 import { SvnService } from "../svn/svn-service";
-import type { SvnLogEntry, SvnStatusEntry, SvnWorkingCopyInfo } from "../svn/svn-types";
+import type {
+    SvnLogPage,
+    SvnStatusEntry,
+    SvnWorkingCopyInfo,
+} from "../svn/svn-types";
 import { ScmResource } from "./scm-resource";
 
 interface RefreshOptions {
@@ -66,21 +70,9 @@ export class SvnRepository implements vscode.Disposable {
         this.sourceControl.count = 0;
         this.sourceControl.statusBarCommands = [
             {
-                command: "svn-graph.refresh",
-                title: "$(refresh)",
-                tooltip: "Refresh",
-                arguments: [this],
-            },
-            {
                 command: "svn-graph.update",
                 title: "$(cloud-download)",
                 tooltip: "Update",
-                arguments: [this],
-            },
-            {
-                command: "svn-graph.open-history",
-                title: "$(history)",
-                tooltip: "History",
                 arguments: [this],
             },
         ];
@@ -170,11 +162,17 @@ export class SvnRepository implements vscode.Disposable {
         await this.historyPanel.show(this);
     }
 
-    public async loadHistory(): Promise<SvnLogEntry[]> {
-        const maxEntries = vscode.workspace
+    public async loadHistoryPage(beforeRevision?: number): Promise<SvnLogPage> {
+        const pageSize = vscode.workspace
             .getConfiguration("svn-graph")
             .get<number>("max-log-entries", 200);
-        return this.svnService.getLog(this.rootPath, maxEntries);
+        const entries = await this.svnService.getLog(this.rootPath, pageSize, beforeRevision);
+        const oldestRevision = entries.at(-1)?.revision;
+
+        return {
+            entries,
+            hasMore: entries.length === pageSize && oldestRevision !== undefined && oldestRevision > 1,
+        };
     }
 
     public async openResourceDiff(resource: ScmResource): Promise<void> {

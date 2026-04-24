@@ -10,14 +10,23 @@ export class SvnRepositoryManager implements vscode.Disposable {
     private readonly disposables: vscode.Disposable[] = [];
     private readonly repositories = new Map<string, SvnRepository>();
     private readonly outputChannel = vscode.window.createOutputChannel("SVN Graph");
+    private readonly historyStatusBarItem = vscode.window.createStatusBarItem(
+        vscode.StatusBarAlignment.Left,
+        100
+    );
     private readonly svnService = new SvnService(this.outputChannel);
     private readonly contentProvider = new SvnContentProvider(this.svnService);
     private readonly historyPanel: HistoryPanel;
     private remoteRefreshTimer: NodeJS.Timeout | undefined;
 
-    public constructor(private readonly context: vscode.ExtensionContext) {
+    public constructor(context: vscode.ExtensionContext) {
         this.historyPanel = new HistoryPanel(context.extensionUri);
+        this.historyStatusBarItem.text = "$(history)";
+        this.historyStatusBarItem.tooltip = "Open SVN History";
+        this.historyStatusBarItem.command = "svn-graph.open-history";
+        this.historyStatusBarItem.hide();
         this.disposables.push(
+            this.historyStatusBarItem,
             this.outputChannel,
             this.historyPanel,
             vscode.workspace.registerTextDocumentContentProvider(
@@ -152,6 +161,7 @@ export class SvnRepositoryManager implements vscode.Disposable {
             }
         }
 
+        this.updateHistoryStatusBarVisibility();
         await this.refreshAll(true);
     }
 
@@ -250,6 +260,15 @@ export class SvnRepositoryManager implements vscode.Disposable {
         );
 
         return selection?.repository;
+    }
+
+    private updateHistoryStatusBarVisibility(): void {
+        if (this.repositories.size > 0) {
+            this.historyStatusBarItem.show();
+            return;
+        }
+
+        this.historyStatusBarItem.hide();
     }
 
     private async openDiff(arg: unknown): Promise<void> {

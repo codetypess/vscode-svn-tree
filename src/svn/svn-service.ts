@@ -47,10 +47,23 @@ export class SvnService {
         return parseStatusXml(stdout, rootPath);
     }
 
-    public async getLog(rootPath: string, limit: number): Promise<SvnLogEntry[]> {
-        const { stdout } = await this.run(["log", "--xml", "-v", "-l", String(limit), "."], {
-            cwd: rootPath,
-        });
+    public async getLog(
+        rootPath: string,
+        limit: number,
+        beforeRevision?: number
+    ): Promise<SvnLogEntry[]> {
+        if (beforeRevision !== undefined && beforeRevision < 1) {
+            return [];
+        }
+
+        const args = ["log", "--xml", "-v", "-l", String(limit)];
+        if (beforeRevision !== undefined) {
+            args.push("-r", `${Math.floor(beforeRevision)}:1`);
+        }
+
+        args.push(".");
+
+        const { stdout } = await this.run(args, { cwd: rootPath });
         return parseLogXml(stdout);
     }
 

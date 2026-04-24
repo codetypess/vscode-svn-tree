@@ -81,12 +81,24 @@ export class HistoryPanel implements vscode.Disposable {
                 const payload = message as {
                     type?: string;
                     revision?: number;
+                    beforeRevision?: number;
                     path?: string;
                     action?: string;
                 };
 
                 if (payload.type === "refresh") {
                     await this.pushEntries(panel, repository);
+                    return;
+                }
+
+                if (
+                    payload.type === "load-more" &&
+                    typeof payload.beforeRevision === "number"
+                ) {
+                    await this.pushEntries(panel, repository, {
+                        append: true,
+                        beforeRevision: payload.beforeRevision,
+                    });
                     return;
                 }
 
@@ -113,23 +125,32 @@ export class HistoryPanel implements vscode.Disposable {
 
     private async pushEntries(
         panel: vscode.WebviewPanel,
-        repository: SvnRepository
+        repository: SvnRepository,
+        options: {
+            append?: boolean;
+            beforeRevision?: number;
+        } = {}
     ): Promise<void> {
         try {
-            const entries = await repository.loadHistory();
+            const page = await repository.loadHistoryPage(options.beforeRevision);
             panel.webview.postMessage({
                 type: "history-data",
                 payload: {
+                    append: options.append === true,
+                    hasMore: page.hasMore,
                     repositoryLabel: repository.label,
                     rootPath: repository.rootPath,
-                    entries,
+                    entries: page.entries,
                 },
             });
         } catch (error) {
             const message = error instanceof Error ? error.message : String(error);
             panel.webview.postMessage({
                 type: "history-error",
-                payload: message,
+                payload: {
+                    append: options.append === true,
+                    message,
+                },
             });
         }
     }
@@ -265,6 +286,26 @@ export class HistoryPanel implements vscode.Disposable {
       .history-list {
         max-height: calc(100vh - 94px);
         overflow: auto;
+      }
+
+      .history-footer {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        min-height: 64px;
+        padding: 12px 16px 18px;
+        border-top: 1px solid color-mix(in srgb, var(--border) 60%, transparent);
+      }
+
+      .history-footer-text {
+        color: var(--muted);
+        font-size: 12px;
+      }
+
+      .history-footer .secondary {
+        color: var(--secondary-button-fg);
+        background: var(--secondary-button-bg);
+        border-color: var(--border);
       }
 
       .table-header,
@@ -714,6 +755,9 @@ export class HistoryPanel implements vscode.Disposable {
       let state = {
         entries: [],
         filteredEntries: [],
+        hasMore: true,
+        isLoading: true,
+        loadMoreError: undefined,
         expandedRevision: undefined,
         collapsedDirectories: {},
         repositoryLabel: ${JSON.stringify(repository.label)},
@@ -995,7 +1039,25 @@ export class HistoryPanel implements vscode.Disposable {
       }
 
       function renderList() {
+        if (state.entries.length === 0 && state.isLoading) {
+          historyList.innerHTML = '<div class="empty-state">Loading history…</div>';
+          return;
+        }
+
+        const footerMarkup = state.isLoading
+          ? '<div class="history-footer"><span class="history-footer-text">Loading more history…</span></div>'
+          : state.loadMoreError
+            ? '<div class="history-footer"><button class="secondary" type="button" data-load-more>Retry loading older revisions</button></div>'
+            : state.hasMore
+              ? '<div class="history-footer"><button class="secondary" type="button" data-load-more>Load older revisions</button></div>'
+              : '<div class="history-footer"><span class="history-footer-text">All available history has been loaded.</span></div>';
+
         if (state.filteredEntries.length === 0) {
+          if (search.value.trim() && state.hasMore) {
+            historyList.innerHTML = '<div class="empty-state">No loaded revisions match the current filter yet.</div>' + footerMarkup;
+            return;
+          }
+
           historyList.innerHTML = '<div class="empty-state">No revisions match the current filter.</div>';
           return;
         }
@@ -1026,12 +1088,60 @@ export class HistoryPanel implements vscode.Disposable {
               </article>
             \`;
           })
-          .join('');
+          .join('') + footerMarkup;
+      }
+
+      function requestMoreEntries() {
+        if (state.isLoading || !state.hasMore || state.entries.length === 0) {
+          return;
+        }
+
+        const beforeRevision = Number(state.entries[state.entries.length - 1]?.revision) - 1;
+        if (!Number.isFinite(beforeRevision) || beforeRevision < 1) {
+          state = {
+            ...state,
+            hasMore: false
+          };
+          renderList();
+          return;
+        }
+
+        state = {
+          ...state,
+          isLoading: true,
+          loadMoreError: undefined
+        };
+        renderList();
+        vscode.postMessage({
+          type: 'load-more',
+          beforeRevision
+        });
+      }
+
+      function maybeLoadMoreOnScroll() {
+        if (state.isLoading || !state.hasMore) {
+          return;
+        }
+
+        if (search.value.trim() && state.filteredEntries.length === 0) {
+          return;
+        }
+
+        const remaining = historyList.scrollHeight - historyList.scrollTop - historyList.clientHeight;
+        if (remaining < 240) {
+          requestMoreEntries();
+        }
       }
 
       historyList.addEventListener('click', (clickEvent) => {
         const target = getEventElement(clickEvent.target);
         if (!target) {
+          return;
+        }
+
+        const loadMoreButton = target.closest('[data-load-more]');
+        if (loadMoreButton) {
+          requestMoreEntries();
           return;
         }
 
@@ -1084,25 +1194,58 @@ export class HistoryPanel implements vscode.Disposable {
 
       search.addEventListener('input', sync);
       refresh.addEventListener('click', () => {
+        state = {
+          ...state,
+          isLoading: true,
+          hasMore: true,
+          loadMoreError: undefined
+        };
+        renderList();
         vscode.postMessage({ type: 'refresh' });
       });
+      historyList.addEventListener('scroll', maybeLoadMoreOnScroll);
 
       window.addEventListener('message', (event) => {
         const { type, payload } = event.data;
 
         if (type === 'history-data') {
+          const nextEntries = payload.append
+            ? [...state.entries, ...payload.entries.filter((entry) => !state.entries.some((existing) => existing.revision === entry.revision))]
+            : payload.entries;
           state = {
             ...state,
-            entries: payload.entries,
+            entries: nextEntries,
+            hasMore: payload.hasMore === true,
+            isLoading: false,
+            loadMoreError: undefined,
             repositoryLabel: payload.repositoryLabel,
             rootPath: payload.rootPath
           };
           sync();
+          queueMicrotask(maybeLoadMoreOnScroll);
           return;
         }
 
         if (type === 'history-error') {
-          historyList.innerHTML = '<div class="empty-state">Unable to load history.<br /><br />' + escape(payload) + '</div>';
+          if (payload.append) {
+            state = {
+              ...state,
+              isLoading: false,
+              loadMoreError: payload.message
+            };
+            renderList();
+            return;
+          }
+
+          state = {
+            ...state,
+            entries: [],
+            filteredEntries: [],
+            hasMore: false,
+            isLoading: false,
+            loadMoreError: payload.message
+          };
+          historyList.innerHTML = '<div class="empty-state">Unable to load history.<br /><br />' + escape(payload.message) + '</div>';
         }
       });
 
