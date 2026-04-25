@@ -47,24 +47,20 @@ function isRemoteChange(status: SvnStatusEntry): boolean {
 function getRepositoryReferenceDisplay(repositoryRelativePath: string): {
     icon: string;
     label: string;
-    fullPath: string;
 } {
-    const normalizedPath = repositoryRelativePath.replace(/^\/+|\/+$/g, "");
-    if (!normalizedPath) {
+    const segments = splitRepositoryPath(repositoryRelativePath);
+    if (segments.length === 0) {
         return {
             icon: "repo",
             label: "/",
-            fullPath: "/",
         };
     }
 
-    const segments = normalizedPath.split("/");
     const trunkIndex = segments.indexOf("trunk");
     if (trunkIndex !== -1) {
         return {
             icon: "git-branch",
             label: "trunk",
-            fullPath: `/${normalizedPath}`,
         };
     }
 
@@ -73,7 +69,6 @@ function getRepositoryReferenceDisplay(repositoryRelativePath: string): {
         return {
             icon: "git-branch",
             label: segments.slice(branchesIndex, branchesIndex + 2).join("/"),
-            fullPath: `/${normalizedPath}`,
         };
     }
 
@@ -82,14 +77,12 @@ function getRepositoryReferenceDisplay(repositoryRelativePath: string): {
         return {
             icon: "tag",
             label: segments.slice(tagsIndex, tagsIndex + 2).join("/"),
-            fullPath: `/${normalizedPath}`,
         };
     }
 
     return {
         icon: "repo",
-        label: segments.at(-1) ?? normalizedPath,
-        fullPath: `/${normalizedPath}`,
+        label: segments.at(-1) ?? "/",
     };
 }
 
@@ -936,24 +929,15 @@ export class SvnRepository implements vscode.Disposable {
 
         this.sourceControl.statusBarCommands = [
             {
-                command: "svn-graph.open-history",
+                command: "SVN Graph Open History",
                 title: `$(${this.repositoryReference.icon}) ${this.repositoryReference.label}`,
-                tooltip: this.i18n.t("repositoryHistoryTooltip", {
-                    path: this.repositoryReference.fullPath,
-                }),
-                arguments: [this],
+                arguments: ["SVN Graph Open History", this],
             },
             {
-                command: "svn-graph.update",
+                command: "SVN Graph Update",
                 title: updateTitle,
                 tooltip: updateTooltip,
-                arguments: [this],
-            },
-            {
-                command: "svn-graph.open-repository-actions",
-                title: "$(ellipsis)",
-                tooltip: this.i18n.t("moreActionsTooltip"),
-                arguments: [this],
+                arguments: ["SVN Graph Update", this],
             },
         ];
     }

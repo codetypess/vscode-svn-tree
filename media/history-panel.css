@@ -124,6 +124,12 @@ button {
   border-color: var(--border);
 }
 
+button.secondary {
+  color: var(--secondary-button-fg);
+  background: var(--secondary-button-bg);
+  border-color: var(--border);
+}
+
 .table-header,
 .commit-row {
   display: grid;
@@ -462,6 +468,15 @@ button {
 .empty-state {
   padding: 28px 20px;
   color: var(--muted);
+}
+
+.empty-state-error {
+  margin-top: 12px;
+  white-space: pre-wrap;
+}
+
+.empty-state-actions {
+  margin-top: 16px;
 }
 
 .context-menu-root {

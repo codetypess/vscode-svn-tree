@@ -83,6 +83,9 @@ type HistoryResponseMessage =
 
 type HistoryRequestMessage =
     | {
+          type: "ready";
+      }
+    | {
           type: "refresh";
       }
     | {
@@ -1021,6 +1024,10 @@ function isHistoryConfigMessage(
             [i18n, state.locale, state.repositoryLabel]
         );
 
+        React.useEffect(function () {
+            vscode.postMessage({ type: "ready" });
+        }, []);
+
         const filteredEntries = state.query.trim()
             ? state.entries.filter(function (entry) {
                   const haystack = [
@@ -1088,6 +1095,19 @@ function isHistoryConfigMessage(
                 type: "load-more",
                 beforeRevision: beforeRevision,
             });
+        }
+
+        function requestRefresh() {
+            setState(function (previous) {
+                return {
+                    ...previous,
+                    isLoading: true,
+                    hasMore: true,
+                    loadMoreError: undefined,
+                    contextMenu: undefined,
+                };
+            });
+            vscode.postMessage({ type: "refresh" });
         }
 
         function maybeLoadMoreOnScroll() {
@@ -1367,10 +1387,21 @@ function isHistoryConfigMessage(
                     return h(
                         "div",
                         { className: "empty-state" },
-                        i18n.t("unableLoadHistory"),
-                        h("br"),
-                        h("br"),
-                        state.loadMoreError
+                        h("div", null, i18n.t("unableLoadHistory")),
+                        h("div", { className: "empty-state-error" }, state.loadMoreError),
+                        h(
+                            "div",
+                            { className: "empty-state-actions" },
+                            h(
+                                "button",
+                                {
+                                    className: "secondary",
+                                    type: "button",
+                                    onClick: requestRefresh,
+                                },
+                                i18n.t("retryLoadingHistory")
+                            )
+                        )
                     );
                 }
 
@@ -1591,18 +1622,7 @@ function isHistoryConfigMessage(
                                 "button",
                                 {
                                     type: "button",
-                                    onClick: function () {
-                                        setState(function (previous) {
-                                            return {
-                                                ...previous,
-                                                isLoading: true,
-                                                hasMore: true,
-                                                loadMoreError: undefined,
-                                                contextMenu: undefined,
-                                            };
-                                        });
-                                        vscode.postMessage({ type: "refresh" });
-                                    },
+                                    onClick: requestRefresh,
                                 },
                                 i18n.t("refreshButton")
                             )

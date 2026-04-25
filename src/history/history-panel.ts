@@ -104,6 +104,11 @@ export class HistoryPanel implements vscode.Disposable {
                     return;
                 }
 
+                if (payload.type === "ready") {
+                    await this.pushEntries(panel, repository);
+                    return;
+                }
+
                 if (
                     payload.type === "load-more" &&
                     typeof payload.beforeRevision === "number"
@@ -284,7 +289,6 @@ export class HistoryPanel implements vscode.Disposable {
         );
 
         panel.webview.html = this.getWebviewHtml(panel.webview, repository);
-        await this.pushEntries(panel, repository);
     }
 
     public refreshLocalization(repository: SvnRepository): void {

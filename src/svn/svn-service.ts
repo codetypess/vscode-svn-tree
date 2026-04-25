@@ -6,10 +6,19 @@ import { parseInfoXml, parseLogXml, parseStatusXml } from "./svn-xml-parser";
 import type { SvnLogEntry, SvnStatusEntry, SvnWorkingCopyInfo } from "./svn-types";
 
 const execFileAsync = promisify(execFile);
+const historyLogRetryCount = 1;
+const historyLogRetryDelayMs = 1500;
+const historyLogInitialTimeoutMs = 3000;
+const historyLogTimeoutBackoffFactor = 2;
+const maxHistoryLogTimeoutMs = 20000;
 
 interface RunSvnOptions {
     cwd?: string;
     quiet?: boolean;
+    retryCount?: number;
+    retryDelayMs?: number;
+    timeoutMs?: number;
+    getTimeoutMs?: (attempt: number, totalAttempts: number) => number | undefined;
 }
 
 export class SvnService {
@@ -63,7 +72,13 @@ export class SvnService {
 
         args.push(".");
 
-        const { stdout } = await this.run(args, { cwd: rootPath });
+        const { stdout } = await this.run(args, {
+            cwd: rootPath,
+            retryCount: historyLogRetryCount,
+            retryDelayMs: historyLogRetryDelayMs,
+            getTimeoutMs: (attempt, totalAttempts) =>
+                this.getHistoryLogTimeoutMs(attempt, totalAttempts, limit),
+        });
         return parseLogXml(stdout);
     }
 
@@ -160,22 +175,54 @@ export class SvnService {
         args: string[],
         options: RunSvnOptions = {}
     ): Promise<{ stdout: string; stderr: string }> {
-        if (!options.quiet) {
-            const renderedCwd = options.cwd ? ` (cwd: ${options.cwd})` : "";
-            this.outputChannel.appendLine(`svn ${args.join(" ")}${renderedCwd}`);
+        const totalAttempts = Math.max(1, (options.retryCount ?? 0) + 1);
+
+        for (let attempt = 1; attempt <= totalAttempts; attempt += 1) {
+            const timeoutMs = this.resolveTimeoutMs(options, attempt, totalAttempts);
+            if (!options.quiet) {
+                this.outputChannel.appendLine(
+                    this.renderCommand(args, options, attempt, totalAttempts, timeoutMs)
+                );
+            }
+
+            try {
+                return await execFileAsync("svn", args, {
+                    cwd: options.cwd,
+                    encoding: "utf8",
+                    maxBuffer: 16 * 1024 * 1024,
+                    timeout: timeoutMs,
+                });
+            } catch (error) {
+                const message = this.renderError(error, args, timeoutMs);
+                const canRetry = attempt < totalAttempts && this.shouldRetry(error, timeoutMs);
+                const attemptMessage =
+                    totalAttempts > 1 && attempt > 1
+                        ? `${message} (attempt ${attempt}/${totalAttempts})`
+                        : message;
+
+                this.outputChannel.appendLine(attemptMessage);
+
+                if (!canRetry) {
+                    const finalMessage =
+                        totalAttempts > 1 && attempt > 1
+                            ? `${message} Failed after ${attempt} attempts.`
+                            : message;
+                    throw new Error(finalMessage);
+                }
+
+                const retryDelayMs = options.retryDelayMs ?? 0;
+                this.outputChannel.appendLine(
+                    `Retrying svn ${args[0]} in ${Math.max(retryDelayMs, 0)}ms ` +
+                        `(${attempt + 1}/${totalAttempts})`
+                );
+
+                if (retryDelayMs > 0) {
+                    await this.delay(retryDelayMs);
+                }
+            }
         }
 
-        try {
-            return await execFileAsync("svn", args, {
-                cwd: options.cwd,
-                encoding: "utf8",
-                maxBuffer: 16 * 1024 * 1024,
-            });
-        } catch (error) {
-            const message = this.renderError(error);
-            this.outputChannel.appendLine(message);
-            throw new Error(message);
-        }
+        throw new Error("SVN command did not complete.");
     }
 
     private toRelativeTargets(rootPath: string, paths?: string[]): string[] {
@@ -189,7 +236,89 @@ export class SvnService {
         });
     }
 
-    private renderError(error: unknown): string {
+    private renderCommand(
+        args: string[],
+        options: RunSvnOptions,
+        attempt: number,
+        totalAttempts: number,
+        _timeoutMs?: number
+    ): string {
+        const renderedCwd = options.cwd ? ` (cwd: ${options.cwd})` : "";
+        const attemptSuffix =
+            totalAttempts > 1 && attempt > 1 ? ` [attempt ${attempt}/${totalAttempts}]` : "";
+
+        return `svn ${args.join(" ")}${renderedCwd}${attemptSuffix}`;
+    }
+
+    private resolveTimeoutMs(
+        options: RunSvnOptions,
+        attempt: number,
+        totalAttempts: number
+    ): number | undefined {
+        if (typeof options.getTimeoutMs === "function") {
+            return options.getTimeoutMs(attempt, totalAttempts);
+        }
+
+        return options.timeoutMs;
+    }
+
+    private shouldRetry(error: unknown, timeoutMs?: number): boolean {
+        if (typeof timeoutMs !== "number" || timeoutMs <= 0) {
+            return false;
+        }
+
+        return this.isTimeoutError(error);
+    }
+
+    private isTimeoutError(error: unknown): boolean {
+        if (!(error instanceof Error)) {
+            return false;
+        }
+
+        const timedOutError = error as Error & {
+            killed?: boolean;
+            signal?: NodeJS.Signals | null;
+        };
+
+        return timedOutError.killed === true || /timed out/i.test(error.message);
+    }
+
+    private getHistoryLogTimeoutMs(
+        attempt: number,
+        _totalAttempts: number,
+        _limit: number
+    ): number {
+        return Math.min(
+            maxHistoryLogTimeoutMs,
+            historyLogInitialTimeoutMs *
+                Math.pow(historyLogTimeoutBackoffFactor, Math.max(0, attempt - 1))
+        );
+    }
+
+    private async delay(milliseconds: number): Promise<void> {
+        await new Promise<void>((resolve) => {
+            setTimeout(resolve, milliseconds);
+        });
+    }
+
+    private renderError(
+        error: unknown,
+        args?: string[],
+        timeoutMs?: number
+    ): string {
+        if (
+            this.isTimeoutError(error) &&
+            Array.isArray(args) &&
+            args[0] === "log" &&
+            typeof timeoutMs === "number" &&
+            timeoutMs > 0
+        ) {
+            return (
+                `svn log timed out after ${Math.ceil(timeoutMs / 1000)}s. ` +
+                "If this keeps happening, lower `svn-graph.max-log-entries`."
+            );
+        }
+
         if (error instanceof Error) {
             return error.message;
         }

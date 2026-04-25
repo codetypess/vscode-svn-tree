@@ -8,6 +8,7 @@
   "command.cleanup.title": "Cleanup SVN Working Copy",
   "command.openHistory.title": "Open SVN History",
   "command.openRepositoryActions.title": "More SVN Actions",
+  "command.showOutput.title": "Show SVN Output",
   "command.openDiff.title": "Open Diff",
   "command.openFile.title": "Open File",
   "command.revertResource.title": "Revert Resource",

@@ -49,16 +49,25 @@ export class SvnRepositoryManager implements vscode.Disposable {
             vscode.commands.registerCommand("svn-graph.update", async (arg?: unknown) =>
                 this.runForRepository(arg, (repository) => repository.update())
             ),
+            vscode.commands.registerCommand("SVN Graph Update", async (arg?: unknown) =>
+                this.runForRepository(arg, (repository) => repository.update())
+            ),
             vscode.commands.registerCommand("svn-graph.cleanup", async (arg?: unknown) =>
                 this.runForRepository(arg, (repository) => repository.cleanup())
             ),
             vscode.commands.registerCommand("svn-graph.open-history", async (arg?: unknown) =>
                 this.runForRepository(arg, (repository) => repository.showHistory())
             ),
+            vscode.commands.registerCommand("SVN Graph Open History", async (arg?: unknown) =>
+                this.runForRepository(arg, (repository) => repository.showHistory())
+            ),
             vscode.commands.registerCommand(
                 "svn-graph.open-repository-actions",
                 async (arg?: unknown) => this.openRepositoryActions(arg)
             ),
+            vscode.commands.registerCommand("svn-graph.show-output", async () => {
+                this.outputChannel.show(true);
+            }),
             vscode.commands.registerCommand("svn-graph.open-diff", async (arg?: unknown) =>
                 this.openDiff(arg)
             ),
@@ -250,6 +259,30 @@ export class SvnRepositoryManager implements vscode.Disposable {
         const i18n = getI18n();
 
         if (Array.isArray(arg) && arg.length > 0) {
+            for (const item of arg) {
+                if (item instanceof SvnRepository) {
+                    return item;
+                }
+
+                if (item instanceof ScmResource) {
+                    return item.repository;
+                }
+
+                if (item instanceof vscode.Uri) {
+                    const repository = this.getRepositoryForUri(item);
+                    if (repository) {
+                        return repository;
+                    }
+                }
+
+                if (this.hasRootUri(item) && item.rootUri instanceof vscode.Uri) {
+                    const repository = this.getRepositoryForUri(item.rootUri);
+                    if (repository) {
+                        return repository;
+                    }
+                }
+            }
+
             return this.resolveRepository(arg[0]);
         }
 
@@ -322,11 +355,6 @@ export class SvnRepositoryManager implements vscode.Disposable {
 
         const selection = await vscode.window.showQuickPick<RepositoryActionItem>(
             [
-                {
-                    label: i18n.t("openHistoryActionLabel"),
-                    description: i18n.t("openHistoryActionDescription"),
-                    run: async (targetRepository) => targetRepository.showHistory(),
-                },
                 {
                     label: i18n.t("refreshStatusActionLabel"),
                     description: i18n.t("refreshStatusActionDescription"),

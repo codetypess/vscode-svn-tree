@@ -66,13 +66,19 @@
         "command": "svn-graph.open-history",
         "title": "%command.openHistory.title%",
         "category": "%command.category%",
-        "icon": "$(history)"
+        "icon": "$(git-branch)"
       },
       {
         "command": "svn-graph.open-repository-actions",
         "title": "%command.openRepositoryActions.title%",
         "category": "%command.category%",
         "icon": "$(ellipsis)"
+      },
+      {
+        "command": "svn-graph.show-output",
+        "title": "%command.showOutput.title%",
+        "category": "%command.category%",
+        "icon": "$(output)"
       },
       {
         "command": "svn-graph.open-diff",
@@ -131,6 +137,13 @@
           "command": "svn-graph.refresh",
           "when": "scmProvider == svn-graph",
           "group": "navigation@2"
+        }
+      ],
+      "scm/repository": [
+        {
+          "command": "svn-graph.open-repository-actions",
+          "when": "scmProvider == svn-graph",
+          "group": "inline@1"
         }
       ],
       "scm/resourceState/context": [
