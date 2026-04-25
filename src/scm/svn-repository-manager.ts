@@ -40,7 +40,7 @@ export class SvnRepositoryManager implements vscode.Disposable {
             ),
             vscode.commands.registerCommand("svn-tree.refresh", async (arg?: unknown) =>
                 this.runForRepository(arg, (repository) =>
-                    repository.refresh({ forceRemote: true })
+                    repository.refreshWithProgress({ forceRemote: true })
                 )
             ),
             vscode.commands.registerCommand("svn-tree.commit", async (arg?: unknown) =>
@@ -356,7 +356,7 @@ export class SvnRepositoryManager implements vscode.Disposable {
                     label: i18n.t("refreshStatusActionLabel"),
                     description: i18n.t("refreshStatusActionDescription"),
                     run: async (targetRepository) =>
-                        targetRepository.refresh({ forceRemote: true }),
+                        targetRepository.refreshWithProgress({ forceRemote: true }),
                 },
                 {
                     label: i18n.t("updateWorkingCopyActionLabel"),

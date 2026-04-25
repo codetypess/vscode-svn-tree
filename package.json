@@ -2,7 +2,7 @@
   "name": "svn-tree",
   "displayName": "%displayName%",
   "description": "%description%",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "publisher": "codetypess",
   "license": "MIT",
   "icon": "media/icon.png",
@@ -136,6 +136,11 @@
       {
         "id": "svn-tree.file-history",
         "label": "%submenu.fileHistory.label%"
+      },
+      {
+        "id": "svn-tree.repository-actions",
+        "label": "%command.openRepositoryActions.title%",
+        "icon": "$(ellipsis)"
       }
     ],
     "menus": {
@@ -166,9 +171,27 @@
       ],
       "scm/repository": [
         {
-          "command": "svn-tree.open-repository-actions",
+          "submenu": "svn-tree.repository-actions",
           "when": "scmProvider == svn-tree",
           "group": "inline@1"
+        }
+      ],
+      "svn-tree.repository-actions": [
+        {
+          "command": "svn-tree.refresh",
+          "group": "1_status@1"
+        },
+        {
+          "command": "svn-tree.update",
+          "group": "1_status@2"
+        },
+        {
+          "command": "svn-tree.cleanup",
+          "group": "1_status@3"
+        },
+        {
+          "command": "svn-tree.show-output",
+          "group": "2_tools@1"
         }
       ],
       "scm/resourceState/context": [

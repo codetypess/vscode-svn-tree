@@ -14,9 +14,11 @@ import { ScmResource } from "./scm-resource";
 
 interface RefreshOptions {
     forceRemote?: boolean;
+    allowWhileBusy?: boolean;
 }
 
 type RepositoryReferenceKind = "branch" | "tag";
+type RepositoryUiOperation = "refresh" | "update" | "cleanup";
 
 function posixJoin(left: string, right: string): string {
     return `${left.replace(/\/+$/, "")}/${right.replace(/\\/g, "/").replace(/^\/+/, "")}`;
@@ -189,6 +191,7 @@ export class SvnRepository implements vscode.Disposable {
     private lastRemoteRefreshAt = 0;
     private isRefreshing = false;
     private isRefreshingRemoteCount = false;
+    private activeOperation: RepositoryUiOperation | undefined;
 
     public constructor(
         public readonly info: SvnWorkingCopyInfo,
@@ -271,6 +274,14 @@ export class SvnRepository implements vscode.Disposable {
             return;
         }
 
+        if (
+            !options.allowWhileBusy &&
+            this.activeOperation !== undefined &&
+            this.activeOperation !== "refresh"
+        ) {
+            return;
+        }
+
         this.isRefreshing = true;
 
         try {
@@ -318,6 +329,15 @@ export class SvnRepository implements vscode.Disposable {
         }
     }
 
+    public async refreshWithProgress(options: RefreshOptions = {}): Promise<void> {
+        await this.runRepositoryOperation(
+            "refresh",
+            this.i18n.t("refreshStatusProgress", { label: this.label }),
+            this.i18n.t("refreshStatusCompleted", { label: this.label }),
+            () => this.refresh(options)
+        );
+    }
+
     public async commit(paths?: string[]): Promise<void> {
         const message = this.sourceControl.inputBox.value.trim();
 
@@ -331,8 +351,15 @@ export class SvnRepository implements vscode.Disposable {
     }
 
     public async update(paths?: string[]): Promise<void> {
-        await this.svnService.update(this.rootPath, paths);
-        await this.refresh({ forceRemote: true });
+        await this.runRepositoryOperation(
+            "update",
+            this.i18n.t("updateWorkingCopyProgress", { label: this.label }),
+            this.i18n.t("updateWorkingCopyCompleted", { label: this.label }),
+            async () => {
+                await this.svnService.update(this.rootPath, paths);
+                await this.refresh({ forceRemote: true, allowWhileBusy: true });
+            }
+        );
     }
 
     public async checkoutRevision(revision: number): Promise<void> {
@@ -524,8 +551,15 @@ export class SvnRepository implements vscode.Disposable {
     }
 
     public async cleanup(): Promise<void> {
-        await this.svnService.cleanup(this.rootPath);
-        await this.refresh();
+        await this.runRepositoryOperation(
+            "cleanup",
+            this.i18n.t("cleanupWorkingCopyProgress", { label: this.label }),
+            this.i18n.t("cleanupWorkingCopyCompleted", { label: this.label }),
+            async () => {
+                await this.svnService.cleanup(this.rootPath);
+                await this.refresh({ allowWhileBusy: true });
+            }
+        );
     }
 
     public async revert(paths: string[]): Promise<void> {
@@ -945,15 +979,18 @@ export class SvnRepository implements vscode.Disposable {
 
     private updateStatusBarCommands(remoteCount: number): void {
         const countSuffix = remoteCount > 0 ? ` ${remoteCount}` : "";
-        const updateIcon = this.isRefreshingRemoteCount ? "loading~spin" : "cloud-download";
-        const updateTitle = this.isRefreshingRemoteCount
-            ? "$(loading~spin)"
-            : `$(${updateIcon})${countSuffix}`;
-        const updateTooltip = this.isRefreshingRemoteCount
-            ? this.i18n.t("checkingIncomingTooltip")
-            : remoteCount > 0
-              ? this.i18n.formatIncomingChangeCount(remoteCount)
-              : this.i18n.t("updateTooltipNoIncoming");
+        const activeOperation = this.activeOperation;
+        const hasActiveOperation = activeOperation !== undefined;
+        const showSpinner = hasActiveOperation || this.isRefreshingRemoteCount;
+        const updateIcon = showSpinner ? "loading~spin" : "cloud-download";
+        const updateTitle = showSpinner ? "$(loading~spin)" : `$(${updateIcon})${countSuffix}`;
+        const updateTooltip = hasActiveOperation
+            ? this.getOperationProgressTooltip(activeOperation)
+            : this.isRefreshingRemoteCount
+              ? this.i18n.t("checkingIncomingTooltip")
+              : remoteCount > 0
+                ? this.i18n.formatIncomingChangeCount(remoteCount)
+                : this.i18n.t("updateTooltipNoIncoming");
 
         this.sourceControl.statusBarCommands = [
             {
@@ -968,6 +1005,65 @@ export class SvnRepository implements vscode.Disposable {
                 arguments: [this],
             },
         ];
+    }
+
+    private getOperationProgressTooltip(operation: RepositoryUiOperation): string {
+        switch (operation) {
+            case "refresh":
+                return this.i18n.t("refreshStatusRunningTooltip");
+            case "update":
+                return this.i18n.t("updateWorkingCopyRunningTooltip");
+            case "cleanup":
+                return this.i18n.t("cleanupWorkingCopyRunningTooltip");
+        }
+    }
+
+    private getOperationLabel(operation: RepositoryUiOperation): string {
+        switch (operation) {
+            case "refresh":
+                return this.i18n.t("refreshStatusActionLabel");
+            case "update":
+                return this.i18n.t("updateWorkingCopyActionLabel");
+            case "cleanup":
+                return this.i18n.t("cleanupWorkingCopyActionLabel");
+        }
+    }
+
+    private async runRepositoryOperation(
+        operation: RepositoryUiOperation,
+        progressTitle: string,
+        completedMessage: string,
+        action: () => Promise<void>
+    ): Promise<void> {
+        if (this.activeOperation) {
+            void vscode.window.showInformationMessage(
+                this.i18n.t("operationAlreadyRunning", {
+                    action: this.getOperationLabel(this.activeOperation),
+                    label: this.label,
+                })
+            );
+            return;
+        }
+
+        this.activeOperation = operation;
+        this.updateStatusBarCommands(this.remoteChangeCount);
+
+        try {
+            await vscode.window.withProgress(
+                {
+                    location: vscode.ProgressLocation.Notification,
+                    title: progressTitle,
+                },
+                async () => {
+                    await action();
+                }
+            );
+
+            void vscode.window.showInformationMessage(completedMessage);
+        } finally {
+            this.activeOperation = undefined;
+            this.updateStatusBarCommands(this.remoteChangeCount);
+        }
     }
 
     private async createRepositoryReferenceFromRevision(
