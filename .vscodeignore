@@ -9,7 +9,7 @@ tsconfig.webview.json
 .gitignore
 out/test/**
 **/*.map
-svn-graph-*.vsix
+svn-tree-*.vsix
 node_modules/@vscode/codicons/_iconCloud/**
 node_modules/@vscode/codicons/.devcontainer/**
 node_modules/@vscode/codicons/.husky/**

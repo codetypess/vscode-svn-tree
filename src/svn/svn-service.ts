@@ -59,7 +59,8 @@ export class SvnService {
     public async getLog(
         rootPath: string,
         limit: number,
-        beforeRevision?: number
+        beforeRevision?: number,
+        targetPath?: string
     ): Promise<SvnLogEntry[]> {
         if (beforeRevision !== undefined && beforeRevision < 1) {
             return [];
@@ -70,7 +71,7 @@ export class SvnService {
             args.push("-r", `${Math.floor(beforeRevision)}:1`);
         }
 
-        args.push(".");
+        args.push(this.toLogTarget(rootPath, targetPath));
 
         const { stdout } = await this.run(args, {
             cwd: rootPath,
@@ -236,6 +237,18 @@ export class SvnService {
         });
     }
 
+    private toLogTarget(rootPath: string, targetPath?: string): string {
+        if (!targetPath) {
+            return ".";
+        }
+
+        const relativePath = nodePath.isAbsolute(targetPath)
+            ? nodePath.relative(rootPath, targetPath)
+            : targetPath;
+
+        return relativePath.length > 0 ? relativePath : ".";
+    }
+
     private renderCommand(
         args: string[],
         options: RunSvnOptions,
@@ -315,7 +328,7 @@ export class SvnService {
         ) {
             return (
                 `svn log timed out after ${Math.ceil(timeoutMs / 1000)}s. ` +
-                "If this keeps happening, lower `svn-graph.max-log-entries`."
+                "If this keeps happening, lower `svn-tree.max-log-entries`."
             );
         }
 

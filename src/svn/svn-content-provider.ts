@@ -12,7 +12,7 @@ interface SvnContentDescriptor {
 }
 
 export class SvnContentProvider implements vscode.TextDocumentContentProvider {
-    public static readonly scheme = "svn-graph";
+    public static readonly scheme = "svn-tree";
 
     public constructor(private readonly svnService: SvnService) {}
 

@@ -198,7 +198,7 @@ export class SvnRepository implements vscode.Disposable {
     ) {
         const i18n = getI18n();
         this.sourceControl = vscode.scm.createSourceControl(
-            "svn-graph",
+            "svn-tree",
             `SVN: ${nodePath.basename(info.workingCopyRoot)}`,
             vscode.Uri.file(info.workingCopyRoot)
         );
@@ -208,15 +208,15 @@ export class SvnRepository implements vscode.Disposable {
         this.repositoryReference = getRepositoryReferenceDisplay(info.repositoryRelativePath);
 
         this.changesGroup = this.sourceControl.createResourceGroup(
-            "svn-graph.changes",
+            "svn-tree.changes",
             i18n.t("changesGroupLabel")
         );
         this.unversionedGroup = this.sourceControl.createResourceGroup(
-            "svn-graph.unversioned",
+            "svn-tree.unversioned",
             i18n.t("unversionedGroupLabel")
         );
         this.remoteChangesGroup = this.sourceControl.createResourceGroup(
-            "svn-graph.remote-changes",
+            "svn-tree.remote-changes",
             i18n.t("remoteChangesGroupLabel")
         );
         this.changesGroup.hideWhenEmpty = false;
@@ -253,7 +253,7 @@ export class SvnRepository implements vscode.Disposable {
 
     public refreshLocalization(): void {
         this.sourceControl.acceptInputCommand = {
-            command: "svn-graph.commit",
+            command: "svn-tree.commit",
             title: this.i18n.t("commitAcceptTitle"),
             arguments: [this],
         };
@@ -547,11 +547,28 @@ export class SvnRepository implements vscode.Disposable {
         await this.historyPanel.show(this);
     }
 
-    public async loadHistoryPage(beforeRevision?: number): Promise<SvnLogPage> {
+    public async showFileHistory(target: vscode.Uri | string): Promise<void> {
+        const relativePath = this.getHistoryTargetRelativePath(target);
+        await this.historyPanel.show(this, {
+            key: `${this.rootPath}::file::${relativePath}`,
+            label: relativePath,
+            targetPath: relativePath,
+        });
+    }
+
+    public async loadHistoryPage(
+        beforeRevision?: number,
+        targetPath?: string
+    ): Promise<SvnLogPage> {
         const pageSize = vscode.workspace
-            .getConfiguration("svn-graph")
+            .getConfiguration("svn-tree")
             .get<number>("max-log-entries", 200);
-        const entries = await this.svnService.getLog(this.rootPath, pageSize, beforeRevision);
+        const entries = await this.svnService.getLog(
+            this.rootPath,
+            pageSize,
+            beforeRevision,
+            targetPath
+        );
         const oldestRevision = entries.at(-1)?.revision;
 
         return {
@@ -683,7 +700,7 @@ export class SvnRepository implements vscode.Disposable {
 
     private shouldIncludeRemote(forceRemote: boolean): boolean {
         const enabled = vscode.workspace
-            .getConfiguration("svn-graph")
+            .getConfiguration("svn-tree")
             .get<boolean>("enable-remote-status", true);
         if (!enabled) {
             return false;
@@ -694,7 +711,7 @@ export class SvnRepository implements vscode.Disposable {
         }
 
         const intervalSeconds = vscode.workspace
-            .getConfiguration("svn-graph")
+            .getConfiguration("svn-tree")
             .get<number>("remote-status-interval-seconds", 60);
         return Date.now() - this.lastRemoteRefreshAt >= intervalSeconds * 1000;
     }
@@ -718,6 +735,17 @@ export class SvnRepository implements vscode.Disposable {
             this.info.repositoryRoot,
             posixJoin(this.info.repositoryRelativePath, relativePath)
         );
+    }
+
+    private getHistoryTargetRelativePath(target: vscode.Uri | string): string {
+        const targetPath = typeof target === "string" ? target : target.fsPath;
+        const relativePath = nodePath.relative(this.rootPath, targetPath).replace(/\\/g, "/");
+
+        if (!relativePath || relativePath.startsWith("../") || relativePath === "..") {
+            throw new Error(this.i18n.t("cannotMapPathWarning", { path: targetPath }));
+        }
+
+        return relativePath;
     }
 
     private async pickHistoryFileChange(
@@ -929,15 +957,15 @@ export class SvnRepository implements vscode.Disposable {
 
         this.sourceControl.statusBarCommands = [
             {
-                command: "SVN Graph Open History",
+                command: "svn-tree.open-history",
                 title: `$(${this.repositoryReference.icon}) ${this.repositoryReference.label}`,
-                arguments: ["SVN Graph Open History", this],
+                arguments: [this],
             },
             {
-                command: "SVN Graph Update",
+                command: "svn-tree.update",
                 title: updateTitle,
                 tooltip: updateTooltip,
-                arguments: ["SVN Graph Update", this],
+                arguments: [this],
             },
         ];
     }

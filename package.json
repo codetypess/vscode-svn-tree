@@ -1,18 +1,18 @@
 {
-  "name": "svn-graph",
+  "name": "svn-tree",
   "displayName": "%displayName%",
   "description": "%description%",
   "version": "0.4.0",
   "publisher": "codetypess",
   "license": "MIT",
   "icon": "media/icon.png",
-  "homepage": "https://github.com/codetypess/vscode-svn-graph#readme",
+  "homepage": "https://github.com/codetypess/vscode-svn-tree#readme",
   "repository": {
     "type": "git",
-    "url": "https://github.com/codetypess/vscode-svn-graph.git"
+    "url": "https://github.com/codetypess/vscode-svn-tree.git"
   },
   "bugs": {
-    "url": "https://github.com/codetypess/vscode-svn-graph/issues"
+    "url": "https://github.com/codetypess/vscode-svn-tree/issues"
   },
   "engines": {
     "vscode": "^1.95.0"
@@ -39,149 +39,174 @@
   "contributes": {
     "commands": [
       {
-        "command": "svn-graph.refresh",
+        "command": "svn-tree.refresh",
         "title": "%command.refresh.title%",
         "category": "%command.category%",
         "icon": "$(refresh)"
       },
       {
-        "command": "svn-graph.commit",
+        "command": "svn-tree.commit",
         "title": "%command.commit.title%",
         "category": "%command.category%",
         "icon": "$(check)"
       },
       {
-        "command": "svn-graph.update",
+        "command": "svn-tree.update",
         "title": "%command.update.title%",
         "category": "%command.category%",
         "icon": "$(cloud-download)"
       },
       {
-        "command": "svn-graph.cleanup",
+        "command": "svn-tree.cleanup",
         "title": "%command.cleanup.title%",
         "category": "%command.category%",
         "icon": "$(tools)"
       },
       {
-        "command": "svn-graph.open-history",
+        "command": "svn-tree.open-history",
         "title": "%command.openHistory.title%",
         "category": "%command.category%",
         "icon": "$(git-branch)"
       },
       {
-        "command": "svn-graph.open-repository-actions",
+        "command": "svn-tree.open-repository-actions",
         "title": "%command.openRepositoryActions.title%",
         "category": "%command.category%",
         "icon": "$(ellipsis)"
       },
       {
-        "command": "svn-graph.show-output",
+        "command": "svn-tree.show-output",
         "title": "%command.showOutput.title%",
         "category": "%command.category%",
         "icon": "$(output)"
       },
       {
-        "command": "svn-graph.open-diff",
+        "command": "svn-tree.open-diff",
         "title": "%command.openDiff.title%",
         "category": "%command.category%"
       },
       {
-        "command": "svn-graph.open-file",
+        "command": "svn-tree.open-file",
         "title": "%command.openFile.title%",
         "category": "%command.category%",
         "icon": "$(go-to-file)"
       },
       {
-        "command": "svn-graph.revert-resource",
+        "command": "svn-tree.revert-resource",
         "title": "%command.revertResource.title%",
         "category": "%command.category%",
         "icon": "$(discard)"
       },
       {
-        "command": "svn-graph.revert-group",
+        "command": "svn-tree.revert-group",
         "title": "%command.revertGroup.title%",
         "category": "%command.category%",
         "icon": "$(discard)"
       },
       {
-        "command": "svn-graph.add-resource",
+        "command": "svn-tree.add-resource",
         "title": "%command.addResource.title%",
         "category": "%command.category%",
         "icon": "$(add)"
       },
       {
-        "command": "svn-graph.add-group",
+        "command": "svn-tree.add-group",
         "title": "%command.addGroup.title%",
         "category": "%command.category%",
         "icon": "$(add)"
       },
       {
-        "command": "svn-graph.delete-resource",
+        "command": "svn-tree.delete-resource",
         "title": "%command.deleteResource.title%",
         "category": "%command.category%"
       },
       {
-        "command": "svn-graph.open-history-diff",
+        "command": "svn-tree.open-history-diff",
         "title": "%command.openHistoryDiff.title%",
         "category": "%command.category%"
+      },
+      {
+        "command": "svn-tree.open-file-history",
+        "title": "%command.openFileHistory.title%",
+        "category": "%command.category%",
+        "icon": "$(history)"
+      }
+    ],
+    "submenus": [
+      {
+        "id": "svn-tree.file-history",
+        "label": "%submenu.fileHistory.label%"
       }
     ],
     "menus": {
+      "explorer/context": [
+        {
+          "submenu": "svn-tree.file-history",
+          "when": "explorerResourceIsFolder == false && resourceScheme == file",
+          "group": "navigation@40"
+        }
+      ],
+      "svn-tree.file-history": [
+        {
+          "command": "svn-tree.open-file-history",
+          "group": "inline@1"
+        }
+      ],
       "scm/title": [
         {
-          "command": "svn-graph.commit",
-          "when": "scmProvider == svn-graph",
+          "command": "svn-tree.commit",
+          "when": "scmProvider == svn-tree",
           "group": "navigation@1"
         },
         {
-          "command": "svn-graph.refresh",
-          "when": "scmProvider == svn-graph",
+          "command": "svn-tree.refresh",
+          "when": "scmProvider == svn-tree",
           "group": "navigation@2"
         }
       ],
       "scm/repository": [
         {
-          "command": "svn-graph.open-repository-actions",
-          "when": "scmProvider == svn-graph",
+          "command": "svn-tree.open-repository-actions",
+          "when": "scmProvider == svn-tree",
           "group": "inline@1"
         }
       ],
       "scm/resourceState/context": [
         {
-          "command": "svn-graph.open-diff",
-          "when": "scmProvider == svn-graph",
+          "command": "svn-tree.open-diff",
+          "when": "scmProvider == svn-tree",
           "group": "navigation@1"
         },
         {
-          "command": "svn-graph.open-file",
-          "when": "scmProvider == svn-graph && scmResourceState != svn-remote-change",
+          "command": "svn-tree.open-file",
+          "when": "scmProvider == svn-tree && scmResourceState != svn-remote-change",
           "group": "inline@1"
         },
         {
-          "command": "svn-graph.add-resource",
-          "when": "scmProvider == svn-graph && scmResourceState == svn-unversioned",
+          "command": "svn-tree.add-resource",
+          "when": "scmProvider == svn-tree && scmResourceState == svn-unversioned",
           "group": "inline@2"
         },
         {
-          "command": "svn-graph.revert-resource",
-          "when": "scmProvider == svn-graph && scmResourceState == svn-change",
+          "command": "svn-tree.revert-resource",
+          "when": "scmProvider == svn-tree && scmResourceState == svn-change",
           "group": "inline@2"
         },
         {
-          "command": "svn-graph.delete-resource",
-          "when": "scmProvider == svn-graph && scmResourceState == svn-unversioned",
+          "command": "svn-tree.delete-resource",
+          "when": "scmProvider == svn-tree && scmResourceState == svn-unversioned",
           "group": "navigation@4"
         }
       ],
       "scm/resourceGroup/context": [
         {
-          "command": "svn-graph.revert-group",
-          "when": "scmProvider == svn-graph && scmResourceGroupState == svn-changes-group",
+          "command": "svn-tree.revert-group",
+          "when": "scmProvider == svn-tree && scmResourceGroupState == svn-changes-group",
           "group": "inline@1"
         },
         {
-          "command": "svn-graph.add-group",
-          "when": "scmProvider == svn-graph && scmResourceGroupState == svn-unversioned-group",
+          "command": "svn-tree.add-group",
+          "when": "scmProvider == svn-tree && scmResourceGroupState == svn-unversioned-group",
           "group": "inline@1"
         }
       ]
@@ -189,7 +214,7 @@
     "configuration": {
       "title": "%config.title%",
       "properties": {
-        "svn-graph.display-language": {
+        "svn-tree.display-language": {
           "type": "string",
           "default": "auto",
           "enum": [
@@ -205,18 +230,18 @@
           "description": "%config.displayLanguage.description%",
           "scope": "window"
         },
-        "svn-graph.enable-remote-status": {
+        "svn-tree.enable-remote-status": {
           "type": "boolean",
           "default": true,
           "description": "%config.enableRemoteStatus.description%"
         },
-        "svn-graph.remote-status-interval-seconds": {
+        "svn-tree.remote-status-interval-seconds": {
           "type": "number",
           "default": 60,
           "minimum": 10,
           "description": "%config.remoteStatusIntervalSeconds.description%"
         },
-        "svn-graph.max-log-entries": {
+        "svn-tree.max-log-entries": {
           "type": "number",
           "default": 200,
           "minimum": 20,

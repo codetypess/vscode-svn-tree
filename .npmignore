@@ -12,7 +12,7 @@ tsconfig.webview.json
 package-lock.json
 out/test/**
 **/*.map
-svn-graph-*.vsix
+svn-tree-*.vsix
 media/history-panel-webview.bundle.js
 node_modules/@vscode/codicons/_iconCloud/**
 node_modules/@vscode/codicons/.devcontainer/**

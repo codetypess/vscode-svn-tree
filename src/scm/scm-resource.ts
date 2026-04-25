@@ -60,7 +60,7 @@ export class ScmResource implements vscode.SourceControlResourceState {
         const i18n = getI18n();
         this.resourceUri = vscode.Uri.file(status.absolutePath);
         this.command = {
-            command: "svn-graph.open-diff",
+            command: "svn-tree.open-diff",
             title: i18n.t("openDiff"),
             arguments: [this],
         };

@@ -1,6 +1,6 @@
-# SVN Graph
+# SVN Tree
 
-SVN Graph brings a lightweight SVN workflow into Visual Studio Code with a native SCM view, quick diffs, incoming change visibility, and a focused history panel for browsing revisions.
+SVN Tree brings a lightweight SVN workflow into Visual Studio Code with a native SCM view, quick diffs, incoming change visibility, and a focused history panel for browsing revisions.
 
 ## Features
 
@@ -27,29 +27,29 @@ If `svn` is not available, the extension will show a warning and stay inactive u
 
 ## Commands
 
-- `SVN Graph: Refresh SVN Status`
-- `SVN Graph: Update SVN Working Copy`
-- `SVN Graph: Commit SVN Changes`
-- `SVN Graph: Open SVN History`
+- `SVN Tree: Refresh SVN Status`
+- `SVN Tree: Update SVN Working Copy`
+- `SVN Tree: Commit SVN Changes`
+- `SVN Tree: Open SVN History`
 
 ## Settings
 
-- `svn-graph.enable-remote-status`: Fetch incoming changes with `svn status -u`.
-- `svn-graph.remote-status-interval-seconds`: Interval between automatic incoming-status refreshes.
-- `svn-graph.max-log-entries`: Number of revisions loaded per batch in the history panel. Default: `200`. Older history is fetched automatically as you scroll.
+- `svn-tree.enable-remote-status`: Fetch incoming changes with `svn status -u`.
+- `svn-tree.remote-status-interval-seconds`: Interval between automatic incoming-status refreshes.
+- `svn-tree.max-log-entries`: Number of revisions loaded per batch in the history panel. Default: `200`. Older history is fetched automatically as you scroll.
 
 ## Notes
 
 - The extension uses VS Code's built-in diff editor for all comparisons.
 - Large repositories can make `svn log -v` and `svn status -u` slower, so remote status can be disabled if needed.
-- Command output is written to the `SVN Graph` output channel for troubleshooting.
+- Command output is written to the `SVN Tree` output channel for troubleshooting.
 
 ## Support
 
 Need help or want to report a bug?
 
-- Issues: https://github.com/codetypess/vscode-svn-graph/issues
-- Repository: https://github.com/codetypess/vscode-svn-graph
+- Issues: https://github.com/codetypess/vscode-svn-tree/issues
+- Repository: https://github.com/codetypess/vscode-svn-tree
 
 ## License
 

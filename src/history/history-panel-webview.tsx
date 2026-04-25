@@ -185,6 +185,7 @@ interface ChangeTreeNodeProps {
     depth: number;
     revision: number;
     rootPath: string;
+    searchQuery: string;
     collapsedDirectories: CollapsedDirectories;
     onToggleDirectory: (revision: number, fullPath: string) => void;
     onOpenFileContextMenu: (
@@ -199,6 +200,7 @@ interface CommitDetailsProps {
     i18n: RuntimeI18n;
     entry: HistoryEntry;
     rootPath: string;
+    searchQuery: string;
     collapsedDirectories: CollapsedDirectories;
     onToggleDirectory: (revision: number, fullPath: string) => void;
     onOpenFileContextMenu: (
@@ -289,7 +291,7 @@ function isHistoryConfigMessage(
         path: string,
         action: string
     ): string {
-        return createCommandUri("svn-graph.open-history-diff", [
+        return createCommandUri("svn-tree.open-history-diff", [
             {
                 rootPath,
                 revision,
@@ -330,6 +332,53 @@ function isHistoryConfigMessage(
 
     function formatPathCount(count: number, i18n: RuntimeI18n): string {
         return i18n.formatChangedPathCount(count);
+    }
+
+    function renderHighlightedText(value: string | number | undefined, query: string): React.ReactNode {
+        const text = String(value ?? "");
+        const trimmedQuery = String(query ?? "").trim();
+
+        if (!trimmedQuery) {
+            return text;
+        }
+
+        const normalizedText = text.toLowerCase();
+        const normalizedQuery = trimmedQuery.toLowerCase();
+
+        if (!normalizedText.includes(normalizedQuery)) {
+            return text;
+        }
+
+        const parts: React.ReactNode[] = [];
+        let startIndex = 0;
+        let matchIndex = normalizedText.indexOf(normalizedQuery, startIndex);
+
+        while (matchIndex !== -1) {
+            if (matchIndex > startIndex) {
+                parts.push(text.slice(startIndex, matchIndex));
+            }
+
+            const matchedText = text.slice(matchIndex, matchIndex + trimmedQuery.length);
+            parts.push(
+                h(
+                    "mark",
+                    {
+                        className: "search-highlight",
+                        key: `${matchIndex}:${matchedText}`,
+                    },
+                    matchedText
+                )
+            );
+
+            startIndex = matchIndex + trimmedQuery.length;
+            matchIndex = normalizedText.indexOf(normalizedQuery, startIndex);
+        }
+
+        if (startIndex < text.length) {
+            parts.push(text.slice(startIndex));
+        }
+
+        return parts;
     }
 
     function actionToIconClass(action: string): string {
@@ -490,7 +539,11 @@ function isHistoryConfigMessage(
                                 "tree-icon codicon " +
                                 (collapsed ? "codicon-folder" : "codicon-folder-opened"),
                         }),
-                        h("span", { className: "tree-label" }, node.name)
+                        h(
+                            "span",
+                            { className: "tree-label" },
+                            renderHighlightedText(node.name, props.searchQuery)
+                        )
                     ),
                     h("div")
                 ),
@@ -508,6 +561,7 @@ function isHistoryConfigMessage(
                               depth: props.depth + 1,
                               revision: props.revision,
                               rootPath: props.rootPath,
+                              searchQuery: props.searchQuery,
                               collapsedDirectories: props.collapsedDirectories,
                               onToggleDirectory: props.onToggleDirectory,
                               onOpenFileContextMenu: props.onOpenFileContextMenu,
@@ -579,12 +633,20 @@ function isHistoryConfigMessage(
                         String(change.action).toLowerCase(),
                     title: props.i18n.formatHistoryAction(action),
                 }),
-                h("span", { className: "tree-label change-path" }, node.name)
+                h(
+                    "span",
+                    { className: "tree-label change-path" },
+                    renderHighlightedText(node.name, props.searchQuery)
+                )
             ),
             h(
                 "span",
                 { className: "tree-actions" },
-                h("span", { className: "change-note" }, noteSegments.join(" • "))
+                h(
+                    "span",
+                    { className: "change-note" },
+                    renderHighlightedText(noteSegments.join(" • "), props.searchQuery)
+                )
             )
         );
     }
@@ -610,6 +672,7 @@ function isHistoryConfigMessage(
                           depth: 0,
                           revision: entry.revision,
                           rootPath: props.rootPath,
+                          searchQuery: props.searchQuery,
                           collapsedDirectories: props.collapsedDirectories,
                           onToggleDirectory: props.onToggleDirectory,
                           onOpenFileContextMenu: props.onOpenFileContextMenu,
@@ -629,7 +692,10 @@ function isHistoryConfigMessage(
                     h(
                         "div",
                         { className: "details-title" },
-                        summarizeMessage(entry.message, props.i18n)
+                        renderHighlightedText(
+                            summarizeMessage(entry.message, props.i18n),
+                            props.searchQuery
+                        )
                     ),
                     h(
                         "div",
@@ -639,21 +705,24 @@ function isHistoryConfigMessage(
                             null,
                             h("strong", null, props.i18n.t("revisionLabel") + ":"),
                             " r",
-                            entry.revision
+                            renderHighlightedText(entry.revision, props.searchQuery)
                         ),
                         h(
                             "div",
                             null,
                             h("strong", null, props.i18n.t("authorDetailLabel") + ":"),
                             " ",
-                            entry.author
+                            renderHighlightedText(entry.author, props.searchQuery)
                         ),
                         h(
                             "div",
                             null,
                             h("strong", null, props.i18n.t("dateLabel") + ":"),
                             " ",
-                            formatDate(entry.date, props.i18n, "detail")
+                            renderHighlightedText(
+                                formatDate(entry.date, props.i18n, "detail"),
+                                props.searchQuery
+                            )
                         ),
                         h(
                             "div",
@@ -1028,21 +1097,24 @@ function isHistoryConfigMessage(
             vscode.postMessage({ type: "ready" });
         }, []);
 
-        const filteredEntries = state.query.trim()
+        const searchQuery = state.query.trim();
+        const normalizedQuery = searchQuery.toLowerCase();
+
+        const filteredEntries = normalizedQuery
             ? state.entries.filter(function (entry) {
                   const haystack = [
-                      "r" + entry.revision,
-                      entry.author,
-                      entry.date,
-                      entry.message,
+                      "r" + String(entry.revision ?? ""),
+                      String(entry.author ?? ""),
+                      String(entry.date ?? ""),
+                      String(entry.message ?? ""),
                   ]
                       .concat(entry.changes.map(function (change) {
-                          return change.path;
+                          return String(change.path ?? "");
                       }))
                       .join(" ")
                       .toLowerCase();
 
-                  return haystack.includes(state.query.trim().toLowerCase());
+                  return haystack.includes(normalizedQuery);
               })
             : state.entries;
 
@@ -1116,7 +1188,7 @@ function isHistoryConfigMessage(
                 return;
             }
 
-            if (state.query.trim() && filteredEntries.length === 0) {
+            if (normalizedQuery && filteredEntries.length === 0) {
                 return;
             }
 
@@ -1210,6 +1282,29 @@ function isHistoryConfigMessage(
                 window.removeEventListener("keydown", handleKeydown);
             };
         });
+
+        React.useEffect(
+            function () {
+                if (
+                    !normalizedQuery ||
+                    filteredEntries.length > 0 ||
+                    state.isLoading ||
+                    !state.hasMore ||
+                    state.entries.length === 0
+                ) {
+                    return;
+                }
+
+                requestMoreEntries();
+            },
+            [
+                filteredEntries.length,
+                normalizedQuery,
+                state.entries.length,
+                state.hasMore,
+                state.isLoading,
+            ]
+        );
 
         React.useEffect(
             function () {
@@ -1405,7 +1500,7 @@ function isHistoryConfigMessage(
                     );
                 }
 
-                if (state.query.trim() && state.hasMore) {
+                if (normalizedQuery && state.hasMore) {
                     return h(
                         React.Fragment,
                         null,
@@ -1488,7 +1583,10 @@ function isHistoryConfigMessage(
                                     h(
                                         "span",
                                         { className: "summary-message" },
-                                        summarizeMessage(entry.message, i18n)
+                                        renderHighlightedText(
+                                            summarizeMessage(entry.message, i18n),
+                                            searchQuery
+                                        )
                                     ),
                                     h("span", { className: "summary-separator" }, "\u2022"),
                                     h(
@@ -1501,14 +1599,17 @@ function isHistoryConfigMessage(
                             h(
                                 "div",
                                 { className: "cell-text muted" },
-                                formatDate(entry.date, i18n)
+                                renderHighlightedText(formatDate(entry.date, i18n), searchQuery)
                             ),
-                            h("div", { className: "cell-text" }, entry.author),
+                            h(
+                                "div",
+                                { className: "cell-text" },
+                                renderHighlightedText(entry.author, searchQuery)
+                            ),
                             h(
                                 "div",
                                 { className: "cell-text revision" },
-                                "r",
-                                entry.revision
+                                renderHighlightedText("r" + String(entry.revision), searchQuery)
                             )
                         ),
                         isExpanded
@@ -1516,6 +1617,7 @@ function isHistoryConfigMessage(
                                   i18n: i18n,
                                   entry: entry,
                                   rootPath: state.rootPath,
+                                  searchQuery,
                                   collapsedDirectories: state.collapsedDirectories,
                                   onToggleDirectory: toggleDirectory,
                                   onOpenFileContextMenu: openFileContextMenu,
@@ -1610,10 +1712,11 @@ function isHistoryConfigMessage(
                                 placeholder: i18n.t("filterPlaceholder"),
                                 value: state.query,
                                 onChange: function (event: React.ChangeEvent<HTMLInputElement>) {
+                                    const query = event.currentTarget.value;
                                     setState(function (previous) {
                                         return {
                                             ...previous,
-                                            query: event.currentTarget.value,
+                                            query,
                                         };
                                     });
                                 },
@@ -1621,10 +1724,21 @@ function isHistoryConfigMessage(
                             h(
                                 "button",
                                 {
+                                    className: "toolbar-button secondary",
                                     type: "button",
+                                    title: i18n.t("refreshButton"),
+                                    "aria-label": i18n.t("refreshButton"),
                                     onClick: requestRefresh,
                                 },
-                                i18n.t("refreshButton")
+                                h("span", {
+                                    className: "codicon codicon-refresh",
+                                    "aria-hidden": "true",
+                                }),
+                                h(
+                                    "span",
+                                    { className: "toolbar-button-label" },
+                                    i18n.t("refreshButton")
+                                )
                             )
                         )
                     ),

@@ -26,8 +26,20 @@ function isSvnLogPathAction(value: unknown): value is SvnLogPathChange["action"]
     return value === "A" || value === "D" || value === "M" || value === "R";
 }
 
+interface HistoryPanelScope {
+    key: string;
+    label: string;
+    targetPath?: string;
+}
+
+interface HistoryPanelState {
+    panel: vscode.WebviewPanel;
+    repositoryRootPath: string;
+    scope: HistoryPanelScope;
+}
+
 export class HistoryPanel implements vscode.Disposable {
-    private readonly panels = new Map<string, vscode.WebviewPanel>();
+    private readonly panels = new Map<string, HistoryPanelState>();
     private readonly disposables: vscode.Disposable[] = [];
 
     public constructor(private readonly extensionUri: vscode.Uri) {}
@@ -37,30 +49,37 @@ export class HistoryPanel implements vscode.Disposable {
             this.disposables.pop()?.dispose();
         }
 
-        for (const panel of this.panels.values()) {
-            panel.dispose();
+        for (const state of this.panels.values()) {
+            state.panel.dispose();
         }
 
         this.panels.clear();
     }
 
-    public async show(repository: SvnRepository): Promise<void> {
-        const existingPanel = this.panels.get(repository.rootPath);
+    public async show(
+        repository: SvnRepository,
+        scope: Partial<HistoryPanelScope> = {}
+    ): Promise<void> {
+        const resolvedScope = this.resolveScope(repository, scope);
+        const existingState = this.panels.get(resolvedScope.key);
+        const existingPanel = existingState?.panel;
 
         if (existingPanel) {
-            this.updatePanelLocalization(existingPanel, repository);
+            this.updatePanelLocalization(existingPanel, resolvedScope);
             existingPanel.reveal(vscode.ViewColumn.Active);
-            await this.pushEntries(existingPanel, repository);
+            await this.pushEntries(existingPanel, repository, {
+                scope: resolvedScope,
+            });
             return;
         }
 
         const panel = vscode.window.createWebviewPanel(
-            "svn-graph.history",
-            getI18n().t("historyPanelTitle", { label: repository.label }),
+            "svn-tree.history",
+            getI18n().t("historyPanelTitle", { label: resolvedScope.label }),
             vscode.ViewColumn.Active,
             {
                 enableScripts: true,
-                enableCommandUris: ["svn-graph.open-history-diff"],
+                enableCommandUris: ["svn-tree.open-history-diff"],
                 retainContextWhenHidden: true,
                 localResourceRoots: [
                     this.extensionUri,
@@ -75,12 +94,16 @@ export class HistoryPanel implements vscode.Disposable {
             }
         );
 
-        this.panels.set(repository.rootPath, panel);
-        this.updatePanelLocalization(panel, repository);
+        this.panels.set(resolvedScope.key, {
+            panel,
+            repositoryRootPath: repository.rootPath,
+            scope: resolvedScope,
+        });
+        this.updatePanelLocalization(panel, resolvedScope);
 
         panel.onDidDispose(
             () => {
-                this.panels.delete(repository.rootPath);
+                this.panels.delete(resolvedScope.key);
             },
             null,
             this.disposables
@@ -100,12 +123,16 @@ export class HistoryPanel implements vscode.Disposable {
                 };
 
                 if (payload.type === "refresh") {
-                    await this.pushEntries(panel, repository);
+                    await this.pushEntries(panel, repository, {
+                        scope: resolvedScope,
+                    });
                     return;
                 }
 
                 if (payload.type === "ready") {
-                    await this.pushEntries(panel, repository);
+                    await this.pushEntries(panel, repository, {
+                        scope: resolvedScope,
+                    });
                     return;
                 }
 
@@ -114,6 +141,7 @@ export class HistoryPanel implements vscode.Disposable {
                     typeof payload.beforeRevision === "number"
                 ) {
                     await this.pushEntries(panel, repository, {
+                        scope: resolvedScope,
                         append: true,
                         beforeRevision: payload.beforeRevision,
                     });
@@ -288,40 +316,43 @@ export class HistoryPanel implements vscode.Disposable {
             this.disposables
         );
 
-        panel.webview.html = this.getWebviewHtml(panel.webview, repository);
+        panel.webview.html = this.getWebviewHtml(panel.webview, repository, resolvedScope);
     }
 
     public refreshLocalization(repository: SvnRepository): void {
-        const panel = this.panels.get(repository.rootPath);
-        if (!panel) {
-            return;
-        }
+        for (const state of this.panels.values()) {
+            if (state.repositoryRootPath !== repository.rootPath) {
+                continue;
+            }
 
-        this.updatePanelLocalization(panel, repository);
-        void panel.webview.postMessage({
-            type: "history-config",
-            payload: {
-                locale: getDisplayLocale(),
-            },
-        });
+            this.updatePanelLocalization(state.panel, state.scope);
+            void state.panel.webview.postMessage({
+                type: "history-config",
+                payload: {
+                    locale: getDisplayLocale(),
+                },
+            });
+        }
     }
 
     private async pushEntries(
         panel: vscode.WebviewPanel,
         repository: SvnRepository,
         options: {
+            scope?: HistoryPanelScope;
             append?: boolean;
             beforeRevision?: number;
         } = {}
     ): Promise<void> {
         try {
-            const page = await repository.loadHistoryPage(options.beforeRevision);
+            const scope = options.scope ?? this.getScopeForPanel(panel, repository);
+            const page = await repository.loadHistoryPage(options.beforeRevision, scope.targetPath);
             panel.webview.postMessage({
                 type: "history-data",
                 payload: {
                     append: options.append === true,
                     hasMore: page.hasMore,
-                    repositoryLabel: repository.label,
+                    repositoryLabel: scope.label,
                     rootPath: repository.rootPath,
                     entries: page.entries,
                 },
@@ -345,12 +376,16 @@ export class HistoryPanel implements vscode.Disposable {
 
     private updatePanelLocalization(
         panel: vscode.WebviewPanel,
-        repository: SvnRepository
+        scope: HistoryPanelScope
     ): void {
-        panel.title = getI18n().t("historyPanelTitle", { label: repository.label });
+        panel.title = getI18n().t("historyPanelTitle", { label: scope.label });
     }
 
-    private getWebviewHtml(webview: vscode.Webview, repository: SvnRepository): string {
+    private getWebviewHtml(
+        webview: vscode.Webview,
+        repository: SvnRepository,
+        scope: HistoryPanelScope
+    ): string {
         const nonce = getNonce();
         const cspSource = webview.cspSource;
         const locale = getDisplayLocale();
@@ -380,7 +415,7 @@ export class HistoryPanel implements vscode.Disposable {
       content="default-src 'none'; style-src ${cspSource} 'unsafe-inline'; font-src ${cspSource}; script-src ${cspSource} 'nonce-${nonce}';"
     />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>${escapeHtml(getI18n().t("historyPanelTitle", { label: repository.label }))}</title>
+    <title>${escapeHtml(getI18n().t("historyPanelTitle", { label: scope.label }))}</title>
     <link rel="stylesheet" href="${codiconStylesUri}" />
     <link rel="stylesheet" href="${appStylesUri}" />
   </head>
@@ -388,7 +423,7 @@ export class HistoryPanel implements vscode.Disposable {
     <div id="root"></div>
     <script nonce="${nonce}">
       window.__SVN_HISTORY_BOOTSTRAP__ = {
-        repositoryLabel: ${JSON.stringify(repository.label)},
+        repositoryLabel: ${JSON.stringify(scope.label)},
         rootPath: ${JSON.stringify(repository.rootPath)},
         locale: ${JSON.stringify(locale as SupportedLocale)}
       };
@@ -396,5 +431,29 @@ export class HistoryPanel implements vscode.Disposable {
     <script src="${appScriptUri}"></script>
   </body>
 </html>`;
+    }
+
+    private resolveScope(
+        repository: SvnRepository,
+        scope: Partial<HistoryPanelScope>
+    ): HistoryPanelScope {
+        return {
+            key: scope.key ?? `${repository.rootPath}::repository`,
+            label: scope.label ?? repository.label,
+            targetPath: scope.targetPath,
+        };
+    }
+
+    private getScopeForPanel(
+        panel: vscode.WebviewPanel,
+        repository: SvnRepository
+    ): HistoryPanelScope {
+        for (const state of this.panels.values()) {
+            if (state.panel === panel) {
+                return state.scope;
+            }
+        }
+
+        return this.resolveScope(repository, {});
     }
 }

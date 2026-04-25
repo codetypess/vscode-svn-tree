@@ -4,7 +4,7 @@ If you run into a problem, please include as much detail as possible so it can b
 
 ## Where to get help
 
-- Bug reports and feature requests: https://github.com/codetypess/vscode-svn-graph/issues
+- Bug reports and feature requests: https://github.com/codetypess/vscode-svn-tree/issues
 
 ## Useful information to include
 
@@ -12,4 +12,4 @@ If you run into a problem, please include as much detail as possible so it can b
 - Operating system
 - SVN client version (`svn --version`)
 - Whether the issue happens in local changes, remote changes, or the history panel
-- Relevant output from the `SVN Graph` output channel
+- Relevant output from the `SVN Tree` output channel

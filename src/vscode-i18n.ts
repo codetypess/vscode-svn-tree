@@ -9,11 +9,11 @@ import {
     type SupportedLocale,
 } from "./i18n";
 
-export const displayLanguageConfigurationKey = "svn-graph.display-language";
+export const displayLanguageConfigurationKey = "svn-tree.display-language";
 
 export function getDisplayLanguageSetting(): DisplayLanguageSetting {
     const value = vscode.workspace
-        .getConfiguration("svn-graph")
+        .getConfiguration("svn-tree")
         .get<string>("display-language", "auto");
 
     if (value === "en" || value === "zh-CN") {

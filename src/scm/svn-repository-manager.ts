@@ -14,7 +14,7 @@ interface RepositoryActionItem extends vscode.QuickPickItem {
 export class SvnRepositoryManager implements vscode.Disposable {
     private readonly disposables: vscode.Disposable[] = [];
     private readonly repositories = new Map<string, SvnRepository>();
-    private readonly outputChannel = vscode.window.createOutputChannel("SVN Graph");
+    private readonly outputChannel = vscode.window.createOutputChannel("SVN Tree");
     private readonly historyStatusBarItem = vscode.window.createStatusBarItem(
         vscode.StatusBarAlignment.Left,
         100
@@ -28,7 +28,7 @@ export class SvnRepositoryManager implements vscode.Disposable {
         this.historyPanel = new HistoryPanel(context.extensionUri);
         this.historyStatusBarItem.text = "$(history)";
         this.historyStatusBarItem.tooltip = getI18n().t("historyStatusTooltip");
-        this.historyStatusBarItem.command = "svn-graph.open-history";
+        this.historyStatusBarItem.command = "svn-tree.open-history";
         this.historyStatusBarItem.hide();
         this.disposables.push(
             this.historyStatusBarItem,
@@ -38,59 +38,56 @@ export class SvnRepositoryManager implements vscode.Disposable {
                 SvnContentProvider.scheme,
                 this.contentProvider
             ),
-            vscode.commands.registerCommand("svn-graph.refresh", async (arg?: unknown) =>
+            vscode.commands.registerCommand("svn-tree.refresh", async (arg?: unknown) =>
                 this.runForRepository(arg, (repository) =>
                     repository.refresh({ forceRemote: true })
                 )
             ),
-            vscode.commands.registerCommand("svn-graph.commit", async (arg?: unknown) =>
+            vscode.commands.registerCommand("svn-tree.commit", async (arg?: unknown) =>
                 this.runForRepository(arg, (repository) => repository.commit())
             ),
-            vscode.commands.registerCommand("svn-graph.update", async (arg?: unknown) =>
+            vscode.commands.registerCommand("svn-tree.update", async (arg?: unknown) =>
                 this.runForRepository(arg, (repository) => repository.update())
             ),
-            vscode.commands.registerCommand("SVN Graph Update", async (arg?: unknown) =>
-                this.runForRepository(arg, (repository) => repository.update())
-            ),
-            vscode.commands.registerCommand("svn-graph.cleanup", async (arg?: unknown) =>
+            vscode.commands.registerCommand("svn-tree.cleanup", async (arg?: unknown) =>
                 this.runForRepository(arg, (repository) => repository.cleanup())
             ),
-            vscode.commands.registerCommand("svn-graph.open-history", async (arg?: unknown) =>
-                this.runForRepository(arg, (repository) => repository.showHistory())
-            ),
-            vscode.commands.registerCommand("SVN Graph Open History", async (arg?: unknown) =>
+            vscode.commands.registerCommand("svn-tree.open-history", async (arg?: unknown) =>
                 this.runForRepository(arg, (repository) => repository.showHistory())
             ),
             vscode.commands.registerCommand(
-                "svn-graph.open-repository-actions",
+                "svn-tree.open-repository-actions",
                 async (arg?: unknown) => this.openRepositoryActions(arg)
             ),
-            vscode.commands.registerCommand("svn-graph.show-output", async () => {
+            vscode.commands.registerCommand("svn-tree.show-output", async () => {
                 this.outputChannel.show(true);
             }),
-            vscode.commands.registerCommand("svn-graph.open-diff", async (arg?: unknown) =>
+            vscode.commands.registerCommand("svn-tree.open-diff", async (arg?: unknown) =>
                 this.openDiff(arg)
             ),
-            vscode.commands.registerCommand("svn-graph.open-file", async (arg?: unknown) =>
+            vscode.commands.registerCommand("svn-tree.open-file", async (arg?: unknown) =>
                 this.openFile(arg)
             ),
-            vscode.commands.registerCommand("svn-graph.revert-resource", async (arg?: unknown) =>
+            vscode.commands.registerCommand("svn-tree.revert-resource", async (arg?: unknown) =>
                 this.revertResource(arg)
             ),
-            vscode.commands.registerCommand("svn-graph.revert-group", async (arg?: unknown) =>
+            vscode.commands.registerCommand("svn-tree.revert-group", async (arg?: unknown) =>
                 this.revertGroup(arg)
             ),
-            vscode.commands.registerCommand("svn-graph.add-resource", async (arg?: unknown) =>
+            vscode.commands.registerCommand("svn-tree.add-resource", async (arg?: unknown) =>
                 this.addResource(arg)
             ),
-            vscode.commands.registerCommand("svn-graph.add-group", async (arg?: unknown) =>
+            vscode.commands.registerCommand("svn-tree.add-group", async (arg?: unknown) =>
                 this.addGroup(arg)
             ),
-            vscode.commands.registerCommand("svn-graph.delete-resource", async (arg?: unknown) =>
+            vscode.commands.registerCommand("svn-tree.delete-resource", async (arg?: unknown) =>
                 this.deleteResource(arg)
             ),
-            vscode.commands.registerCommand("svn-graph.open-history-diff", async (arg?: unknown) =>
+            vscode.commands.registerCommand("svn-tree.open-history-diff", async (arg?: unknown) =>
                 this.openDiff(arg)
+            ),
+            vscode.commands.registerCommand("svn-tree.open-file-history", async (arg?: unknown) =>
+                this.openFileHistory(arg)
             ),
             vscode.workspace.onDidSaveTextDocument((document) => {
                 void this.refreshRepositoryForUri(document.uri, false);
@@ -120,10 +117,10 @@ export class SvnRepositoryManager implements vscode.Disposable {
                 void this.initialize();
             }),
             vscode.workspace.onDidChangeConfiguration((event) => {
-                const languageChanged = event.affectsConfiguration("svn-graph.display-language");
+                const languageChanged = event.affectsConfiguration("svn-tree.display-language");
                 const remoteChanged =
-                    event.affectsConfiguration("svn-graph.enable-remote-status") ||
-                    event.affectsConfiguration("svn-graph.remote-status-interval-seconds");
+                    event.affectsConfiguration("svn-tree.enable-remote-status") ||
+                    event.affectsConfiguration("svn-tree.remote-status-interval-seconds");
 
                 if (languageChanged) {
                     this.refreshLocalization();
@@ -501,6 +498,25 @@ export class SvnRepositoryManager implements vscode.Disposable {
         }
     }
 
+    private async openFileHistory(arg: unknown): Promise<void> {
+        const uri = this.getUriFromArg(arg) ?? vscode.window.activeTextEditor?.document.uri;
+        if (!uri) {
+            return;
+        }
+
+        const repository = this.getRepositoryForUri(uri);
+        if (!repository) {
+            void vscode.window.showInformationMessage(getI18n().t("noWorkingCopyInfo"));
+            return;
+        }
+
+        try {
+            await repository.showFileHistory(uri);
+        } catch (error) {
+            this.showError(error);
+        }
+    }
+
     private async revertResource(arg: unknown): Promise<void> {
         const i18n = getI18n();
         if (!(arg instanceof ScmResource)) {
@@ -643,6 +659,27 @@ export class SvnRepositoryManager implements vscode.Disposable {
         );
     }
 
+    private getUriFromArg(arg: unknown): vscode.Uri | undefined {
+        if (arg instanceof vscode.Uri) {
+            return arg;
+        }
+
+        if (arg instanceof ScmResource) {
+            return arg.resourceUri;
+        }
+
+        if (Array.isArray(arg)) {
+            for (const item of arg) {
+                const uri = this.getUriFromArg(item);
+                if (uri) {
+                    return uri;
+                }
+            }
+        }
+
+        return undefined;
+    }
+
     private restartRemoteRefreshTimer(): void {
         if (this.remoteRefreshTimer) {
             clearInterval(this.remoteRefreshTimer);
@@ -650,14 +687,14 @@ export class SvnRepositoryManager implements vscode.Disposable {
         }
 
         const enabled = vscode.workspace
-            .getConfiguration("svn-graph")
+            .getConfiguration("svn-tree")
             .get<boolean>("enable-remote-status", true);
         if (!enabled) {
             return;
         }
 
         const intervalSeconds = vscode.workspace
-            .getConfiguration("svn-graph")
+            .getConfiguration("svn-tree")
             .get<number>("remote-status-interval-seconds", 60);
         this.remoteRefreshTimer = setInterval(
             () => {
