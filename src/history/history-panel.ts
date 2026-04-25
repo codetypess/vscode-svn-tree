@@ -1,6 +1,8 @@
 import * as vscode from "vscode";
+import { getHtmlLanguage, type SupportedLocale } from "../i18n";
 import type { SvnRepository } from "../scm/svn-repository";
 import type { SvnLogPathChange } from "../svn/svn-types";
+import { getDisplayLocale, getI18n } from "../vscode-i18n";
 
 function escapeHtml(value: string): string {
     return value
@@ -46,6 +48,7 @@ export class HistoryPanel implements vscode.Disposable {
         const existingPanel = this.panels.get(repository.rootPath);
 
         if (existingPanel) {
+            this.updatePanelLocalization(existingPanel, repository);
             existingPanel.reveal(vscode.ViewColumn.Active);
             await this.pushEntries(existingPanel, repository);
             return;
@@ -53,7 +56,7 @@ export class HistoryPanel implements vscode.Disposable {
 
         const panel = vscode.window.createWebviewPanel(
             "svn-graph.history",
-            `SVN History: ${repository.label}`,
+            getI18n().t("historyPanelTitle", { label: repository.label }),
             vscode.ViewColumn.Active,
             {
                 enableScripts: true,
@@ -73,6 +76,7 @@ export class HistoryPanel implements vscode.Disposable {
         );
 
         this.panels.set(repository.rootPath, panel);
+        this.updatePanelLocalization(panel, repository);
 
         panel.onDidDispose(
             () => {
@@ -216,7 +220,7 @@ export class HistoryPanel implements vscode.Disposable {
                 ) {
                     await this.copyToClipboard(
                         payload.path,
-                        `Copied file path for r${payload.revision}`
+                        getI18n().t("copiedFilePathStatus", { revision: payload.revision })
                     );
                     return;
                 }
@@ -227,7 +231,7 @@ export class HistoryPanel implements vscode.Disposable {
                 ) {
                     await this.copyToClipboard(
                         `r${payload.revision}`,
-                        `Copied revision r${payload.revision}`
+                        getI18n().t("copiedRevisionStatus", { revision: payload.revision })
                     );
                     return;
                 }
@@ -239,7 +243,9 @@ export class HistoryPanel implements vscode.Disposable {
                 ) {
                     await this.copyToClipboard(
                         payload.message,
-                        `Copied commit message for r${payload.revision}`
+                        getI18n().t("copiedCommitMessageStatus", {
+                            revision: payload.revision,
+                        })
                     );
                     return;
                 }
@@ -251,7 +257,9 @@ export class HistoryPanel implements vscode.Disposable {
                 ) {
                     await this.copyToClipboard(
                         payload.changedPaths.join("\n"),
-                        `Copied changed paths for r${payload.revision}`
+                        getI18n().t("copiedChangedPathsStatus", {
+                            revision: payload.revision,
+                        })
                     );
                     return;
                 }
@@ -277,6 +285,21 @@ export class HistoryPanel implements vscode.Disposable {
 
         panel.webview.html = this.getWebviewHtml(panel.webview, repository);
         await this.pushEntries(panel, repository);
+    }
+
+    public refreshLocalization(repository: SvnRepository): void {
+        const panel = this.panels.get(repository.rootPath);
+        if (!panel) {
+            return;
+        }
+
+        this.updatePanelLocalization(panel, repository);
+        void panel.webview.postMessage({
+            type: "history-config",
+            payload: {
+                locale: getDisplayLocale(),
+            },
+        });
     }
 
     private async pushEntries(
@@ -316,10 +339,17 @@ export class HistoryPanel implements vscode.Disposable {
         void vscode.window.setStatusBarMessage(message, 2000);
     }
 
+    private updatePanelLocalization(
+        panel: vscode.WebviewPanel,
+        repository: SvnRepository
+    ): void {
+        panel.title = getI18n().t("historyPanelTitle", { label: repository.label });
+    }
+
     private getWebviewHtml(webview: vscode.Webview, repository: SvnRepository): string {
         const nonce = getNonce();
         const cspSource = webview.cspSource;
-        const title = escapeHtml(repository.label);
+        const locale = getDisplayLocale();
         const codiconStylesUri = webview.asWebviewUri(
             vscode.Uri.joinPath(
                 this.extensionUri,
@@ -338,7 +368,7 @@ export class HistoryPanel implements vscode.Disposable {
         );
 
         return `<!DOCTYPE html>
-<html lang="en">
+<html lang="${getHtmlLanguage(locale)}">
   <head>
     <meta charset="UTF-8" />
     <meta
@@ -346,7 +376,7 @@ export class HistoryPanel implements vscode.Disposable {
       content="default-src 'none'; style-src ${cspSource} 'unsafe-inline'; font-src ${cspSource}; script-src ${cspSource} 'nonce-${nonce}';"
     />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>SVN History: ${title}</title>
+    <title>${escapeHtml(getI18n().t("historyPanelTitle", { label: repository.label }))}</title>
     <link rel="stylesheet" href="${codiconStylesUri}" />
     <link rel="stylesheet" href="${appStylesUri}" />
   </head>
@@ -355,7 +385,8 @@ export class HistoryPanel implements vscode.Disposable {
     <script nonce="${nonce}">
       window.__SVN_HISTORY_BOOTSTRAP__ = {
         repositoryLabel: ${JSON.stringify(repository.label)},
-        rootPath: ${JSON.stringify(repository.rootPath)}
+        rootPath: ${JSON.stringify(repository.rootPath)},
+        locale: ${JSON.stringify(locale as SupportedLocale)}
       };
     </script>
     <script src="${appScriptUri}"></script>

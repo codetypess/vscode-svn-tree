@@ -1,4 +1,5 @@
 import * as vscode from "vscode";
+import { getI18n } from "../vscode-i18n";
 import { SvnService } from "./svn-service";
 
 type SvnContentSource = "empty" | "svn";
@@ -16,6 +17,7 @@ export class SvnContentProvider implements vscode.TextDocumentContentProvider {
     public constructor(private readonly svnService: SvnService) {}
 
     public provideTextDocumentContent(uri: vscode.Uri): Thenable<string> {
+        const i18n = getI18n();
         const descriptor = this.parse(uri);
 
         if (descriptor.source === "empty") {
@@ -23,14 +25,14 @@ export class SvnContentProvider implements vscode.TextDocumentContentProvider {
         }
 
         if (!descriptor.target || !descriptor.revision) {
-            return Promise.resolve("Missing SVN diff content metadata.");
+            return Promise.resolve(i18n.t("missingDiffMetadata"));
         }
 
         return this.svnService
             .cat(descriptor.target, descriptor.revision)
             .catch((error: unknown) => {
                 const message = error instanceof Error ? error.message : String(error);
-                return `Unable to load SVN content.\n\n${message}`;
+                return i18n.t("unableLoadSvnContent", { message });
             });
     }
 

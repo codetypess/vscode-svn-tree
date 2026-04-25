@@ -9,6 +9,7 @@ import type {
     SvnStatusEntry,
     SvnWorkingCopyInfo,
 } from "../svn/svn-types";
+import { getI18n } from "../vscode-i18n";
 import { ScmResource } from "./scm-resource";
 
 interface RefreshOptions {
@@ -41,6 +42,55 @@ function isUnversionedChange(status: SvnStatusEntry): boolean {
 
 function isRemoteChange(status: SvnStatusEntry): boolean {
     return !!status.reposStatus && status.reposStatus !== "none";
+}
+
+function getRepositoryReferenceDisplay(repositoryRelativePath: string): {
+    icon: string;
+    label: string;
+    fullPath: string;
+} {
+    const normalizedPath = repositoryRelativePath.replace(/^\/+|\/+$/g, "");
+    if (!normalizedPath) {
+        return {
+            icon: "repo",
+            label: "/",
+            fullPath: "/",
+        };
+    }
+
+    const segments = normalizedPath.split("/");
+    const trunkIndex = segments.indexOf("trunk");
+    if (trunkIndex !== -1) {
+        return {
+            icon: "git-branch",
+            label: "trunk",
+            fullPath: `/${normalizedPath}`,
+        };
+    }
+
+    const branchesIndex = segments.indexOf("branches");
+    if (branchesIndex !== -1 && branchesIndex + 1 < segments.length) {
+        return {
+            icon: "git-branch",
+            label: segments.slice(branchesIndex, branchesIndex + 2).join("/"),
+            fullPath: `/${normalizedPath}`,
+        };
+    }
+
+    const tagsIndex = segments.indexOf("tags");
+    if (tagsIndex !== -1 && tagsIndex + 1 < segments.length) {
+        return {
+            icon: "tag",
+            label: segments.slice(tagsIndex, tagsIndex + 2).join("/"),
+            fullPath: `/${normalizedPath}`,
+        };
+    }
+
+    return {
+        icon: "repo",
+        label: segments.at(-1) ?? normalizedPath,
+        fullPath: `/${normalizedPath}`,
+    };
 }
 
 function normalizeRepositoryPath(value: string): string {
@@ -80,7 +130,10 @@ function getCommitTargetLabel(repositoryRelativePath: string): string {
 function getCommitInputPlaceholder(repositoryRelativePath: string): string {
     const submitShortcut = process.platform === "darwin" ? "⌘Enter" : "Ctrl+Enter";
     const targetLabel = getCommitTargetLabel(repositoryRelativePath);
-    return `Message (${submitShortcut} to commit on "${targetLabel}")`;
+    return getI18n().t("commitInputPlaceholder", {
+        shortcut: submitShortcut,
+        target: targetLabel,
+    });
 }
 
 function getReferenceLayoutRoot(repositoryRelativePath: string): string {
@@ -137,9 +190,12 @@ export class SvnRepository implements vscode.Disposable {
     private readonly changesGroup: vscode.SourceControlResourceGroup;
     private readonly unversionedGroup: vscode.SourceControlResourceGroup;
     private readonly remoteChangesGroup: vscode.SourceControlResourceGroup;
+    private readonly repositoryReference: ReturnType<typeof getRepositoryReferenceDisplay>;
     private readonly sourceControl: vscode.SourceControl;
+    private remoteChangeCount = 0;
     private lastRemoteRefreshAt = 0;
     private isRefreshing = false;
+    private isRefreshingRemoteCount = false;
 
     public constructor(
         public readonly info: SvnWorkingCopyInfo,
@@ -147,32 +203,28 @@ export class SvnRepository implements vscode.Disposable {
         private readonly historyPanel: HistoryPanel,
         private readonly contentProvider: SvnContentProvider
     ) {
+        const i18n = getI18n();
         this.sourceControl = vscode.scm.createSourceControl(
             "svn-graph",
             `SVN: ${nodePath.basename(info.workingCopyRoot)}`,
             vscode.Uri.file(info.workingCopyRoot)
         );
-        this.sourceControl.acceptInputCommand = {
-            command: "svn-graph.commit",
-            title: "Commit",
-            arguments: [this],
-        };
-        this.sourceControl.inputBox.placeholder = getCommitInputPlaceholder(
-            info.repositoryRelativePath
-        );
         this.sourceControl.quickDiffProvider = {
             provideOriginalResource: (uri) => this.provideOriginalResource(uri),
         };
-        this.sourceControl.statusBarCommands = [];
+        this.repositoryReference = getRepositoryReferenceDisplay(info.repositoryRelativePath);
 
-        this.changesGroup = this.sourceControl.createResourceGroup("svn-graph.changes", "Changes");
+        this.changesGroup = this.sourceControl.createResourceGroup(
+            "svn-graph.changes",
+            i18n.t("changesGroupLabel")
+        );
         this.unversionedGroup = this.sourceControl.createResourceGroup(
             "svn-graph.unversioned",
-            "Unversioned"
+            i18n.t("unversionedGroupLabel")
         );
         this.remoteChangesGroup = this.sourceControl.createResourceGroup(
             "svn-graph.remote-changes",
-            "Remote Changes"
+            i18n.t("remoteChangesGroupLabel")
         );
         this.changesGroup.hideWhenEmpty = false;
         this.changesGroup.contextValue = "svn-changes-group";
@@ -184,6 +236,7 @@ export class SvnRepository implements vscode.Disposable {
         this.remoteChangesGroup.contextValue = "svn-remote-changes-group";
         this.remoteChangesGroup.resourceStates = [];
         this.sourceControl.count = 0;
+        this.refreshLocalization();
     }
 
     public get rootPath(): string {
@@ -194,11 +247,30 @@ export class SvnRepository implements vscode.Disposable {
         return nodePath.basename(this.rootPath);
     }
 
+    private get i18n() {
+        return getI18n();
+    }
+
     public dispose(): void {
         while (this.disposables.length > 0) {
             this.disposables.pop()?.dispose();
         }
         this.sourceControl.dispose();
+    }
+
+    public refreshLocalization(): void {
+        this.sourceControl.acceptInputCommand = {
+            command: "svn-graph.commit",
+            title: this.i18n.t("commitAcceptTitle"),
+            arguments: [this],
+        };
+        this.sourceControl.inputBox.placeholder = getCommitInputPlaceholder(
+            this.info.repositoryRelativePath
+        );
+        this.changesGroup.label = this.i18n.t("changesGroupLabel");
+        this.unversionedGroup.label = this.i18n.t("unversionedGroupLabel");
+        this.remoteChangesGroup.label = this.i18n.t("remoteChangesGroupLabel");
+        this.updateStatusBarCommands(this.remoteChangeCount);
     }
 
     public async refresh(options: RefreshOptions = {}): Promise<void> {
@@ -210,6 +282,11 @@ export class SvnRepository implements vscode.Disposable {
 
         try {
             const includeRemote = this.shouldIncludeRemote(options.forceRemote === true);
+            if (includeRemote) {
+                this.isRefreshingRemoteCount = true;
+                this.updateStatusBarCommands(this.remoteChangeCount);
+            }
+
             const statuses = await this.svnService.getStatus(this.rootPath, includeRemote);
             const changeResources = statuses
                 .filter(isLocalChange)
@@ -232,9 +309,18 @@ export class SvnRepository implements vscode.Disposable {
             this.sourceControl.count = changeResources.length + unversionedResources.length;
 
             if (includeRemote) {
+                this.remoteChangeCount = remoteResources.length;
+                this.isRefreshingRemoteCount = false;
                 this.lastRemoteRefreshAt = Date.now();
             }
+
+            this.updateStatusBarCommands(this.remoteChangeCount);
         } finally {
+            if (this.isRefreshingRemoteCount) {
+                this.isRefreshingRemoteCount = false;
+                this.updateStatusBarCommands(this.remoteChangeCount);
+            }
+
             this.isRefreshing = false;
         }
     }
@@ -243,7 +329,7 @@ export class SvnRepository implements vscode.Disposable {
         const message = this.sourceControl.inputBox.value.trim();
 
         if (!message) {
-            throw new Error("Enter a commit message before committing.");
+            throw new Error(this.i18n.t("emptyCommitMessageError"));
         }
 
         await this.svnService.commit(this.rootPath, message, paths);
@@ -265,7 +351,7 @@ export class SvnRepository implements vscode.Disposable {
         await vscode.window.withProgress(
             {
                 location: vscode.ProgressLocation.Notification,
-                title: `Checking out r${revision}...`,
+                title: this.i18n.t("checkoutProgress", { revision }),
             },
             async () => {
                 await this.svnService.checkout(
@@ -278,7 +364,10 @@ export class SvnRepository implements vscode.Disposable {
 
         await this.revealCreatedPath(
             destinationPath,
-            `Checked out r${revision} to ${destinationPath}.`
+            this.i18n.t("checkedOutMessage", {
+                revision,
+                destination: destinationPath,
+            })
         );
     }
 
@@ -291,7 +380,7 @@ export class SvnRepository implements vscode.Disposable {
         await vscode.window.withProgress(
             {
                 location: vscode.ProgressLocation.Notification,
-                title: `Exporting r${revision}...`,
+                title: this.i18n.t("exportProgress", { revision }),
             },
             async () => {
                 await this.svnService.export(
@@ -304,7 +393,10 @@ export class SvnRepository implements vscode.Disposable {
 
         await this.revealCreatedPath(
             destinationPath,
-            `Exported r${revision} to ${destinationPath}.`
+            this.i18n.t("exportedMessage", {
+                revision,
+                destination: destinationPath,
+            })
         );
     }
 
@@ -315,7 +407,7 @@ export class SvnRepository implements vscode.Disposable {
         const change = await this.pickHistoryFileChange(
             revision,
             changes,
-            "compare with the working copy"
+            this.i18n.t("compareWithWorkingCopyActionLower")
         );
         if (!change) {
             return;
@@ -345,7 +437,7 @@ export class SvnRepository implements vscode.Disposable {
         const change = await this.pickHistoryFileChange(
             revision,
             changes,
-            "compare with the previous revision"
+            this.i18n.t("compareWithPreviousRevisionActionLower")
         );
         if (!change) {
             return;
@@ -387,7 +479,7 @@ export class SvnRepository implements vscode.Disposable {
         await vscode.window.withProgress(
             {
                 location: vscode.ProgressLocation.Notification,
-                title: `Reverting working copy to r${revision}...`,
+                title: this.i18n.t("revertWorkingCopyProgress", { revision }),
             },
             async () => {
                 await this.svnService.reverseMergeToRevision(
@@ -400,7 +492,7 @@ export class SvnRepository implements vscode.Disposable {
 
         await this.refresh();
         void vscode.window.showInformationMessage(
-            `Reverted working copy to r${revision}. Review the changes and commit when ready.`
+            this.i18n.t("revertedWorkingCopyInfo", { revision })
         );
     }
 
@@ -421,7 +513,7 @@ export class SvnRepository implements vscode.Disposable {
         await vscode.window.withProgress(
             {
                 location: vscode.ProgressLocation.Notification,
-                title: `Reverting changes from r${revision}...`,
+                title: this.i18n.t("revertChangesProgress", { revision }),
             },
             async () => {
                 await this.svnService.reverseMergeRevision(
@@ -434,7 +526,7 @@ export class SvnRepository implements vscode.Disposable {
 
         await this.refresh();
         void vscode.window.showInformationMessage(
-            `Reverted changes from r${revision}. Review the changes and commit when ready.`
+            this.i18n.t("revertedChangesInfo", { revision })
         );
     }
 
@@ -489,7 +581,7 @@ export class SvnRepository implements vscode.Disposable {
         const rightUri =
             resource.status.wcStatus === "deleted" || resource.status.wcStatus === "missing"
                 ? this.contentProvider.createUri({
-                      label: `${resource.status.relativePath} (working tree missing)`,
+                      label: `${resource.status.relativePath} (${this.i18n.t("labelWorkingTreeMissing")})`,
                       source: "empty",
                   })
                 : resource.resourceUri;
@@ -497,11 +589,11 @@ export class SvnRepository implements vscode.Disposable {
         const leftUri =
             resource.status.wcStatus === "added"
                 ? this.contentProvider.createUri({
-                      label: `${resource.status.relativePath} (empty)`,
+                      label: `${resource.status.relativePath} (${this.i18n.t("labelEmpty")})`,
                       source: "empty",
                   })
                 : this.contentProvider.createUri({
-                      label: `${resource.status.relativePath} (BASE)`,
+                      label: `${resource.status.relativePath} (${this.i18n.t("labelBase")})`,
                       source: "svn",
                       target: resource.status.absolutePath,
                       revision: "BASE",
@@ -511,7 +603,7 @@ export class SvnRepository implements vscode.Disposable {
             "vscode.diff",
             leftUri,
             rightUri,
-            `${resource.status.relativePath} (${resource.status.wcStatus})`
+            `${resource.status.relativePath} (${this.i18n.formatSvnStatus(resource.status.wcStatus)})`
         );
     }
 
@@ -527,7 +619,7 @@ export class SvnRepository implements vscode.Disposable {
         const leftUri =
             action === "A" || revision <= 1
                 ? this.contentProvider.createUri({
-                      label: `${repositoryPath} (empty)`,
+                      label: `${repositoryPath} (${this.i18n.t("labelEmpty")})`,
                       source: "empty",
                   })
                 : this.contentProvider.createUri({
@@ -540,7 +632,7 @@ export class SvnRepository implements vscode.Disposable {
         const rightUri =
             action === "D"
                 ? this.contentProvider.createUri({
-                      label: `${repositoryPath} (deleted)`,
+                      label: `${repositoryPath} (${this.i18n.t("labelDeleted")})`,
                       source: "empty",
                   })
                 : this.contentProvider.createUri({
@@ -563,11 +655,11 @@ export class SvnRepository implements vscode.Disposable {
         const rightUri =
             status.reposStatus === "deleted"
                 ? this.contentProvider.createUri({
-                      label: `${status.relativePath} (deleted in HEAD)`,
+                      label: `${status.relativePath} (${this.i18n.t("labelDeletedInHead")})`,
                       source: "empty",
                   })
                 : this.contentProvider.createUri({
-                      label: `${status.relativePath} (HEAD)`,
+                      label: `${status.relativePath} (${this.i18n.t("labelHead")})`,
                       source: "svn",
                       target: repositoryUrl,
                       revision: "HEAD",
@@ -576,11 +668,11 @@ export class SvnRepository implements vscode.Disposable {
         const leftUri =
             status.reposStatus === "added"
                 ? this.contentProvider.createUri({
-                      label: `${status.relativePath} (empty)`,
+                      label: `${status.relativePath} (${this.i18n.t("labelEmpty")})`,
                       source: "empty",
                   })
                 : this.contentProvider.createUri({
-                      label: `${status.relativePath} (BASE)`,
+                      label: `${status.relativePath} (${this.i18n.t("labelBase")})`,
                       source: "svn",
                       target: status.absolutePath,
                       revision: "BASE",
@@ -590,7 +682,9 @@ export class SvnRepository implements vscode.Disposable {
             "vscode.diff",
             leftUri,
             rightUri,
-            `${status.relativePath} (${status.reposStatus ?? "incoming"})`
+            `${status.relativePath} (${this.i18n.formatSvnStatus(
+                status.reposStatus ?? this.i18n.t("incomingStatusLabel")
+            )})`
         );
     }
 
@@ -618,7 +712,7 @@ export class SvnRepository implements vscode.Disposable {
         }
 
         return this.contentProvider.createUri({
-            label: `${nodePath.relative(this.rootPath, uri.fsPath)} (BASE)`,
+            label: `${nodePath.relative(this.rootPath, uri.fsPath)} (${this.i18n.t("labelBase")})`,
             source: "svn",
             target: uri.fsPath,
             revision: "BASE",
@@ -641,7 +735,7 @@ export class SvnRepository implements vscode.Disposable {
         const fileChanges = changes.filter((change) => change.kind === "file");
         if (fileChanges.length === 0) {
             void vscode.window.showInformationMessage(
-                `Revision r${revision} has no file changes to ${actionLabel}.`
+                this.i18n.t("historyNoFileChanges", { revision, action: actionLabel })
             );
             return undefined;
         }
@@ -654,11 +748,14 @@ export class SvnRepository implements vscode.Disposable {
             fileChanges.map((change) => ({
                 label: nodePath.posix.basename(change.path),
                 description: change.path,
-                detail: `${this.describeHistoryChangeAction(change.action)} in r${revision}`,
+                detail: this.i18n.t("historyActionInRevision", {
+                    action: this.describeHistoryChangeAction(change.action),
+                    revision,
+                }),
                 change,
             })),
             {
-                placeHolder: `Select a file to ${actionLabel}`,
+                placeHolder: this.i18n.t("selectFilePlaceholder", { action: actionLabel }),
             }
         );
 
@@ -672,7 +769,7 @@ export class SvnRepository implements vscode.Disposable {
         const absolutePath = this.getWorkingCopyPathForRepositoryPath(change.path);
         if (!absolutePath) {
             void vscode.window.showWarningMessage(
-                `Cannot map ${change.path} into the current working copy.`
+                this.i18n.t("cannotMapPathWarning", { path: change.path })
             );
             return;
         }
@@ -684,7 +781,7 @@ export class SvnRepository implements vscode.Disposable {
         const leftUri =
             change.action === "D"
                 ? this.contentProvider.createUri({
-                      label: `${relativeLabel} (r${revision}, deleted)`,
+                      label: `${relativeLabel} (r${revision}, ${this.i18n.t("labelDeleted")})`,
                       source: "empty",
                   })
                 : this.contentProvider.createUri({
@@ -696,7 +793,7 @@ export class SvnRepository implements vscode.Disposable {
         const rightUri = workingCopyExists
             ? vscode.Uri.file(absolutePath)
             : this.contentProvider.createUri({
-                  label: `${relativeLabel} (working copy missing)`,
+                  label: `${relativeLabel} (${this.i18n.t("labelWorkingCopyMissing")})`,
                   source: "empty",
               });
 
@@ -704,24 +801,19 @@ export class SvnRepository implements vscode.Disposable {
             "vscode.diff",
             leftUri,
             rightUri,
-            `${relativeLabel} (r${revision} vs working copy)`
+            this.i18n.t("revisionVsWorkingCopy", {
+                label: relativeLabel,
+                revision,
+            })
         );
     }
 
     private describeHistoryChangeAction(action: SvnLogPathChange["action"]): string {
-        if (action === "A") {
-            return "Added";
-        }
+        return this.i18n.formatHistoryAction(action);
+    }
 
-        if (action === "D") {
-            return "Deleted";
-        }
-
-        if (action === "R") {
-            return "Replaced";
-        }
-
-        return "Modified";
+    private getReferenceKindLabel(kind: RepositoryReferenceKind): string {
+        return kind === "branch" ? this.i18n.t("branchKind") : this.i18n.t("tagKind");
     }
 
     private getWorkingCopyPathForRepositoryPath(repositoryPath: string): string | undefined {
@@ -764,11 +856,11 @@ export class SvnRepository implements vscode.Disposable {
             canSelectFiles: false,
             canSelectFolders: true,
             canSelectMany: false,
-            openLabel: "Select Parent Folder",
+            openLabel: this.i18n.t("selectParentFolderLabel"),
             title:
                 operation === "checkout"
-                    ? `Select parent folder for checkout of r${revision}`
-                    : `Select parent folder for export of r${revision}`,
+                    ? this.i18n.t("selectParentFolderCheckoutTitle", { revision })
+                    : this.i18n.t("selectParentFolderExportTitle", { revision }),
         });
         const parentFolder = selectedFolders?.[0];
         if (!parentFolder) {
@@ -782,17 +874,17 @@ export class SvnRepository implements vscode.Disposable {
         const folderName = await vscode.window.showInputBox({
             prompt:
                 operation === "checkout"
-                    ? `Folder name for checkout of r${revision}`
-                    : `Folder name for export of r${revision}`,
+                    ? this.i18n.t("folderNameCheckoutPrompt", { revision })
+                    : this.i18n.t("folderNameExportPrompt", { revision }),
             value: defaultName,
             validateInput: (value) => {
                 const trimmed = value.trim();
                 if (!trimmed) {
-                    return "Folder name is required.";
+                    return this.i18n.t("folderNameRequired");
                 }
 
                 if (trimmed.includes("/") || trimmed.includes("\\")) {
-                    return "Use a folder name, not a path.";
+                    return this.i18n.t("folderNamePathWarning");
                 }
 
                 return undefined;
@@ -808,7 +900,9 @@ export class SvnRepository implements vscode.Disposable {
         try {
             await vscode.workspace.fs.stat(destinationUri);
             void vscode.window.showWarningMessage(
-                `Destination already exists: ${destinationPath}`
+                this.i18n.t("destinationExistsWarning", {
+                    destination: destinationPath,
+                })
             );
             return undefined;
         } catch {
@@ -819,13 +913,49 @@ export class SvnRepository implements vscode.Disposable {
     private async revealCreatedPath(destinationPath: string, successMessage: string): Promise<void> {
         const selection = await vscode.window.showInformationMessage(
             successMessage,
-            "Reveal"
+            this.i18n.t("revealButton")
         );
-        if (selection !== "Reveal") {
+        if (selection !== this.i18n.t("revealButton")) {
             return;
         }
 
         await vscode.commands.executeCommand("revealFileInOS", vscode.Uri.file(destinationPath));
+    }
+
+    private updateStatusBarCommands(remoteCount: number): void {
+        const countSuffix = remoteCount > 0 ? ` ${remoteCount}` : "";
+        const updateIcon = this.isRefreshingRemoteCount ? "loading~spin" : "cloud-download";
+        const updateTitle = this.isRefreshingRemoteCount
+            ? "$(loading~spin)"
+            : `$(${updateIcon})${countSuffix}`;
+        const updateTooltip = this.isRefreshingRemoteCount
+            ? this.i18n.t("checkingIncomingTooltip")
+            : remoteCount > 0
+              ? this.i18n.formatIncomingChangeCount(remoteCount)
+              : this.i18n.t("updateTooltipNoIncoming");
+
+        this.sourceControl.statusBarCommands = [
+            {
+                command: "svn-graph.open-history",
+                title: `$(${this.repositoryReference.icon}) ${this.repositoryReference.label}`,
+                tooltip: this.i18n.t("repositoryHistoryTooltip", {
+                    path: this.repositoryReference.fullPath,
+                }),
+                arguments: [this],
+            },
+            {
+                command: "svn-graph.update",
+                title: updateTitle,
+                tooltip: updateTooltip,
+                arguments: [this],
+            },
+            {
+                command: "svn-graph.open-repository-actions",
+                title: "$(ellipsis)",
+                tooltip: this.i18n.t("moreActionsTooltip"),
+                arguments: [this],
+            },
+        ];
     }
 
     private async createRepositoryReferenceFromRevision(
@@ -839,12 +969,20 @@ export class SvnRepository implements vscode.Disposable {
 
         const sourceUrl = this.resolveRepositoryUrl(this.rootPath);
         const destinationUrl = buildRepositoryUrl(this.info.repositoryRoot, destinationPath);
-        const message = `Create ${kind} ${destinationPath} from r${revision}`;
+        const kindLabel = this.getReferenceKindLabel(kind);
+        const message = this.i18n.t("createReferenceCommitMessage", {
+            kind: kindLabel,
+            destination: destinationPath,
+            revision,
+        });
 
         await vscode.window.withProgress(
             {
                 location: vscode.ProgressLocation.Notification,
-                title: `Creating ${kind} from r${revision}...`,
+                title: this.i18n.t("createReferenceProgress", {
+                    kind: kindLabel,
+                    revision,
+                }),
             },
             async () => {
                 await this.svnService.copy(
@@ -857,12 +995,22 @@ export class SvnRepository implements vscode.Disposable {
         );
 
         const selection = await vscode.window.showInformationMessage(
-            `Created ${kind} from r${revision}: ${destinationPath}`,
-            "Copy Path"
+            this.i18n.t("createdReferenceMessage", {
+                kind: kindLabel,
+                revision,
+                destination: destinationPath,
+            }),
+            this.i18n.t("copyPathButton")
         );
-        if (selection === "Copy Path") {
+        if (selection === this.i18n.t("copyPathButton")) {
             await vscode.env.clipboard.writeText(destinationPath);
-            void vscode.window.setStatusBarMessage(`Copied ${kind} path ${destinationPath}`, 2000);
+            void vscode.window.setStatusBarMessage(
+                this.i18n.t("copiedReferencePathStatus", {
+                    kind: kindLabel,
+                    destination: destinationPath,
+                }),
+                2000
+            );
         }
     }
 
@@ -875,21 +1023,30 @@ export class SvnRepository implements vscode.Disposable {
         const locationPath = normalizeRepositoryPath(
             [layoutRoot, locationLabel].filter((segment) => segment !== "/").join("/")
         );
+        const kindLabel = this.getReferenceKindLabel(kind);
         const referencePath = await vscode.window.showInputBox({
-            prompt: `New ${kind} path under ${locationPath} for r${revision}`,
+            prompt: this.i18n.t("newReferencePathPrompt", {
+                kind: kindLabel,
+                location: locationPath,
+                revision,
+            }),
             value: getReferenceNameSuggestion(this.info.repositoryRelativePath, revision),
             validateInput: (value) => {
                 const normalizedValue = value.trim().replace(/\\/g, "/");
                 if (!normalizedValue) {
-                    return `${kind === "branch" ? "Branch" : "Tag"} name is required.`;
+                    return kind === "branch"
+                        ? this.i18n.t("branchNameRequired")
+                        : this.i18n.t("tagNameRequired");
                 }
 
                 if (normalizedValue.startsWith("/")) {
-                    return `Use a path relative to ${locationPath}.`;
+                    return this.i18n.t("relativePathRequired", {
+                        location: locationPath,
+                    });
                 }
 
                 if (normalizedValue.split("/").some((segment) => segment.trim().length === 0)) {
-                    return "Avoid empty path segments.";
+                    return this.i18n.t("avoidEmptySegments");
                 }
 
                 return undefined;
@@ -916,20 +1073,18 @@ export class SvnRepository implements vscode.Disposable {
             this.unversionedGroup.resourceStates.length > 0;
         const message =
             mode === "revert-to-revision"
-                ? `Revert working copy to r${revision}?`
-                : `Revert changes from r${revision}?`;
+                ? this.i18n.t("revertWorkingCopyQuestion", { revision })
+                : this.i18n.t("revertChangesQuestion", { revision });
         const detailLines = [
             mode === "revert-to-revision"
-                ? `This will reverse-merge all revisions newer than r${revision} into the current working copy.`
-                : `This will reverse-merge only revision r${revision} into the current working copy.`,
-            "A clean, up-to-date working copy is recommended.",
-            "The operation only changes your working copy. You still need to commit the result.",
+                ? this.i18n.t("revertWorkingCopyDetail", { revision })
+                : this.i18n.t("revertChangesDetail", { revision }),
+            this.i18n.t("cleanWorkingCopyRecommended"),
+            this.i18n.t("workingCopyOnlyDetail"),
         ];
 
         if (hasLocalChanges) {
-            detailLines.push(
-                "This working copy already has local changes, so conflicts are more likely."
-            );
+            detailLines.push(this.i18n.t("localChangesConflictWarning"));
         }
 
         const selection = await vscode.window.showWarningMessage(
@@ -938,9 +1093,9 @@ export class SvnRepository implements vscode.Disposable {
                 modal: true,
                 detail: detailLines.join("\n"),
             },
-            "Continue"
+            this.i18n.t("continueButton")
         );
 
-        return selection === "Continue";
+        return selection === this.i18n.t("continueButton");
     }
 }

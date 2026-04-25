@@ -1,5 +1,6 @@
 import React from "react";
 import { createRoot } from "react-dom/client";
+import { createI18n, type RuntimeI18n, type SupportedLocale } from "../i18n";
 
 type HistoryViewStyle = "summary" | "detail";
 type ContextActionType =
@@ -24,6 +25,7 @@ type FileContextActionType =
 interface HistoryBootstrap {
     repositoryLabel: string;
     rootPath: string;
+    locale: SupportedLocale;
 }
 
 interface HistoryChange {
@@ -57,6 +59,14 @@ interface HistoryErrorPayload {
     message: string;
 }
 
+interface HistoryConfigPayload {
+    locale: SupportedLocale;
+}
+
+function getDisplayChangePath(changePath: string): string {
+    return String(changePath || "").replace(/^\/+/, "");
+}
+
 type HistoryResponseMessage =
     | {
           type: "history-data";
@@ -65,6 +75,10 @@ type HistoryResponseMessage =
     | {
           type: "history-error";
           payload: HistoryErrorPayload;
+      }
+    | {
+          type: "history-config";
+          payload: HistoryConfigPayload;
       };
 
 type HistoryRequestMessage =
@@ -143,6 +157,7 @@ interface HistoryState {
     query: string;
     repositoryLabel: string;
     rootPath: string;
+    locale: SupportedLocale;
 }
 
 interface ChangeTreeDirectory {
@@ -162,6 +177,7 @@ interface ChangeTreeFile {
 type ChangeTreeNodeModel = ChangeTreeDirectory | ChangeTreeFile;
 
 interface ChangeTreeNodeProps {
+    i18n: RuntimeI18n;
     node: ChangeTreeNodeModel;
     depth: number;
     revision: number;
@@ -177,6 +193,7 @@ interface ChangeTreeNodeProps {
 }
 
 interface CommitDetailsProps {
+    i18n: RuntimeI18n;
     entry: HistoryEntry;
     rootPath: string;
     collapsedDirectories: CollapsedDirectories;
@@ -190,6 +207,7 @@ interface CommitDetailsProps {
 }
 
 interface ContextMenuProps {
+    i18n: RuntimeI18n;
     menu?: ContextMenuState;
     entry?: HistoryEntry;
     onClose: () => void;
@@ -238,11 +256,23 @@ function isHistoryErrorMessage(
     return typeof data.payload.message === "string";
 }
 
+function isHistoryConfigMessage(
+    data: unknown
+): data is Extract<HistoryResponseMessage, { type: "history-config" }> {
+    return (
+        isObject(data) &&
+        data.type === "history-config" &&
+        isObject(data.payload) &&
+        (data.payload.locale === "en" || data.payload.locale === "zh-CN")
+    );
+}
+
 (function () {
     const vscode = acquireVsCodeApi();
     const bootstrap: HistoryBootstrap = window.__SVN_HISTORY_BOOTSTRAP__ ?? {
         repositoryLabel: "",
         rootPath: "",
+        locale: "en",
     };
     const h = React.createElement;
 
@@ -266,9 +296,13 @@ function isHistoryErrorMessage(
         ]);
     }
 
-    function formatDate(value: string | undefined, style: HistoryViewStyle = "summary"): string {
+    function formatDate(
+        value: string | undefined,
+        i18n: RuntimeI18n,
+        style: HistoryViewStyle = "summary"
+    ): string {
         if (!value) {
-            return "Unknown date";
+            return i18n.t("unknownDate");
         }
 
         const date = new Date(value);
@@ -276,23 +310,23 @@ function isHistoryErrorMessage(
             return value;
         }
 
-        return new Intl.DateTimeFormat(undefined, {
+        return new Intl.DateTimeFormat(i18n.locale, {
             dateStyle: style === "detail" ? "full" : "medium",
             timeStyle: "short",
         }).format(date);
     }
 
-    function summarizeMessage(value: string | undefined): string {
+    function summarizeMessage(value: string | undefined, i18n: RuntimeI18n): string {
         const normalized = String(value || "").trim();
         if (!normalized) {
-            return "(no commit message)";
+            return i18n.t("noCommitMessage");
         }
 
         return normalized.split(/\r?\n/, 1)[0];
     }
 
-    function formatPathCount(count: number): string {
-        return count === 1 ? "1 changed path" : count + " changed paths";
+    function formatPathCount(count: number, i18n: RuntimeI18n): string {
+        return i18n.formatChangedPathCount(count);
     }
 
     function actionToIconClass(action: string): string {
@@ -466,6 +500,7 @@ function isHistoryErrorMessage(
                                   props.revision +
                                   ":" +
                                   childNode.fullPath,
+                              i18n: props.i18n,
                               node: childNode,
                               depth: props.depth + 1,
                               revision: props.revision,
@@ -483,19 +518,29 @@ function isHistoryErrorMessage(
         const noteSegments: string[] = [];
 
         if (change.kind) {
-            noteSegments.push(change.kind);
+            noteSegments.push(props.i18n.formatNodeKind(change.kind));
         }
 
         if (change.copyfromPath) {
             noteSegments.push(
-                "from " +
-                    change.copyfromPath +
-                    (change.copyfromRevision ? " @ r" + change.copyfromRevision : "")
+                change.copyfromRevision
+                    ? props.i18n.t("historyCopiedFromRevision", {
+                          path: change.copyfromPath,
+                          revision: change.copyfromRevision,
+                      })
+                    : props.i18n.t("historyCopiedFrom", {
+                          path: change.copyfromPath,
+                      })
             );
         }
 
         if (change.textMods && change.propMods) {
-            noteSegments.push("text: " + change.textMods + ", props: " + change.propMods);
+            noteSegments.push(
+                props.i18n.t("historyTextAndProps", {
+                    text: change.textMods,
+                    props: change.propMods,
+                })
+            );
         }
 
         return h(
@@ -503,7 +548,7 @@ function isHistoryErrorMessage(
             {
                 className: "tree-row change-row",
                 style: depthStyle,
-                title: "Open diff",
+                title: props.i18n.t("openDiff"),
                 href: createHistoryDiffCommandUri(
                     props.rootPath,
                     props.revision,
@@ -529,7 +574,7 @@ function isHistoryErrorMessage(
                         actionToIconClass(action) +
                         " action-" +
                         String(change.action).toLowerCase(),
-                    title: action,
+                    title: props.i18n.formatHistoryAction(action),
                 }),
                 h("span", { className: "tree-label change-path" }, node.name)
             ),
@@ -548,7 +593,7 @@ function isHistoryErrorMessage(
                 ? h(
                       "div",
                       { className: "empty-state" },
-                      "No changed paths were reported for this revision."
+                      props.i18n.t("noChangedPathsReported")
                   )
                 : buildChangeTree(entry.changes).map(function (node) {
                       return h(ChangeTreeNode, {
@@ -557,6 +602,7 @@ function isHistoryErrorMessage(
                               entry.revision +
                               ":" +
                               node.fullPath,
+                          i18n: props.i18n,
                           node: node,
                           depth: 0,
                           revision: entry.revision,
@@ -577,35 +623,39 @@ function isHistoryErrorMessage(
                 h(
                     "div",
                     { className: "details-summary-panel" },
-                    h("div", { className: "details-title" }, entry.message || "(no commit message)"),
+                    h(
+                        "div",
+                        { className: "details-title" },
+                        summarizeMessage(entry.message, props.i18n)
+                    ),
                     h(
                         "div",
                         { className: "details-meta" },
                         h(
                             "div",
                             null,
-                            h("strong", null, "Revision:"),
+                            h("strong", null, props.i18n.t("revisionLabel") + ":"),
                             " r",
                             entry.revision
                         ),
                         h(
                             "div",
                             null,
-                            h("strong", null, "Author:"),
+                            h("strong", null, props.i18n.t("authorDetailLabel") + ":"),
                             " ",
                             entry.author
                         ),
                         h(
                             "div",
                             null,
-                            h("strong", null, "Date:"),
+                            h("strong", null, props.i18n.t("dateLabel") + ":"),
                             " ",
-                            formatDate(entry.date, "detail")
+                            formatDate(entry.date, props.i18n, "detail")
                         ),
                         h(
                             "div",
                             null,
-                            h("strong", null, "Files:"),
+                            h("strong", null, props.i18n.t("filesLabel") + ":"),
                             " ",
                             entry.changes.length
                         )
@@ -614,7 +664,7 @@ function isHistoryErrorMessage(
                 h(
                     "div",
                     { className: "details-files-panel" },
-                    h("div", { className: "section-title" }, "Changed Files"),
+                    h("div", { className: "section-title" }, props.i18n.t("changedFilesLabel")),
                     h("div", { className: "changes" }, treeMarkup)
                 )
             )
@@ -629,6 +679,7 @@ function isHistoryErrorMessage(
         const entry = props.entry;
         if (props.menu.kind === "file") {
             const change = props.menu.change;
+            const displayPath = getDisplayChangePath(change.path);
 
             return h(
                 "div",
@@ -646,14 +697,14 @@ function isHistoryErrorMessage(
                     h(
                         "div",
                         { className: "context-menu-header" },
-                        h("div", { className: "context-menu-title" }, change.path),
+                        h("div", { className: "context-menu-title", title: displayPath }, displayPath),
                         h(
                             "div",
                             { className: "context-menu-subtitle" },
                             "r",
                             entry.revision,
                             " • ",
-                            summarizeMessage(entry.message)
+                            summarizeMessage(entry.message, props.i18n)
                         )
                     ),
                     h(
@@ -669,7 +720,7 @@ function isHistoryErrorMessage(
                                 },
                             },
                             h("span", { className: "codicon codicon-diff", "aria-hidden": "true" }),
-                            h("span", { className: "context-menu-label" }, "Open Diff")
+                            h("span", { className: "context-menu-label" }, props.i18n.t("openDiff"))
                         ),
                         h(
                             "button",
@@ -685,7 +736,11 @@ function isHistoryErrorMessage(
                                 },
                             },
                             h("span", { className: "codicon codicon-diff", "aria-hidden": "true" }),
-                            h("span", { className: "context-menu-label" }, "Compare With Working Copy")
+                            h(
+                                "span",
+                                { className: "context-menu-label" },
+                                props.i18n.t("compareWithWorkingCopy")
+                            )
                         ),
                         h(
                             "button",
@@ -707,7 +762,7 @@ function isHistoryErrorMessage(
                             h(
                                 "span",
                                 { className: "context-menu-label" },
-                                "Compare With Previous Revision"
+                                props.i18n.t("compareWithPreviousRevision")
                             )
                         ),
                         h("div", { className: "context-menu-separator", "aria-hidden": "true" }),
@@ -721,7 +776,7 @@ function isHistoryErrorMessage(
                                 },
                             },
                             h("span", { className: "codicon codicon-copy", "aria-hidden": "true" }),
-                            h("span", { className: "context-menu-label" }, "Copy File Path")
+                            h("span", { className: "context-menu-label" }, props.i18n.t("copyFilePath"))
                         )
                     )
                 )
@@ -748,7 +803,7 @@ function isHistoryErrorMessage(
                     h(
                         "div",
                         { className: "context-menu-subtitle" },
-                        summarizeMessage(entry.message)
+                        summarizeMessage(entry.message, props.i18n)
                     )
                 ),
                 h(
@@ -764,7 +819,11 @@ function isHistoryErrorMessage(
                             },
                         },
                         h("span", { className: "codicon codicon-repo-clone", "aria-hidden": "true" }),
-                        h("span", { className: "context-menu-label" }, "Checkout To This Revision")
+                        h(
+                            "span",
+                            { className: "context-menu-label" },
+                            props.i18n.t("checkoutToThisRevision")
+                        )
                     ),
                     h(
                         "button",
@@ -779,7 +838,7 @@ function isHistoryErrorMessage(
                             className: "codicon codicon-folder-opened",
                             "aria-hidden": "true",
                         }),
-                        h("span", { className: "context-menu-label" }, "Export This Revision")
+                        h("span", { className: "context-menu-label" }, props.i18n.t("exportThisRevision"))
                     ),
                     h(
                         "button",
@@ -791,7 +850,11 @@ function isHistoryErrorMessage(
                             },
                         },
                         h("span", { className: "codicon codicon-diff", "aria-hidden": "true" }),
-                        h("span", { className: "context-menu-label" }, "Compare With Working Copy")
+                        h(
+                            "span",
+                            { className: "context-menu-label" },
+                            props.i18n.t("compareWithWorkingCopy")
+                        )
                     ),
                     h(
                         "button",
@@ -803,7 +866,11 @@ function isHistoryErrorMessage(
                             },
                         },
                         h("span", { className: "codicon codicon-git-compare", "aria-hidden": "true" }),
-                        h("span", { className: "context-menu-label" }, "Compare With Previous Revision")
+                        h(
+                            "span",
+                            { className: "context-menu-label" },
+                            props.i18n.t("compareWithPreviousRevision")
+                        )
                     ),
                     h(
                         "button",
@@ -815,7 +882,11 @@ function isHistoryErrorMessage(
                             },
                         },
                         h("span", { className: "codicon codicon-history", "aria-hidden": "true" }),
-                        h("span", { className: "context-menu-label" }, "Revert To This Revision")
+                        h(
+                            "span",
+                            { className: "context-menu-label" },
+                            props.i18n.t("revertToThisRevision")
+                        )
                     ),
                     h(
                         "button",
@@ -827,7 +898,11 @@ function isHistoryErrorMessage(
                             },
                         },
                         h("span", { className: "codicon codicon-discard", "aria-hidden": "true" }),
-                        h("span", { className: "context-menu-label" }, "Revert Changes From This Revision")
+                        h(
+                            "span",
+                            { className: "context-menu-label" },
+                            props.i18n.t("revertChangesFromThisRevision")
+                        )
                     ),
                     h("div", { className: "context-menu-separator", "aria-hidden": "true" }),
                     h(
@@ -843,7 +918,11 @@ function isHistoryErrorMessage(
                             className: "codicon codicon-git-branch",
                             "aria-hidden": "true",
                         }),
-                        h("span", { className: "context-menu-label" }, "Create Branch From This Revision")
+                        h(
+                            "span",
+                            { className: "context-menu-label" },
+                            props.i18n.t("createBranchFromThisRevision")
+                        )
                     ),
                     h(
                         "button",
@@ -855,7 +934,11 @@ function isHistoryErrorMessage(
                             },
                         },
                         h("span", { className: "codicon codicon-tag", "aria-hidden": "true" }),
-                        h("span", { className: "context-menu-label" }, "Create Tag From This Revision")
+                        h(
+                            "span",
+                            { className: "context-menu-label" },
+                            props.i18n.t("createTagFromThisRevision")
+                        )
                     ),
                     h("div", { className: "context-menu-separator", "aria-hidden": "true" }),
                     h(
@@ -868,7 +951,11 @@ function isHistoryErrorMessage(
                             },
                         },
                         h("span", { className: "codicon codicon-copy", "aria-hidden": "true" }),
-                        h("span", { className: "context-menu-label" }, "Copy Revision Number")
+                        h(
+                            "span",
+                            { className: "context-menu-label" },
+                            props.i18n.t("copyRevisionNumber")
+                        )
                     ),
                     h(
                         "button",
@@ -880,7 +967,11 @@ function isHistoryErrorMessage(
                             },
                         },
                         h("span", { className: "codicon codicon-note", "aria-hidden": "true" }),
-                        h("span", { className: "context-menu-label" }, "Copy Commit Message")
+                        h(
+                            "span",
+                            { className: "context-menu-label" },
+                            props.i18n.t("copyCommitMessage")
+                        )
                     ),
                     h(
                         "button",
@@ -892,7 +983,11 @@ function isHistoryErrorMessage(
                             },
                         },
                         h("span", { className: "codicon codicon-list-unordered", "aria-hidden": "true" }),
-                        h("span", { className: "context-menu-label" }, "Copy Changed Paths")
+                        h(
+                            "span",
+                            { className: "context-menu-label" },
+                            props.i18n.t("copyChangedPaths")
+                        )
                     )
                 )
             )
@@ -912,7 +1007,19 @@ function isHistoryErrorMessage(
             query: "",
             repositoryLabel: bootstrap.repositoryLabel,
             rootPath: bootstrap.rootPath,
+            locale: bootstrap.locale,
         });
+        const i18n = createI18n(state.locale);
+
+        React.useEffect(
+            function () {
+                document.title = i18n.t("historyPanelTitle", {
+                    label: state.repositoryLabel,
+                });
+                document.documentElement.lang = state.locale;
+            },
+            [i18n, state.locale, state.repositoryLabel]
+        );
 
         const filteredEntries = state.query.trim()
             ? state.entries.filter(function (entry) {
@@ -1048,6 +1155,16 @@ function isHistoryErrorMessage(
                             isLoading: false,
                             loadMoreError: data.payload.message,
                             contextMenu: undefined,
+                        };
+                    });
+                    return;
+                }
+
+                if (isHistoryConfigMessage(data)) {
+                    setState(function (previous) {
+                        return {
+                            ...previous,
+                            locale: data.payload.locale,
                         };
                     });
                 }
@@ -1242,7 +1359,7 @@ function isHistoryErrorMessage(
 
         function renderHistoryContent() {
             if (state.entries.length === 0 && state.isLoading) {
-                return h("div", { className: "empty-state" }, "Loading history...");
+                return h("div", { className: "empty-state" }, i18n.t("loadingHistory"));
             }
 
             if (filteredEntries.length === 0) {
@@ -1250,7 +1367,7 @@ function isHistoryErrorMessage(
                     return h(
                         "div",
                         { className: "empty-state" },
-                        "Unable to load history.",
+                        i18n.t("unableLoadHistory"),
                         h("br"),
                         h("br"),
                         state.loadMoreError
@@ -1264,7 +1381,7 @@ function isHistoryErrorMessage(
                         h(
                             "div",
                             { className: "empty-state" },
-                            "No loaded revisions match the current filter yet."
+                            i18n.t("noLoadedRevisionsMatch")
                         ),
                         renderFooter()
                     );
@@ -1273,7 +1390,7 @@ function isHistoryErrorMessage(
                 return h(
                     "div",
                     { className: "empty-state" },
-                    "No revisions match the current filter."
+                    i18n.t("noRevisionsMatch")
                 );
             }
 
@@ -1340,20 +1457,20 @@ function isHistoryErrorMessage(
                                     h(
                                         "span",
                                         { className: "summary-message" },
-                                        summarizeMessage(entry.message)
+                                        summarizeMessage(entry.message, i18n)
                                     ),
                                     h("span", { className: "summary-separator" }, "\u2022"),
                                     h(
                                         "span",
                                         { className: "summary-meta" },
-                                        formatPathCount(entry.changes.length)
+                                        formatPathCount(entry.changes.length, i18n)
                                     )
                                 )
                             ),
                             h(
                                 "div",
                                 { className: "cell-text muted" },
-                                formatDate(entry.date)
+                                formatDate(entry.date, i18n)
                             ),
                             h("div", { className: "cell-text" }, entry.author),
                             h(
@@ -1365,6 +1482,7 @@ function isHistoryErrorMessage(
                         ),
                         isExpanded
                             ? h(CommitDetails, {
+                                  i18n: i18n,
                                   entry: entry,
                                   rootPath: state.rootPath,
                                   collapsedDirectories: state.collapsedDirectories,
@@ -1386,7 +1504,7 @@ function isHistoryErrorMessage(
                     h(
                         "span",
                         { className: "history-footer-text" },
-                        "Loading more history..."
+                        i18n.t("loadingMoreHistory")
                     )
                 );
             }
@@ -1402,7 +1520,7 @@ function isHistoryErrorMessage(
                             type: "button",
                             onClick: requestMoreEntries,
                         },
-                        "Retry loading older revisions"
+                        i18n.t("retryLoadingOlderRevisions")
                     )
                 );
             }
@@ -1418,7 +1536,7 @@ function isHistoryErrorMessage(
                             type: "button",
                             onClick: requestMoreEntries,
                         },
-                        "Load older revisions"
+                        i18n.t("loadOlderRevisions")
                     )
                 );
             }
@@ -1429,7 +1547,7 @@ function isHistoryErrorMessage(
                 h(
                     "span",
                     { className: "history-footer-text" },
-                    "All available history has been loaded."
+                    i18n.t("allHistoryLoaded")
                 )
             );
         }
@@ -1458,7 +1576,7 @@ function isHistoryErrorMessage(
                             h("input", {
                                 className: "search",
                                 type: "search",
-                                placeholder: "Filter by revision, author, message or path",
+                                placeholder: i18n.t("filterPlaceholder"),
                                 value: state.query,
                                 onChange: function (event: React.ChangeEvent<HTMLInputElement>) {
                                     setState(function (previous) {
@@ -1486,18 +1604,18 @@ function isHistoryErrorMessage(
                                         vscode.postMessage({ type: "refresh" });
                                     },
                                 },
-                                "Refresh"
+                                i18n.t("refreshButton")
                             )
                         )
                     ),
                     h(
                         "div",
                         { className: "table-header" },
-                        h("div", null, "Graph"),
-                        h("div", null, "Description"),
-                        h("div", null, "Date"),
-                        h("div", null, "Author"),
-                        h("div", null, "Revision")
+                        h("div", null, i18n.t("graphLabel")),
+                        h("div", null, i18n.t("descriptionLabel")),
+                        h("div", null, i18n.t("dateLabel")),
+                        h("div", null, i18n.t("authorDetailLabel")),
+                        h("div", null, i18n.t("revisionLabel"))
                     ),
                     h(
                         "div",
@@ -1514,6 +1632,7 @@ function isHistoryErrorMessage(
                 )
             ),
             h(ContextMenu, {
+                i18n: i18n,
                 menu: state.contextMenu,
                 entry: contextEntry,
                 onClose: hideContextMenu,

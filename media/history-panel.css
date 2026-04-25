@@ -497,6 +497,11 @@ button {
 .context-menu-title {
   font-size: 12px;
   font-weight: 700;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  direction: rtl;
+  text-align: left;
 }
 
 .context-menu-subtitle {

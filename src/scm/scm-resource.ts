@@ -1,5 +1,6 @@
 import * as nodePath from "node:path";
 import * as vscode from "vscode";
+import { getI18n } from "../vscode-i18n";
 import type { SvnRepository } from "./svn-repository";
 import type { SvnStatusEntry } from "../svn/svn-types";
 
@@ -56,10 +57,11 @@ export class ScmResource implements vscode.SourceControlResourceState {
         public readonly status: SvnStatusEntry,
         public readonly kind: ScmResourceKind
     ) {
+        const i18n = getI18n();
         this.resourceUri = vscode.Uri.file(status.absolutePath);
         this.command = {
             command: "svn-graph.open-diff",
-            title: "Open Diff",
+            title: i18n.t("openDiff"),
             arguments: [this],
         };
         this.contextValue =
@@ -77,18 +79,31 @@ export class ScmResource implements vscode.SourceControlResourceState {
     }
 
     public get tooltip(): string {
+        const i18n = getI18n();
         const segments = [
-            this.kind === "remote-change" ? "Incoming change" : "Working copy change",
+            this.kind === "remote-change"
+                ? i18n.t("incomingChange")
+                : i18n.t("workingCopyChange"),
             this.status.relativePath,
-            `Status: ${this.kind === "remote-change" ? (this.status.reposStatus ?? "none") : this.status.wcStatus}`,
+            i18n.t("statusLabel", {
+                status: i18n.formatSvnStatus(
+                    this.kind === "remote-change"
+                        ? this.status.reposStatus ?? "none"
+                        : this.status.wcStatus
+                ),
+            }),
         ];
 
         if (this.status.author) {
-            segments.push(`Author: ${this.status.author}`);
+            segments.push(i18n.t("authorLabel", { author: this.status.author }));
         }
 
         if (this.status.committedRevision) {
-            segments.push(`Committed revision: r${this.status.committedRevision}`);
+            segments.push(
+                i18n.t("committedRevisionLabel", {
+                    revision: this.status.committedRevision,
+                })
+            );
         }
 
         return segments.join("\n");

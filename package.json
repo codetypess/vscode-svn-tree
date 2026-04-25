@@ -1,8 +1,8 @@
 {
   "name": "svn-graph",
-  "displayName": "SVN Graph",
-  "description": "SVN source control and history viewer for Visual Studio Code.",
-  "version": "0.3.0",
+  "displayName": "%displayName%",
+  "description": "%description%",
+  "version": "0.4.0",
   "publisher": "codetypess",
   "license": "MIT",
   "icon": "media/icon.png",
@@ -40,84 +40,84 @@
     "commands": [
       {
         "command": "svn-graph.refresh",
-        "title": "Refresh SVN Status",
-        "category": "SVN Graph",
+        "title": "%command.refresh.title%",
+        "category": "%command.category%",
         "icon": "$(refresh)"
       },
       {
         "command": "svn-graph.commit",
-        "title": "Commit SVN Changes",
-        "category": "SVN Graph",
+        "title": "%command.commit.title%",
+        "category": "%command.category%",
         "icon": "$(check)"
       },
       {
         "command": "svn-graph.update",
-        "title": "Update SVN Working Copy",
-        "category": "SVN Graph",
+        "title": "%command.update.title%",
+        "category": "%command.category%",
         "icon": "$(cloud-download)"
       },
       {
         "command": "svn-graph.cleanup",
-        "title": "Cleanup SVN Working Copy",
-        "category": "SVN Graph",
+        "title": "%command.cleanup.title%",
+        "category": "%command.category%",
         "icon": "$(tools)"
       },
       {
         "command": "svn-graph.open-history",
-        "title": "Open SVN History",
-        "category": "SVN Graph",
+        "title": "%command.openHistory.title%",
+        "category": "%command.category%",
         "icon": "$(history)"
       },
       {
         "command": "svn-graph.open-repository-actions",
-        "title": "More SVN Actions",
-        "category": "SVN Graph",
+        "title": "%command.openRepositoryActions.title%",
+        "category": "%command.category%",
         "icon": "$(ellipsis)"
       },
       {
         "command": "svn-graph.open-diff",
-        "title": "Open Diff",
-        "category": "SVN Graph"
+        "title": "%command.openDiff.title%",
+        "category": "%command.category%"
       },
       {
         "command": "svn-graph.open-file",
-        "title": "Open File",
-        "category": "SVN Graph",
+        "title": "%command.openFile.title%",
+        "category": "%command.category%",
         "icon": "$(go-to-file)"
       },
       {
         "command": "svn-graph.revert-resource",
-        "title": "Revert Resource",
-        "category": "SVN Graph",
+        "title": "%command.revertResource.title%",
+        "category": "%command.category%",
         "icon": "$(discard)"
       },
       {
         "command": "svn-graph.revert-group",
-        "title": "Revert All Changes",
-        "category": "SVN Graph",
+        "title": "%command.revertGroup.title%",
+        "category": "%command.category%",
         "icon": "$(discard)"
       },
       {
         "command": "svn-graph.add-resource",
-        "title": "Add Resource",
-        "category": "SVN Graph",
+        "title": "%command.addResource.title%",
+        "category": "%command.category%",
         "icon": "$(add)"
       },
       {
         "command": "svn-graph.add-group",
-        "title": "Add All Unversioned",
-        "category": "SVN Graph",
+        "title": "%command.addGroup.title%",
+        "category": "%command.category%",
         "icon": "$(add)"
       },
       {
         "command": "svn-graph.delete-resource",
-        "title": "Delete Resource",
-        "category": "SVN Graph"
+        "title": "%command.deleteResource.title%",
+        "category": "%command.category%"
       },
       {
         "command": "svn-graph.open-history-diff",
-        "title": "Open History Diff",
-        "category": "SVN Graph"
+        "title": "%command.openHistoryDiff.title%",
+        "category": "%command.category%"
       }
     ],
     "menus": {
@@ -174,24 +174,40 @@
       ]
     },
     "configuration": {
-      "title": "SVN Graph",
+      "title": "%config.title%",
       "properties": {
+        "svn-graph.display-language": {
+          "type": "string",
+          "default": "auto",
+          "enum": [
+            "auto",
+            "en",
+            "zh-CN"
+          ],
+          "enumDescriptions": [
+            "%config.displayLanguage.auto%",
+            "%config.displayLanguage.en%",
+            "%config.displayLanguage.zhCN%"
+          ],
+          "description": "%config.displayLanguage.description%",
+          "scope": "window"
+        },
         "svn-graph.enable-remote-status": {
           "type": "boolean",
           "default": true,
-          "description": "Fetch incoming changes with `svn status -u`."
+          "description": "%config.enableRemoteStatus.description%"
         },
         "svn-graph.remote-status-interval-seconds": {
           "type": "number",
           "default": 60,
           "minimum": 10,
-          "description": "Interval in seconds between automatic remote status refreshes."
+          "description": "%config.remoteStatusIntervalSeconds.description%"
         },
         "svn-graph.max-log-entries": {
           "type": "number",
           "default": 200,
           "minimum": 20,
-          "description": "Number of revisions loaded per batch in the history webview. Older history is fetched automatically as you scroll."
+          "description": "%config.maxLogEntries.description%"
         }
       }
     }
