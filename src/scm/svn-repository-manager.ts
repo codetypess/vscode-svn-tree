@@ -72,6 +72,28 @@ export class SvnRepositoryManager implements vscode.Disposable {
                 "svn-tree.switch-reference",
                 async (arg?: unknown) => this.switchReference(arg)
             ),
+            vscode.commands.registerCommand("svn-tree.show-blame", async (arg?: unknown) =>
+                this.showBlame(arg)
+            ),
+            vscode.commands.registerCommand("svn-tree.edit-property", async (arg?: unknown) =>
+                this.editProperty(arg)
+            ),
+            vscode.commands.registerCommand(
+                "svn-tree.create-branch-from-working-copy",
+                async (arg?: unknown) => this.createBranchFromWorkingCopy(arg)
+            ),
+            vscode.commands.registerCommand(
+                "svn-tree.create-tag-from-working-copy",
+                async (arg?: unknown) => this.createTagFromWorkingCopy(arg)
+            ),
+            vscode.commands.registerCommand(
+                "svn-tree.delete-reference",
+                async (arg?: unknown) => this.deleteReference(arg)
+            ),
+            vscode.commands.registerCommand(
+                "svn-tree.relocate-working-copy",
+                async (arg?: unknown) => this.relocateWorkingCopy(arg)
+            ),
             vscode.commands.registerCommand(
                 "svn-tree.update-to-revision",
                 async (arg?: unknown) => this.updateToRevision(arg)
@@ -540,6 +562,30 @@ export class SvnRepositoryManager implements vscode.Disposable {
                         targetRepository.switchRepositoryReference(),
                 },
                 {
+                    label: i18n.t("createBranchFromWorkingCopyActionLabel"),
+                    description: i18n.t("createBranchFromWorkingCopyActionDescription"),
+                    run: async (targetRepository) =>
+                        targetRepository.createBranchFromWorkingCopy(),
+                },
+                {
+                    label: i18n.t("createTagFromWorkingCopyActionLabel"),
+                    description: i18n.t("createTagFromWorkingCopyActionDescription"),
+                    run: async (targetRepository) =>
+                        targetRepository.createTagFromWorkingCopy(),
+                },
+                {
+                    label: i18n.t("deleteReferenceActionLabel"),
+                    description: i18n.t("deleteReferenceActionDescription"),
+                    run: async (targetRepository) =>
+                        targetRepository.deleteRepositoryReference(),
+                },
+                {
+                    label: i18n.t("relocateWorkingCopyActionLabel"),
+                    description: i18n.t("relocateWorkingCopyActionDescription"),
+                    run: async (targetRepository) =>
+                        targetRepository.relocateWorkingCopy(),
+                },
+                {
                     label: i18n.t("commitActionLabel"),
                     description: i18n.t("commitActionDescription"),
                     run: async (targetRepository) => targetRepository.commit(),
@@ -956,6 +1002,34 @@ export class SvnRepositoryManager implements vscode.Disposable {
         }
     }
 
+    private async showBlame(arg: unknown): Promise<void> {
+        const target = this.resolvePathTarget(arg);
+        if (!target) {
+            void vscode.window.showInformationMessage(getI18n().t("noWorkingCopyInfo"));
+            return;
+        }
+
+        try {
+            await target.repository.showBlame(target.uri);
+        } catch (error) {
+            this.showError(error);
+        }
+    }
+
+    private async editProperty(arg: unknown): Promise<void> {
+        const target = this.resolvePathTarget(arg);
+        if (!target) {
+            void vscode.window.showInformationMessage(getI18n().t("noWorkingCopyInfo"));
+            return;
+        }
+
+        try {
+            await target.repository.editPathProperty(target.uri);
+        } catch (error) {
+            this.showError(error);
+        }
+    }
+
     private async renamePath(arg: unknown): Promise<void> {
         const target = this.resolvePathTarget(arg);
         if (!target) {
@@ -1125,6 +1199,24 @@ export class SvnRepositoryManager implements vscode.Disposable {
 
     private async switchReference(arg: unknown): Promise<void> {
         await this.runForRepository(arg, (repository) => repository.switchRepositoryReference());
+    }
+
+    private async createBranchFromWorkingCopy(arg: unknown): Promise<void> {
+        await this.runForRepository(arg, (repository) =>
+            repository.createBranchFromWorkingCopy()
+        );
+    }
+
+    private async createTagFromWorkingCopy(arg: unknown): Promise<void> {
+        await this.runForRepository(arg, (repository) => repository.createTagFromWorkingCopy());
+    }
+
+    private async deleteReference(arg: unknown): Promise<void> {
+        await this.runForRepository(arg, (repository) => repository.deleteRepositoryReference());
+    }
+
+    private async relocateWorkingCopy(arg: unknown): Promise<void> {
+        await this.runForRepository(arg, (repository) => repository.relocateWorkingCopy());
     }
 
     private async resolveAllConflicts(arg: unknown): Promise<void> {

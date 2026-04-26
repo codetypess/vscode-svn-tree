@@ -24,6 +24,15 @@ interface CommitQuickPickItem extends vscode.QuickPickItem {
     readonly absolutePath: string;
 }
 
+interface PropertyNameQuickPickItem extends vscode.QuickPickItem {
+    readonly propertyName: string;
+    readonly custom?: boolean;
+}
+
+interface PropertyActionQuickPickItem extends vscode.QuickPickItem {
+    readonly action: "set" | "delete";
+}
+
 type RepositoryReferenceKind = "branch" | "tag";
 type RepositoryUiOperation =
     | "refresh"
@@ -201,6 +210,21 @@ function getReferenceNameSuggestion(repositoryRelativePath: string, revision: nu
         .replace(/\s+/g, "-");
     const normalizedBase = baseLabel && baseLabel !== "/" ? baseLabel : "revision";
     return `${normalizedBase}-r${revision}`;
+}
+
+function getReferenceKindForRepositoryPath(
+    repositoryPath: string
+): RepositoryReferenceKind | undefined {
+    const segments = splitRepositoryPath(repositoryPath);
+    if (segments.includes("branches")) {
+        return "branch";
+    }
+
+    if (segments.includes("tags")) {
+        return "tag";
+    }
+
+    return undefined;
 }
 
 export class SvnRepository implements vscode.Disposable {
@@ -892,6 +916,196 @@ export class SvnRepository implements vscode.Disposable {
 
     public async createTagFromRevision(revision: number): Promise<void> {
         await this.createRepositoryReferenceFromRevision("tag", revision);
+    }
+
+    public async createBranchFromWorkingCopy(): Promise<void> {
+        await this.createRepositoryReferenceFromWorkingCopy("branch");
+    }
+
+    public async createTagFromWorkingCopy(): Promise<void> {
+        await this.createRepositoryReferenceFromWorkingCopy("tag");
+    }
+
+    public async deleteRepositoryReference(): Promise<void> {
+        const target = await this.promptDeleteReferenceTarget();
+        if (!target) {
+            return;
+        }
+
+        const confirmed = await this.confirmDeleteRepositoryReference(target.display);
+        if (!confirmed) {
+            return;
+        }
+
+        const message = this.i18n.t("deleteReferenceCommitMessage", {
+            target: target.display,
+        });
+
+        await vscode.window.withProgress(
+            {
+                location: vscode.ProgressLocation.Notification,
+                title: this.i18n.t("deleteReferenceProgress", {
+                    target: target.display,
+                }),
+            },
+            async () => {
+                await this.svnService.deleteUrl(target.url, message);
+            }
+        );
+
+        await this.historyPanel.refresh(this);
+        void vscode.window.showInformationMessage(
+            this.i18n.t("deletedReferenceInfo", {
+                target: target.display,
+            })
+        );
+    }
+
+    public async relocateWorkingCopy(): Promise<void> {
+        const targetUrl = await this.promptRelocateTargetUrl();
+        if (!targetUrl) {
+            return;
+        }
+
+        await vscode.window.withProgress(
+            {
+                location: vscode.ProgressLocation.Notification,
+                title: this.i18n.t("relocateWorkingCopyProgress", {
+                    label: this.label,
+                }),
+            },
+            async () => {
+                await this.svnService.relocate(this.rootPath, targetUrl);
+            }
+        );
+
+        await this.refreshWorkingCopyInfo();
+        await this.refresh({ forceRemote: true, allowWhileBusy: true });
+        await this.historyPanel.refresh(this);
+        void vscode.window.showInformationMessage(
+            this.i18n.t("relocatedWorkingCopyInfo", {
+                label: this.label,
+            })
+        );
+    }
+
+    public async showBlame(target: vscode.Uri | string): Promise<void> {
+        const targetPath = typeof target === "string" ? target : target.fsPath;
+        const targetInfo = await this.svnService.getNodeInfo(targetPath);
+        const displayPath =
+            nodePath.relative(this.rootPath, targetPath).replace(/\\/g, "/") ||
+            nodePath.basename(targetPath);
+
+        if (!targetInfo) {
+            throw new Error(this.i18n.t("noSvnInfoForPathError", { path: displayPath }));
+        }
+
+        if (targetInfo.kind !== "file") {
+            throw new Error(this.i18n.t("blameFileOnlyError"));
+        }
+
+        const blameOutput = await vscode.window.withProgress(
+            {
+                location: vscode.ProgressLocation.Notification,
+                title: this.i18n.t("showBlameProgress", { path: displayPath }),
+            },
+            async () => this.svnService.blame(this.rootPath, targetPath)
+        );
+
+        const document = await vscode.workspace.openTextDocument({
+            language: "plaintext",
+            content: [
+                `${this.i18n.t("infoPathLabel")}: ${displayPath}`,
+                `${this.i18n.t("infoRepositoryPathLabel")}: ${targetInfo.repositoryRelativePath}`,
+                `${this.i18n.t("infoUrlLabel")}: ${targetInfo.url}`,
+                "",
+                blameOutput,
+            ].join("\n"),
+        });
+        await vscode.window.showTextDocument(document, {
+            preview: true,
+            viewColumn: vscode.ViewColumn.Active,
+        });
+        void vscode.window.setStatusBarMessage(this.i18n.t("openedBlameStatus"), 2000);
+    }
+
+    public async editPathProperty(target: vscode.Uri | string): Promise<void> {
+        const targetPath = typeof target === "string" ? target : target.fsPath;
+        const displayPath =
+            nodePath.relative(this.rootPath, targetPath).replace(/\\/g, "/") ||
+            nodePath.basename(targetPath);
+        const targetInfo = await this.svnService.getNodeInfo(targetPath);
+        if (!targetInfo) {
+            throw new Error(this.i18n.t("noSvnInfoForPathError", { path: displayPath }));
+        }
+
+        const propertyName = await this.promptPropertyName();
+        if (!propertyName) {
+            return;
+        }
+
+        const currentValue = await this.svnService.getProperty(targetPath, propertyName);
+        const action = await this.promptPropertyAction(propertyName, currentValue);
+        if (!action) {
+            return;
+        }
+
+        if (action === "delete") {
+            if (currentValue === undefined) {
+                void vscode.window.showInformationMessage(
+                    this.i18n.t("propertyNotSetInfo", {
+                        name: propertyName,
+                    })
+                );
+                return;
+            }
+
+            await vscode.window.withProgress(
+                {
+                    location: vscode.ProgressLocation.Notification,
+                    title: this.i18n.t("deletePropertyProgress", {
+                        name: propertyName,
+                    }),
+                },
+                async () => {
+                    await this.svnService.deleteProperty(targetPath, propertyName);
+                }
+            );
+
+            await this.refresh({ allowWhileBusy: true });
+            void vscode.window.showInformationMessage(
+                this.i18n.t("deletedPropertyInfo", {
+                    name: propertyName,
+                    path: displayPath,
+                })
+            );
+            return;
+        }
+
+        const nextValue = await this.promptPropertyValue(propertyName, currentValue);
+        if (nextValue === undefined) {
+            return;
+        }
+
+        await vscode.window.withProgress(
+            {
+                location: vscode.ProgressLocation.Notification,
+                title: this.i18n.t("setPropertyProgress", {
+                    name: propertyName,
+                }),
+            },
+            async () => {
+                await this.svnService.setProperty(targetPath, propertyName, nextValue);
+            }
+        );
+
+        await this.refresh({ allowWhileBusy: true });
+        void vscode.window.showInformationMessage(
+            this.i18n.t("updatedPropertyInfo", {
+                name: propertyName,
+                path: displayPath,
+            })
+        );
     }
 
     public async revertToRevision(revision: number): Promise<void> {
@@ -1742,6 +1956,92 @@ export class SvnRepository implements vscode.Disposable {
         }
     }
 
+    private async createRepositoryReferenceFromWorkingCopy(
+        kind: RepositoryReferenceKind
+    ): Promise<void> {
+        const destinationPath = await this.promptReferenceDestinationFromWorkingCopy(kind);
+        if (!destinationPath) {
+            return;
+        }
+
+        const confirmed = await this.confirmCreateReferenceFromWorkingCopy(
+            kind,
+            destinationPath
+        );
+        if (!confirmed) {
+            return;
+        }
+
+        const kindLabel = this.getReferenceKindLabel(kind);
+        const message = this.i18n.t("createReferenceFromWorkingCopyCommitMessage", {
+            kind: kindLabel,
+            destination: destinationPath,
+        });
+        const destinationUrl = buildRepositoryUrl(this.info.repositoryRoot, destinationPath);
+
+        await vscode.window.withProgress(
+            {
+                location: vscode.ProgressLocation.Notification,
+                title: this.i18n.t("createReferenceFromWorkingCopyProgress", {
+                    kind: kindLabel,
+                }),
+            },
+            async () => {
+                await this.svnService.copy(this.rootPath, destinationUrl, message);
+            }
+        );
+
+        await this.historyPanel.refresh(this);
+        const selection = await vscode.window.showInformationMessage(
+            this.i18n.t("createdReferenceFromWorkingCopyMessage", {
+                kind: kindLabel,
+                destination: destinationPath,
+            }),
+            this.i18n.t("copyPathButton")
+        );
+        if (selection === this.i18n.t("copyPathButton")) {
+            await vscode.env.clipboard.writeText(destinationPath);
+            void vscode.window.setStatusBarMessage(
+                this.i18n.t("copiedReferencePathStatus", {
+                    kind: kindLabel,
+                    destination: destinationPath,
+                }),
+                2000
+            );
+        }
+    }
+
+    private async confirmCreateReferenceFromWorkingCopy(
+        kind: RepositoryReferenceKind,
+        destinationPath: string
+    ): Promise<boolean> {
+        const kindLabel = this.getReferenceKindLabel(kind);
+        const detailLines = [
+            this.i18n.t("createReferenceFromWorkingCopyDetail", {
+                kind: kindLabel,
+                destination: destinationPath,
+            }),
+        ];
+
+        if (this.hasLocalChanges()) {
+            detailLines.push(this.i18n.t("createReferenceFromWorkingCopyWithLocalChangesDetail"));
+        }
+
+        const selection = await vscode.window.showWarningMessage(
+            this.i18n.t("createReferenceFromWorkingCopyQuestion", {
+                kind: kindLabel,
+                destination: destinationPath,
+            }),
+            {
+                modal: true,
+                detail: detailLines.join("\n"),
+            },
+            this.i18n.t("continueButton")
+        );
+
+        return selection === this.i18n.t("continueButton");
+    }
+
     private async promptReferenceDestination(
         kind: RepositoryReferenceKind,
         revision: number
@@ -1792,6 +2092,77 @@ export class SvnRepository implements vscode.Disposable {
         );
     }
 
+    private async promptReferenceDestinationFromWorkingCopy(
+        kind: RepositoryReferenceKind
+    ): Promise<string | undefined> {
+        const locationLabel = getReferenceLocationLabel(kind);
+        const layoutRoot = getReferenceLayoutRoot(this.info.repositoryRelativePath);
+        const locationPath = normalizeRepositoryPath(
+            [layoutRoot, locationLabel].filter((segment) => segment !== "/").join("/")
+        );
+        const kindLabel = this.getReferenceKindLabel(kind);
+        const referencePath = await vscode.window.showInputBox({
+            prompt: this.i18n.t("newReferencePathFromWorkingCopyPrompt", {
+                kind: kindLabel,
+                location: locationPath,
+            }),
+            value: getCommitTargetLabel(this.info.repositoryRelativePath).replace(
+                /^trunk$/,
+                this.label
+            ),
+            validateInput: (value) => {
+                const normalizedValue = value.trim().replace(/\\/g, "/");
+                if (!normalizedValue) {
+                    return kind === "branch"
+                        ? this.i18n.t("branchNameRequired")
+                        : this.i18n.t("tagNameRequired");
+                }
+
+                if (normalizedValue.startsWith("/")) {
+                    return this.i18n.t("relativePathRequired", {
+                        location: locationPath,
+                    });
+                }
+
+                if (normalizedValue.split("/").some((segment) => segment.trim().length === 0)) {
+                    return this.i18n.t("avoidEmptySegments");
+                }
+
+                return undefined;
+            },
+        });
+        const trimmedReferencePath = referencePath?.trim();
+        if (!trimmedReferencePath) {
+            return undefined;
+        }
+
+        return buildReferenceDestinationPath(
+            this.info.repositoryRelativePath,
+            kind,
+            trimmedReferencePath
+        );
+    }
+
+    private async promptDeleteReferenceTarget(): Promise<
+        { display: string; url: string; repositoryPath: string } | undefined
+    > {
+        const switchTarget = await vscode.window.showInputBox({
+            title: this.i18n.t("deleteReferenceActionLabel"),
+            prompt: this.i18n.t("deleteReferencePrompt", {
+                layoutRoot: getReferenceLayoutRoot(this.info.repositoryRelativePath),
+            }),
+            placeHolder: this.i18n.t("deleteReferencePlaceholder"),
+            value: this.getCurrentReferenceSuggestion() ?? "",
+            validateInput: (value) => this.validateDeleteReferenceTarget(value),
+        });
+        const trimmedTarget = switchTarget?.trim();
+        if (!trimmedTarget) {
+            return undefined;
+        }
+
+        return this.resolveDeleteReferenceTarget(trimmedTarget);
+    }
+
     private async promptSwitchTarget(): Promise<{ display: string; url: string } | undefined> {
         const switchTarget = await vscode.window.showInputBox({
             title: this.i18n.t("switchWorkingCopyActionLabel"),
@@ -1808,6 +2179,277 @@ export class SvnRepository implements vscode.Disposable {
         }
 
         return this.resolveSwitchTarget(trimmedTarget);
+    }
+
+    private async promptPropertyName(): Promise<string | undefined> {
+        const selection = await vscode.window.showQuickPick<PropertyNameQuickPickItem>(
+            [
+                {
+                    label: "svn:eol-style",
+                    description: this.i18n.t("propertyNameEolStyleDescription"),
+                    propertyName: "svn:eol-style",
+                },
+                {
+                    label: "svn:keywords",
+                    description: this.i18n.t("propertyNameKeywordsDescription"),
+                    propertyName: "svn:keywords",
+                },
+                {
+                    label: "svn:executable",
+                    description: this.i18n.t("propertyNameExecutableDescription"),
+                    propertyName: "svn:executable",
+                },
+                {
+                    label: "svn:needs-lock",
+                    description: this.i18n.t("propertyNameNeedsLockDescription"),
+                    propertyName: "svn:needs-lock",
+                },
+                {
+                    label: "svn:mime-type",
+                    description: this.i18n.t("propertyNameMimeTypeDescription"),
+                    propertyName: "svn:mime-type",
+                },
+                {
+                    label: "svn:ignore",
+                    description: this.i18n.t("propertyNameIgnoreDescription"),
+                    propertyName: "svn:ignore",
+                },
+                {
+                    label: "svn:externals",
+                    description: this.i18n.t("propertyNameExternalsDescription"),
+                    propertyName: "svn:externals",
+                },
+                {
+                    label: this.i18n.t("customPropertyNameLabel"),
+                    description: this.i18n.t("customPropertyNameDescription"),
+                    propertyName: "",
+                    custom: true,
+                },
+            ],
+            {
+                placeHolder: this.i18n.t("propertyNamePlaceholder"),
+            }
+        );
+
+        if (!selection) {
+            return undefined;
+        }
+
+        if (!selection.custom) {
+            return selection.propertyName;
+        }
+
+        const customName = await vscode.window.showInputBox({
+            title: this.i18n.t("editPropertyActionLabel"),
+            prompt: this.i18n.t("propertyNamePrompt"),
+            placeHolder: this.i18n.t("propertyNamePlaceholder"),
+            validateInput: (value) =>
+                value.trim() ? undefined : this.i18n.t("propertyNameRequired"),
+        });
+
+        return customName?.trim() || undefined;
+    }
+
+    private async promptPropertyAction(
+        propertyName: string,
+        currentValue: string | undefined
+    ): Promise<"set" | "delete" | undefined> {
+        const selection = await vscode.window.showQuickPick<PropertyActionQuickPickItem>(
+            currentValue === undefined
+                ? [
+                      {
+                          label: this.i18n.t("propertySetActionLabel"),
+                          description: propertyName,
+                          action: "set",
+                      },
+                  ]
+                : [
+                      {
+                          label: this.i18n.t("propertySetActionLabel"),
+                          description: propertyName,
+                          detail: this.i18n.t("propertyCurrentValueDetail", {
+                              value: this.encodePropertyValue(currentValue),
+                          }),
+                          action: "set",
+                      },
+                      {
+                          label: this.i18n.t("propertyDeleteActionLabel"),
+                          description: propertyName,
+                          action: "delete",
+                      },
+                  ],
+            {
+                placeHolder: this.i18n.t("propertyActionPlaceholder", {
+                    name: propertyName,
+                }),
+            }
+        );
+
+        return selection?.action;
+    }
+
+    private async promptPropertyValue(
+        propertyName: string,
+        currentValue: string | undefined
+    ): Promise<string | undefined> {
+        const value = await vscode.window.showInputBox({
+            title: this.i18n.t("editPropertyActionLabel"),
+            prompt: this.i18n.t("propertyValuePrompt", {
+                name: propertyName,
+            }),
+            placeHolder: this.i18n.t("propertyValuePlaceholder"),
+            value: this.encodePropertyValue(currentValue ?? ""),
+            validateInput: (input) =>
+                input.trim() ? undefined : this.i18n.t("propertyValueRequired"),
+        });
+
+        if (value === undefined) {
+            return undefined;
+        }
+
+        return this.decodePropertyValue(value.trim());
+    }
+
+    private async confirmDeleteRepositoryReference(displayTarget: string): Promise<boolean> {
+        const selection = await vscode.window.showWarningMessage(
+            this.i18n.t("deleteReferenceQuestion", { target: displayTarget }),
+            {
+                modal: true,
+                detail: this.i18n.t("deleteReferenceDetail", { target: displayTarget }),
+            },
+            this.i18n.t("continueButton")
+        );
+
+        return selection === this.i18n.t("continueButton");
+    }
+
+    private validateDeleteReferenceTarget(value: string): string | undefined {
+        const trimmedValue = value.trim();
+        if (!trimmedValue) {
+            return this.i18n.t("deleteReferenceRequired");
+        }
+
+        try {
+            this.resolveDeleteReferenceTarget(trimmedValue);
+            return undefined;
+        } catch {
+            return this.i18n.t("deleteReferenceInvalid");
+        }
+    }
+
+    private resolveDeleteReferenceTarget(target: string): {
+        display: string;
+        url: string;
+        repositoryPath: string;
+    } {
+        let repositoryPath: string;
+        if (isUrlTarget(target)) {
+            const rootUrl = new URL(this.info.repositoryRoot);
+            const targetUrl = new URL(target);
+            const normalizePathname = (value: string): string =>
+                value.replace(/\/+$/, "") || "/";
+
+            const sameRepository =
+                rootUrl.protocol === targetUrl.protocol &&
+                rootUrl.username === targetUrl.username &&
+                rootUrl.password === targetUrl.password &&
+                rootUrl.host === targetUrl.host;
+            if (!sameRepository) {
+                throw new Error(this.i18n.t("deleteReferenceInvalid"));
+            }
+
+            const normalizedRootPath = normalizePathname(rootUrl.pathname);
+            const normalizedTargetPath = normalizePathname(targetUrl.pathname);
+            if (normalizedTargetPath === normalizedRootPath) {
+                repositoryPath = "/";
+            } else if (normalizedTargetPath.startsWith(`${normalizedRootPath}/`)) {
+                repositoryPath = normalizeRepositoryPath(
+                    decodeURI(normalizedTargetPath.slice(normalizedRootPath.length))
+                );
+            } else {
+                throw new Error(this.i18n.t("deleteReferenceInvalid"));
+            }
+        } else if (target.startsWith("/")) {
+            repositoryPath = normalizeRepositoryPath(target);
+        } else {
+            repositoryPath = normalizeRepositoryPath(
+                [getReferenceLayoutRoot(this.info.repositoryRelativePath), target]
+                    .filter((segment) => segment !== "/")
+                    .join("/")
+            );
+        }
+
+        if (!getReferenceKindForRepositoryPath(repositoryPath)) {
+            throw new Error(this.i18n.t("deleteReferenceInvalid"));
+        }
+
+        return {
+            display: repositoryPath,
+            url: buildRepositoryUrl(this.info.repositoryRoot, repositoryPath),
+            repositoryPath,
+        };
+    }
+
+    private getCurrentReferenceSuggestion(): string | undefined {
+        if (!getReferenceKindForRepositoryPath(this.info.repositoryRelativePath)) {
+            return undefined;
+        }
+
+        return getCommitTargetLabel(this.info.repositoryRelativePath);
+    }
+
+    private async promptRelocateTargetUrl(): Promise<string | undefined> {
+        const targetUrl = await vscode.window.showInputBox({
+            title: this.i18n.t("relocateWorkingCopyActionLabel"),
+            prompt: this.i18n.t("relocateWorkingCopyPrompt", {
+                label: this.label,
+            }),
+            placeHolder: this.i18n.t("relocateWorkingCopyPlaceholder"),
+            value: this.info.url,
+            validateInput: (value) => {
+                const trimmedValue = value.trim();
+                if (!trimmedValue) {
+                    return this.i18n.t("relocateWorkingCopyRequired");
+                }
+
+                try {
+                    new URL(trimmedValue);
+                    return undefined;
+                } catch {
+                    return this.i18n.t("relocateWorkingCopyInvalid");
+                }
+            },
+        });
+
+        return targetUrl?.trim() || undefined;
+    }
+
+    private encodePropertyValue(value: string): string {
+        return value.replace(/\\/g, "\\\\").replace(/\n/g, "\\n");
+    }
+
+    private decodePropertyValue(value: string): string {
+        let decoded = "";
+        for (let index = 0; index < value.length; index += 1) {
+            const currentChar = value[index];
+            const nextChar = value[index + 1];
+
+            if (currentChar === "\\" && nextChar === "n") {
+                decoded += "\n";
+                index += 1;
+                continue;
+            }
+
+            if (currentChar === "\\" && nextChar === "\\") {
+                decoded += "\\";
+                index += 1;
+                continue;
+            }
+
+            decoded += currentChar;
+        }
+
+        return decoded;
     }
 
     private validateSwitchTarget(value: string): string | undefined {

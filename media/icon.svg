@@ -20,24 +20,24 @@
 
     <path
       d="M168 72C136 72 108 88 95 116C86 136 104 156 132 156C160 156 172 168 172 188C172 210 154 220 122 220"
-      stroke="#59C7FF"
+      stroke="#f26624"
       stroke-width="18"
       stroke-linecap="round"
       stroke-linejoin="round"
     />
     <path
       d="M95 116V74"
-      stroke="#59C7FF"
+      stroke="#f26624"
       stroke-width="18"
       stroke-linecap="round"
     />
 
     <g>
-      <circle cx="95" cy="74" r="12" fill="#F4FBFF" stroke="#59C7FF" stroke-width="5"/>
-      <circle cx="168" cy="72" r="12" fill="#F4FBFF" stroke="#59C7FF" stroke-width="5"/>
-      <circle cx="95" cy="116" r="12" fill="#F4FBFF" stroke="#59C7FF" stroke-width="5"/>
-      <circle cx="172" cy="188" r="12" fill="#F4FBFF" stroke="#59C7FF" stroke-width="5"/>
-      <circle cx="122" cy="220" r="12" fill="#F4FBFF" stroke="#59C7FF" stroke-width="5"/>
+      <circle cx="95" cy="74" r="12" fill="#F4FBFF" stroke="#f26624" stroke-width="5"/>
+      <circle cx="168" cy="72" r="12" fill="#F4FBFF" stroke="#f26624" stroke-width="5"/>
+      <circle cx="95" cy="116" r="12" fill="#F4FBFF" stroke="#f26624" stroke-width="5"/>
+      <circle cx="172" cy="188" r="12" fill="#F4FBFF" stroke="#f26624" stroke-width="5"/>
+      <circle cx="122" cy="220" r="12" fill="#F4FBFF" stroke="#f26624" stroke-width="5"/>
     </g>
   </g>
 </svg>

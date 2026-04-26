@@ -110,8 +110,18 @@ export class SvnService {
         await this.run(args, { cwd: rootPath });
     }
 
+    public async blame(rootPath: string, targetPath: string): Promise<string> {
+        const [target] = this.toRelativeTargets(rootPath, [targetPath]);
+        const { stdout } = await this.run(["blame", "-v", target], { cwd: rootPath });
+        return stdout;
+    }
+
     public async switch(rootPath: string, target: string): Promise<void> {
         await this.run(["switch", target, "."], { cwd: rootPath });
+    }
+
+    public async relocate(rootPath: string, targetUrl: string): Promise<void> {
+        await this.run(["relocate", targetUrl, "."], { cwd: rootPath });
     }
 
     public async checkout(target: string, revision: string, destinationPath: string): Promise<void> {
@@ -181,6 +191,10 @@ export class SvnService {
         const targets = this.toRelativeTargets(rootPath, paths);
         const args = ["delete", "--force", ...targets];
         await this.run(args, { cwd: rootPath });
+    }
+
+    public async deleteUrl(target: string, message: string): Promise<void> {
+        await this.run(["delete", target, "-m", message]);
     }
 
     public async move(

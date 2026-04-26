@@ -47,6 +47,8 @@ test("createI18n returns repository action prompts", () => {
     assert.equal(english.t("renamePathActionLabel"), "Rename");
     assert.equal(english.t("lockPathActionLabel"), "Lock");
     assert.equal(english.t("showPathInfoActionLabel"), "Show SVN Info");
+    assert.equal(english.t("showBlameActionLabel"), "Blame / Annotate");
+    assert.equal(english.t("editPropertyActionLabel"), "Edit Properties");
     assert.equal(
         english.t("renamePathExistsError", { name: "app.ts" }),
         "app.ts already exists in this folder."
@@ -77,6 +79,14 @@ test("createI18n returns repository action prompts", () => {
         english.t("noLockablePathsInfo"),
         "There are no files that can be locked in the current selection."
     );
+    assert.equal(
+        english.t("deleteReferenceInvalid"),
+        "Use a valid branch or tag path in this repository, or a full URL to one."
+    );
+    assert.equal(
+        english.t("relocateWorkingCopyActionLabel"),
+        "Relocate Working Copy"
+    );
 
     assert.equal(chinese.t("addAllUnversionedActionLabel"), "添加全部未纳管项");
     assert.equal(chinese.t("noLocalChangesInfo"), "当前没有可还原的本地更改。");
@@ -84,4 +94,6 @@ test("createI18n returns repository action prompts", () => {
     assert.equal(chinese.t("noConflictsInfo"), "当前没有可处理的冲突。");
     assert.equal(chinese.t("renamePathActionLabel"), "重命名");
     assert.equal(chinese.t("copyRepositoryPathActionLabel"), "复制仓库路径");
+    assert.equal(chinese.t("editPropertyActionLabel"), "编辑属性");
+    assert.equal(chinese.t("createBranchFromWorkingCopyActionLabel"), "从工作副本创建分支");
 });
