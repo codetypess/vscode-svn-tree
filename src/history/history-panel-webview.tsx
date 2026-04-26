@@ -528,10 +528,27 @@ function isHistoryConfigMessage(
         return compressDirectories(root);
     }
 
+    const contextMenuViewportMarginPx = 8;
+    const contextMenuMaxWidthPx = 360;
+    const contextMenuEstimatedHeightPx = 196;
+
     function getMenuPosition(clientX: number, clientY: number): MenuPosition {
+        const estimatedMenuWidth = Math.min(
+            contextMenuMaxWidthPx,
+            Math.max(0, window.innerWidth - contextMenuViewportMarginPx * 2)
+        );
         return {
-            x: Math.max(8, Math.min(clientX, window.innerWidth - 248)),
-            y: Math.max(8, Math.min(clientY, window.innerHeight - 196)),
+            x: Math.max(
+                contextMenuViewportMarginPx,
+                Math.min(
+                    clientX,
+                    window.innerWidth - contextMenuViewportMarginPx - estimatedMenuWidth
+                )
+            ),
+            y: Math.max(
+                contextMenuViewportMarginPx,
+                Math.min(clientY, window.innerHeight - contextMenuEstimatedHeightPx)
+            ),
         };
     }
 

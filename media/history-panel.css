@@ -618,8 +618,8 @@ button.secondary:hover {
 .context-menu {
   position: absolute;
   min-width: 240px;
-  max-width: min(320px, calc(100vw - 16px));
-  padding: 6px;
+  max-width: min(360px, calc(100vw - 16px));
+  padding: 5px;
   border: 1px solid var(--details-border);
   border-radius: 10px;
   background: var(--vscode-menu-background, var(--details-bg));
@@ -650,17 +650,18 @@ button.secondary:hover {
 }
 
 .context-menu-actions {
-  padding-top: 4px;
+  padding-top: 2px;
 }
 
 .context-menu-item {
   width: 100%;
+  min-height: 26px;
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 8px 10px;
+  gap: 7px;
+  padding: 6px 10px;
   border: 0;
-  border-radius: 8px;
+  border-radius: 7px;
   background: transparent;
   color: inherit;
   cursor: pointer;
@@ -688,7 +689,7 @@ button.secondary:hover {
 
 .context-menu-separator {
   height: 1px;
-  margin: 4px 6px;
+  margin: 3px 6px;
   background: color-mix(in srgb, var(--border) 70%, transparent);
 }
 
