@@ -2,8 +2,22 @@ import { execFile } from "node:child_process";
 import * as nodePath from "node:path";
 import { promisify } from "node:util";
 import * as vscode from "vscode";
-import { parseInfoXml, parseLogXml, parseNodeInfoXml, parseStatusXml } from "./svn-xml-parser";
-import type { SvnLogEntry, SvnNodeInfo, SvnStatusEntry, SvnWorkingCopyInfo } from "./svn-types";
+import {
+    parseInfoXml,
+    parseListXml,
+    parseLogXml,
+    parseNodeInfoXml,
+    parsePropertyListXml,
+    parseStatusXml,
+} from "./svn-xml-parser";
+import type {
+    SvnLogEntry,
+    SvnNodeInfo,
+    SvnPropertyEntry,
+    SvnRepositoryListEntry,
+    SvnStatusEntry,
+    SvnWorkingCopyInfo,
+} from "./svn-types";
 
 const execFileAsync = promisify(execFile);
 const historyLogRetryCount = 1;
@@ -113,6 +127,11 @@ export class SvnService {
     public async blame(rootPath: string, targetPath: string): Promise<string> {
         const [target] = this.toRelativeTargets(rootPath, [targetPath]);
         const { stdout } = await this.run(["blame", "-v", target], { cwd: rootPath });
+        return stdout;
+    }
+
+    public async blameTarget(target: string): Promise<string> {
+        const { stdout } = await this.run(["blame", "-v", target]);
         return stdout;
     }
 
@@ -259,6 +278,11 @@ export class SvnService {
         }
     }
 
+    public async getProperties(target: string): Promise<SvnPropertyEntry[]> {
+        const { stdout } = await this.run(["proplist", "--xml", "-v", target], { quiet: true });
+        return parsePropertyListXml(stdout);
+    }
+
     public async setProperty(target: string, name: string, value: string): Promise<void> {
         await this.run(["propset", name, value, target], {
             cwd: nodePath.isAbsolute(target) ? nodePath.dirname(target) : undefined,
@@ -277,6 +301,11 @@ export class SvnService {
         });
 
         return stdout;
+    }
+
+    public async list(target: string): Promise<SvnRepositoryListEntry[]> {
+        const { stdout } = await this.run(["list", "--xml", target], { quiet: true });
+        return parseListXml(stdout);
     }
 
     private async run(

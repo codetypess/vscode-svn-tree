@@ -42,12 +42,19 @@ test("createI18n returns repository action prompts", () => {
         "Update Working Copy To Revision"
     );
     assert.equal(english.t("switchWorkingCopyActionLabel"), "Switch Branch Or Tag");
+    assert.equal(english.t("revisionGraphActionLabel"), "Revision Graph");
+    assert.equal(english.t("repositoryBrowserActionLabel"), "Repository Browser");
     assert.equal(english.t("invalidRevisionError"), "Enter a valid positive revision number.");
     assert.equal(english.t("changelistLabel", { name: "feature-a" }), "Changelist: feature-a");
     assert.equal(english.t("renamePathActionLabel"), "Rename");
     assert.equal(english.t("lockPathActionLabel"), "Lock");
     assert.equal(english.t("showPathInfoActionLabel"), "Show SVN Info");
     assert.equal(english.t("showBlameActionLabel"), "Blame / Annotate");
+    assert.equal(english.t("showPropertiesActionLabel"), "Show Properties");
+    assert.equal(
+        english.t("showPropertiesOutputHeader", { path: "src/app.ts" }),
+        "SVN Properties: src/app.ts"
+    );
     assert.equal(english.t("editPropertyActionLabel"), "Edit Properties");
     assert.equal(
         english.t("renamePathExistsError", { name: "app.ts" }),
@@ -94,6 +101,13 @@ test("createI18n returns repository action prompts", () => {
     assert.equal(chinese.t("noConflictsInfo"), "当前没有可处理的冲突。");
     assert.equal(chinese.t("renamePathActionLabel"), "重命名");
     assert.equal(chinese.t("copyRepositoryPathActionLabel"), "复制仓库路径");
+    assert.equal(chinese.t("revisionGraphActionLabel"), "版本图");
+    assert.equal(chinese.t("repositoryBrowserActionLabel"), "仓库浏览器");
     assert.equal(chinese.t("editPropertyActionLabel"), "编辑属性");
+    assert.equal(chinese.t("showPropertiesActionLabel"), "显示属性");
+    assert.equal(
+        chinese.t("showPropertiesOutputHeader", { path: "src/app.ts" }),
+        "SVN 属性：src/app.ts"
+    );
     assert.equal(chinese.t("createBranchFromWorkingCopyActionLabel"), "从工作副本创建分支");
 });

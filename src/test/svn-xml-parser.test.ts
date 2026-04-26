@@ -1,6 +1,13 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { parseInfoXml, parseLogXml, parseNodeInfoXml, parseStatusXml } from "../svn/svn-xml-parser";
+import {
+    parseInfoXml,
+    parseListXml,
+    parseLogXml,
+    parseNodeInfoXml,
+    parsePropertyListXml,
+    parseStatusXml,
+} from "../svn/svn-xml-parser";
 
 test("parseInfoXml extracts working copy metadata", () => {
     const xml = `<?xml version="1.0"?>
@@ -116,4 +123,55 @@ test("parseLogXml extracts revisions and changed paths", () => {
     assert.equal(logEntries[0].changes.length, 2);
     assert.equal(logEntries[0].changes[0].path, "/project/trunk/src/app.ts");
     assert.equal(logEntries[0].changes[1].action, "A");
+});
+
+test("parsePropertyListXml extracts property names and values", () => {
+    const xml = `<?xml version="1.0"?>
+<properties>
+  <target path="src/app.ts">
+    <property name="svn:eol-style">LF</property>
+    <property name="svn:keywords">Id
+Author</property>
+  </target>
+</properties>`;
+
+    const properties = parsePropertyListXml(xml);
+
+    assert.equal(properties.length, 2);
+    assert.equal(properties[0].name, "svn:eol-style");
+    assert.equal(properties[0].value, "LF");
+    assert.equal(properties[1].value, "Id\nAuthor");
+});
+
+test("parseListXml extracts repository list entries", () => {
+    const xml = `<?xml version="1.0"?>
+<lists>
+  <list path="https://svn.example.com/repos/project/trunk">
+    <entry kind="dir">
+      <name>src</name>
+      <commit revision="108">
+        <author>alice</author>
+        <date>2026-04-24T02:03:04.000000Z</date>
+      </commit>
+    </entry>
+    <entry kind="file">
+      <name>README.md</name>
+      <size>42</size>
+      <commit revision="107">
+        <author>bob</author>
+        <date>2026-04-23T01:02:03.000000Z</date>
+      </commit>
+    </entry>
+  </list>
+</lists>`;
+
+    const entries = parseListXml(xml);
+
+    assert.equal(entries.length, 2);
+    assert.equal(entries[0].kind, "dir");
+    assert.equal(entries[0].name, "src");
+    assert.equal(entries[0].revision, "108");
+    assert.equal(entries[1].kind, "file");
+    assert.equal(entries[1].size, 42);
+    assert.equal(entries[1].author, "bob");
 });

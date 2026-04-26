@@ -7,6 +7,8 @@ import { SvnService } from "../svn/svn-service";
 import type {
     SvnLogPage,
     SvnLogPathChange,
+    SvnPropertyEntry,
+    SvnRepositoryListEntry,
     SvnStatusEntry,
     SvnWorkingCopyInfo,
 } from "../svn/svn-types";
@@ -31,6 +33,27 @@ interface PropertyNameQuickPickItem extends vscode.QuickPickItem {
 
 interface PropertyActionQuickPickItem extends vscode.QuickPickItem {
     readonly action: "set" | "delete";
+}
+
+interface RepositoryBrowserQuickPickItem extends vscode.QuickPickItem {
+    readonly itemType: "action" | "up" | "directory" | "file";
+    readonly action?:
+        | "show-history"
+        | "show-properties"
+        | "copy-url"
+        | "copy-path"
+        | "switch-here";
+    readonly repositoryPath?: string;
+    readonly url?: string;
+}
+
+interface RepositoryBrowserFileActionQuickPickItem extends vscode.QuickPickItem {
+    readonly action:
+        | "show-history"
+        | "show-properties"
+        | "show-blame"
+        | "copy-url"
+        | "copy-path";
 }
 
 type RepositoryReferenceKind = "branch" | "tag";
@@ -246,7 +269,8 @@ export class SvnRepository implements vscode.Disposable {
         public readonly info: SvnWorkingCopyInfo,
         private readonly svnService: SvnService,
         private readonly historyPanel: HistoryPanel,
-        private readonly contentProvider: SvnContentProvider
+        private readonly contentProvider: SvnContentProvider,
+        private readonly outputChannel: vscode.OutputChannel
     ) {
         const i18n = getI18n();
         this.sourceControl = vscode.scm.createSourceControl(
@@ -1029,6 +1053,34 @@ export class SvnRepository implements vscode.Disposable {
         void vscode.window.setStatusBarMessage(this.i18n.t("openedBlameStatus"), 2000);
     }
 
+    public async showPathProperties(target: vscode.Uri | string): Promise<void> {
+        const targetPath = typeof target === "string" ? target : target.fsPath;
+        const displayPath =
+            nodePath.relative(this.rootPath, targetPath).replace(/\\/g, "/") ||
+            nodePath.basename(targetPath);
+        const targetInfo = await this.svnService.getNodeInfo(targetPath);
+        if (!targetInfo) {
+            throw new Error(this.i18n.t("noSvnInfoForPathError", { path: displayPath }));
+        }
+
+        const properties = await vscode.window.withProgress(
+            {
+                location: vscode.ProgressLocation.Notification,
+                title: this.i18n.t("showPropertiesProgress", {
+                    path: displayPath,
+                }),
+            },
+            async () => this.svnService.getProperties(targetPath)
+        );
+
+        this.writePropertiesToOutput({
+            displayPath,
+            repositoryPath: targetInfo.repositoryRelativePath,
+            url: targetInfo.url,
+            properties,
+        });
+    }
+
     public async editPathProperty(target: vscode.Uri | string): Promise<void> {
         const targetPath = typeof target === "string" ? target : target.fsPath;
         const displayPath =
@@ -1238,6 +1290,81 @@ export class SvnRepository implements vscode.Disposable {
         await this.historyPanel.show(this);
     }
 
+    public async openRepositoryBrowser(initialRepositoryPath?: string): Promise<void> {
+        let currentRepositoryPath = normalizeRepositoryPath(
+            initialRepositoryPath ?? this.info.repositoryRelativePath
+        );
+
+        while (true) {
+            const currentUrl = buildRepositoryUrl(
+                this.info.repositoryRoot,
+                currentRepositoryPath
+            );
+            const entries = await vscode.window.withProgress(
+                {
+                    location: vscode.ProgressLocation.Notification,
+                    title: this.i18n.t("repositoryBrowserProgress", {
+                        path: currentRepositoryPath,
+                    }),
+                },
+                async () => this.svnService.list(currentUrl)
+            );
+
+            const selection = await vscode.window.showQuickPick<RepositoryBrowserQuickPickItem>(
+                this.buildRepositoryBrowserItems(
+                    currentRepositoryPath,
+                    currentUrl,
+                    entries
+                ),
+                {
+                    title: this.i18n.t("repositoryBrowserActionLabel"),
+                    placeHolder: this.i18n.t("repositoryBrowserPlaceholder", {
+                        path: currentRepositoryPath,
+                    }),
+                }
+            );
+
+            if (!selection) {
+                return;
+            }
+
+            if (selection.itemType === "up") {
+                currentRepositoryPath = this.getParentRepositoryPath(currentRepositoryPath);
+                continue;
+            }
+
+            if (selection.itemType === "directory" && selection.repositoryPath) {
+                currentRepositoryPath = selection.repositoryPath;
+                continue;
+            }
+
+            if (selection.itemType === "file" && selection.repositoryPath) {
+                await this.openRepositoryBrowserFileActions(
+                    selection.repositoryPath,
+                    selection.url ??
+                        buildRepositoryUrl(
+                            this.info.repositoryRoot,
+                            selection.repositoryPath
+                        )
+                );
+                continue;
+            }
+
+            if (
+                selection.itemType === "action" &&
+                selection.action &&
+                selection.repositoryPath &&
+                selection.url
+            ) {
+                await this.runRepositoryBrowserAction(
+                    selection.action,
+                    selection.repositoryPath,
+                    selection.url
+                );
+            }
+        }
+    }
+
     public async showFileHistory(target: vscode.Uri | string): Promise<void> {
         const relativePath = this.getHistoryTargetRelativePath(target);
         await this.historyPanel.show(this, {
@@ -1250,7 +1377,7 @@ export class SvnRepository implements vscode.Disposable {
     public async showHistoryForRepositoryPath(repositoryPath: string): Promise<void> {
         const label =
             this.getWorkingCopyRelativePathForRepositoryPath(repositoryPath) ??
-            repositoryPath.replace(/^\/+/, "");
+            (repositoryPath.replace(/^\/+/, "") || "/");
         await this.historyPanel.show(this, {
             key: `${this.rootPath}::repository-file::${repositoryPath}`,
             label,
@@ -1529,6 +1656,360 @@ export class SvnRepository implements vscode.Disposable {
         this.info.repositoryRelativePath = info.repositoryRelativePath;
         this.info.revision = info.revision;
         this.refreshLocalization();
+    }
+
+    private buildRepositoryBrowserItems(
+        currentRepositoryPath: string,
+        currentUrl: string,
+        entries: SvnRepositoryListEntry[]
+    ): RepositoryBrowserQuickPickItem[] {
+        const items: RepositoryBrowserQuickPickItem[] = [
+            {
+                label: this.i18n.t("repositoryBrowserActionsSeparator"),
+                kind: vscode.QuickPickItemKind.Separator,
+                itemType: "action",
+            },
+            {
+                label: this.i18n.t("openHistoryActionLabel"),
+                description: currentRepositoryPath,
+                itemType: "action",
+                action: "show-history",
+                repositoryPath: currentRepositoryPath,
+                url: currentUrl,
+            },
+            {
+                label: this.i18n.t("showPropertiesActionLabel"),
+                description: currentRepositoryPath,
+                itemType: "action",
+                action: "show-properties",
+                repositoryPath: currentRepositoryPath,
+                url: currentUrl,
+            },
+            {
+                label: this.i18n.t("copyRepositoryUrlActionLabel"),
+                description: currentUrl,
+                itemType: "action",
+                action: "copy-url",
+                repositoryPath: currentRepositoryPath,
+                url: currentUrl,
+            },
+            {
+                label: this.i18n.t("copyRepositoryPathActionLabel"),
+                description: currentRepositoryPath,
+                itemType: "action",
+                action: "copy-path",
+                repositoryPath: currentRepositoryPath,
+                url: currentUrl,
+            },
+        ];
+
+        if (
+            normalizeRepositoryPath(currentRepositoryPath) !==
+            normalizeRepositoryPath(this.info.repositoryRelativePath)
+        ) {
+            items.push({
+                label: this.i18n.t("repositoryBrowserSwitchHereLabel"),
+                description: currentRepositoryPath,
+                itemType: "action",
+                action: "switch-here",
+                repositoryPath: currentRepositoryPath,
+                url: currentUrl,
+            });
+        }
+
+        items.push({
+            label: this.i18n.t("repositoryBrowserEntriesSeparator"),
+            kind: vscode.QuickPickItemKind.Separator,
+            itemType: "action",
+        });
+
+        if (currentRepositoryPath !== "/") {
+            items.push({
+                label: this.i18n.t("repositoryBrowserUpLabel"),
+                description: this.getParentRepositoryPath(currentRepositoryPath),
+                itemType: "up",
+                repositoryPath: this.getParentRepositoryPath(currentRepositoryPath),
+                url: buildRepositoryUrl(
+                    this.info.repositoryRoot,
+                    this.getParentRepositoryPath(currentRepositoryPath)
+                ),
+            });
+        }
+
+        const sortedEntries = [...entries].sort((left, right) => {
+            if (left.kind !== right.kind) {
+                return left.kind === "dir" ? -1 : 1;
+            }
+
+            return left.name.localeCompare(right.name);
+        });
+
+        if (sortedEntries.length === 0) {
+            items.push({
+                label: this.i18n.t("repositoryBrowserEmptyLabel"),
+                description: currentRepositoryPath,
+                itemType: "action",
+                repositoryPath: currentRepositoryPath,
+                url: currentUrl,
+            });
+            return items;
+        }
+
+        for (const entry of sortedEntries) {
+            const repositoryPath = normalizeRepositoryPath(
+                [currentRepositoryPath, entry.name]
+                    .filter((segment) => segment !== "/")
+                    .join("/")
+            );
+            const url = buildRepositoryUrl(this.info.repositoryRoot, repositoryPath);
+            items.push({
+                label: entry.name,
+                description: this.i18n.formatNodeKind(entry.kind),
+                detail: entry.revision
+                    ? `r${entry.revision}${entry.author ? ` | ${entry.author}` : ""}`
+                    : undefined,
+                itemType: entry.kind === "dir" ? "directory" : "file",
+                repositoryPath,
+                url,
+            });
+        }
+
+        return items;
+    }
+
+    private getParentRepositoryPath(repositoryPath: string): string {
+        const segments = splitRepositoryPath(repositoryPath);
+        if (segments.length <= 1) {
+            return "/";
+        }
+
+        return normalizeRepositoryPath(segments.slice(0, -1).join("/"));
+    }
+
+    private async runRepositoryBrowserAction(
+        action: NonNullable<RepositoryBrowserQuickPickItem["action"]>,
+        repositoryPath: string,
+        url: string
+    ): Promise<void> {
+        switch (action) {
+            case "show-history":
+                await this.showHistoryForRepositoryPath(repositoryPath);
+                return;
+            case "show-properties":
+                await this.showRepositoryPathProperties(repositoryPath, url);
+                return;
+            case "copy-url":
+                await this.copyValueToClipboard(url, this.i18n.t("copiedRepositoryUrlStatus"));
+                return;
+            case "copy-path":
+                await this.copyValueToClipboard(
+                    repositoryPath,
+                    this.i18n.t("copiedRepositoryPathStatus")
+                );
+                return;
+            case "switch-here":
+                await this.switchWorkingCopyToRepositoryPath(repositoryPath);
+                return;
+        }
+    }
+
+    private async openRepositoryBrowserFileActions(
+        repositoryPath: string,
+        url: string
+    ): Promise<void> {
+        const selection =
+            await vscode.window.showQuickPick<RepositoryBrowserFileActionQuickPickItem>(
+                [
+                    {
+                        label: this.i18n.t("openHistoryActionLabel"),
+                        description: repositoryPath,
+                        action: "show-history",
+                    },
+                    {
+                        label: this.i18n.t("showPropertiesActionLabel"),
+                        description: repositoryPath,
+                        action: "show-properties",
+                    },
+                    {
+                        label: this.i18n.t("showBlameActionLabel"),
+                        description: repositoryPath,
+                        action: "show-blame",
+                    },
+                    {
+                        label: this.i18n.t("copyRepositoryUrlActionLabel"),
+                        description: url,
+                        action: "copy-url",
+                    },
+                    {
+                        label: this.i18n.t("copyRepositoryPathActionLabel"),
+                        description: repositoryPath,
+                        action: "copy-path",
+                    },
+                ],
+                {
+                    title: this.i18n.t("repositoryBrowserActionLabel"),
+                    placeHolder: this.i18n.t("repositoryBrowserFileActionsPlaceholder", {
+                        path: repositoryPath,
+                    }),
+                }
+            );
+
+        if (!selection) {
+            return;
+        }
+
+        switch (selection.action) {
+            case "show-history":
+                await this.showHistoryForRepositoryPath(repositoryPath);
+                return;
+            case "show-properties":
+                await this.showRepositoryPathProperties(repositoryPath, url);
+                return;
+            case "show-blame":
+                await this.showBlameForRepositoryPath(repositoryPath, url);
+                return;
+            case "copy-url":
+                await this.copyValueToClipboard(url, this.i18n.t("copiedRepositoryUrlStatus"));
+                return;
+            case "copy-path":
+                await this.copyValueToClipboard(
+                    repositoryPath,
+                    this.i18n.t("copiedRepositoryPathStatus")
+                );
+                return;
+        }
+    }
+
+    public async showRepositoryPathProperties(
+        repositoryPath: string,
+        url: string
+    ): Promise<void> {
+        const properties = await vscode.window.withProgress(
+            {
+                location: vscode.ProgressLocation.Notification,
+                title: this.i18n.t("showPropertiesProgress", {
+                    path: repositoryPath,
+                }),
+            },
+            async () => this.svnService.getProperties(url)
+        );
+
+        this.writePropertiesToOutput({
+            displayPath: repositoryPath,
+            repositoryPath,
+            url,
+            properties,
+        });
+    }
+
+    public async showBlameForRepositoryPath(
+        repositoryPath: string,
+        url: string
+    ): Promise<void> {
+        const blameOutput = await vscode.window.withProgress(
+            {
+                location: vscode.ProgressLocation.Notification,
+                title: this.i18n.t("showBlameProgress", { path: repositoryPath }),
+            },
+            async () => this.svnService.blameTarget(url)
+        );
+
+        await this.openBlameDocument({
+            displayPath: repositoryPath,
+            repositoryPath,
+            url,
+            blameOutput,
+        });
+    }
+
+    private async switchWorkingCopyToRepositoryPath(repositoryPath: string): Promise<void> {
+        const targetUrl = buildRepositoryUrl(this.info.repositoryRoot, repositoryPath);
+
+        await this.runRepositoryOperation(
+            "switch",
+            this.i18n.t("switchWorkingCopyProgress", {
+                label: this.label,
+                target: repositoryPath,
+            }),
+            this.i18n.t("switchedWorkingCopyCompleted", {
+                label: this.label,
+                target: repositoryPath,
+            }),
+            async () => {
+                await this.svnService.switch(this.rootPath, targetUrl);
+                await this.refreshWorkingCopyInfo();
+                await this.refresh({ forceRemote: true, allowWhileBusy: true });
+                await this.historyPanel.refresh(this);
+            }
+        );
+    }
+
+    private async openBlameDocument(options: {
+        displayPath: string;
+        repositoryPath: string;
+        url: string;
+        blameOutput: string;
+    }): Promise<void> {
+        const document = await vscode.workspace.openTextDocument({
+            language: "plaintext",
+            content: [
+                `${this.i18n.t("infoPathLabel")}: ${options.displayPath}`,
+                `${this.i18n.t("infoRepositoryPathLabel")}: ${options.repositoryPath}`,
+                `${this.i18n.t("infoUrlLabel")}: ${options.url}`,
+                "",
+                options.blameOutput,
+            ].join("\n"),
+        });
+        await vscode.window.showTextDocument(document, {
+            preview: true,
+            viewColumn: vscode.ViewColumn.Active,
+        });
+        void vscode.window.setStatusBarMessage(this.i18n.t("openedBlameStatus"), 2000);
+    }
+
+    private writePropertiesToOutput(options: {
+        displayPath: string;
+        repositoryPath: string;
+        url: string;
+        properties: SvnPropertyEntry[];
+    }): void {
+        const contentLines = [
+            `${this.i18n.t("infoPathLabel")}: ${options.displayPath}`,
+            `${this.i18n.t("infoRepositoryPathLabel")}: ${options.repositoryPath}`,
+            `${this.i18n.t("infoUrlLabel")}: ${options.url}`,
+            "",
+            `${this.i18n.t("propertiesHeaderLabel")}:`,
+            ...(options.properties.length === 0
+                ? [this.i18n.t("noPropertiesFoundLabel")]
+                : options.properties.flatMap((property) => {
+                      const valueLines = property.value.split("\n");
+                      if (valueLines.length === 1) {
+                          return `${property.name}: ${valueLines[0]}`;
+                      }
+
+                      return [
+                          `${property.name}:`,
+                          ...valueLines.map((line) => `  ${line}`),
+                      ];
+                  })),
+        ];
+
+        this.outputChannel.appendLine("");
+        const headerLine = `=== ${this.i18n.t("showPropertiesOutputHeader", {
+            path: options.displayPath,
+        })} ===`;
+        this.outputChannel.appendLine(headerLine);
+        for (const line of contentLines) {
+            this.outputChannel.appendLine(line);
+        }
+        this.outputChannel.appendLine("=".repeat(headerLine.length));
+        this.outputChannel.show(true);
+        void vscode.window.setStatusBarMessage(this.i18n.t("openedPropertiesStatus"), 2000);
+    }
+
+    private async copyValueToClipboard(value: string, statusMessage: string): Promise<void> {
+        await vscode.env.clipboard.writeText(value);
+        void vscode.window.setStatusBarMessage(statusMessage, 2000);
     }
 
     private async pickHistoryFileChange(

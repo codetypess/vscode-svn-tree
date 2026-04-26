@@ -75,8 +75,19 @@ export class SvnRepositoryManager implements vscode.Disposable {
             vscode.commands.registerCommand("svn-tree.show-blame", async (arg?: unknown) =>
                 this.showBlame(arg)
             ),
+            vscode.commands.registerCommand("svn-tree.show-properties", async (arg?: unknown) =>
+                this.showProperties(arg)
+            ),
             vscode.commands.registerCommand("svn-tree.edit-property", async (arg?: unknown) =>
                 this.editProperty(arg)
+            ),
+            vscode.commands.registerCommand(
+                "svn-tree.open-repository-browser",
+                async (arg?: unknown) => this.openRepositoryBrowser(arg)
+            ),
+            vscode.commands.registerCommand(
+                "svn-tree.open-revision-graph",
+                async (arg?: unknown) => this.openRevisionGraph(arg)
             ),
             vscode.commands.registerCommand(
                 "svn-tree.create-branch-from-working-copy",
@@ -303,7 +314,8 @@ export class SvnRepositoryManager implements vscode.Disposable {
                     },
                     this.svnService,
                     this.historyPanel,
-                    this.contentProvider
+                    this.contentProvider,
+                    this.outputChannel
                 );
 
                 this.repositories.set(info.workingCopyRoot, repository);
@@ -543,6 +555,22 @@ export class SvnRepositoryManager implements vscode.Disposable {
                     label: i18n.t("openHistoryActionLabel"),
                     description: i18n.t("openHistoryActionDescription"),
                     run: async (targetRepository) => targetRepository.showHistory(),
+                },
+                {
+                    label: i18n.t("revisionGraphActionLabel"),
+                    description: i18n.t("revisionGraphActionDescription"),
+                    run: async (targetRepository) => targetRepository.showHistory(),
+                },
+                {
+                    label: i18n.t("repositoryBrowserActionLabel"),
+                    description: i18n.t("repositoryBrowserActionDescription"),
+                    run: async (targetRepository) => targetRepository.openRepositoryBrowser(),
+                },
+                {
+                    label: i18n.t("showPropertiesActionLabel"),
+                    description: i18n.t("showPropertiesActionDescription"),
+                    run: async (targetRepository) =>
+                        targetRepository.showPathProperties(targetRepository.rootPath),
                 },
                 {
                     label: i18n.t("updateWorkingCopyActionLabel"),
@@ -935,12 +963,12 @@ export class SvnRepositoryManager implements vscode.Disposable {
             }
 
             this.outputChannel.appendLine("");
-            this.outputChannel.appendLine(
-                `=== ${i18n.t("showPathInfoOutputHeader", { path: displayPath })} ===`
-            );
+            const headerLine = `=== ${i18n.t("showPathInfoOutputHeader", { path: displayPath })} ===`;
+            this.outputChannel.appendLine(headerLine);
             for (const line of lines) {
                 this.outputChannel.appendLine(line);
             }
+            this.outputChannel.appendLine("=".repeat(headerLine.length));
             this.outputChannel.show(true);
             void vscode.window.setStatusBarMessage(i18n.t("openedPathInfoStatus"), 2000);
         } catch (error) {
@@ -1010,10 +1038,56 @@ export class SvnRepositoryManager implements vscode.Disposable {
         }
 
         try {
+            if (
+                target.resource &&
+                (target.resource.kind === "remote-change" ||
+                    target.resource.status.wcStatus === "deleted" ||
+                    target.resource.status.wcStatus === "missing")
+            ) {
+                const repositoryPath = target.repository.resolveRepositoryPath(target.uri.fsPath);
+                await target.repository.showBlameForRepositoryPath(
+                    repositoryPath,
+                    target.repository.resolveRepositoryUrl(target.uri.fsPath)
+                );
+                return;
+            }
+
             await target.repository.showBlame(target.uri);
         } catch (error) {
             this.showError(error);
         }
+    }
+
+    private async showProperties(arg: unknown): Promise<void> {
+        const target = this.resolvePathTarget(arg);
+        if (target) {
+            try {
+                if (
+                    target.resource &&
+                    (target.resource.kind === "remote-change" ||
+                        target.resource.status.wcStatus === "deleted" ||
+                        target.resource.status.wcStatus === "missing")
+                ) {
+                    const repositoryPath = target.repository.resolveRepositoryPath(
+                        target.uri.fsPath
+                    );
+                    await target.repository.showRepositoryPathProperties(
+                        repositoryPath,
+                        target.repository.resolveRepositoryUrl(target.uri.fsPath)
+                    );
+                    return;
+                }
+
+                await target.repository.showPathProperties(target.uri);
+            } catch (error) {
+                this.showError(error);
+            }
+            return;
+        }
+
+        await this.runForRepository(arg, (repository) =>
+            repository.showPathProperties(repository.rootPath)
+        );
     }
 
     private async editProperty(arg: unknown): Promise<void> {
@@ -1028,6 +1102,42 @@ export class SvnRepositoryManager implements vscode.Disposable {
         } catch (error) {
             this.showError(error);
         }
+    }
+
+    private async openRepositoryBrowser(arg: unknown): Promise<void> {
+        const target = this.resolvePathTarget(arg);
+        if (target) {
+            try {
+                const nodeInfo = await this.resolveNodeInfo(target);
+                const repositoryPath = target.repository.resolveRepositoryPath(target.uri.fsPath);
+                await target.repository.openRepositoryBrowser(
+                    nodeInfo?.kind === "file"
+                        ? nodePath.posix.dirname(repositoryPath).replace(/^$/, "/")
+                        : repositoryPath
+                );
+            } catch (error) {
+                this.showError(error);
+            }
+            return;
+        }
+
+        await this.runForRepository(arg, (repository) => repository.openRepositoryBrowser());
+    }
+
+    private async openRevisionGraph(arg: unknown): Promise<void> {
+        const target = this.resolvePathTarget(arg);
+        if (target) {
+            try {
+                await target.repository.showHistoryForRepositoryPath(
+                    target.repository.resolveRepositoryPath(target.uri.fsPath)
+                );
+            } catch (error) {
+                this.showError(error);
+            }
+            return;
+        }
+
+        await this.runForRepository(arg, (repository) => repository.showHistory());
     }
 
     private async renamePath(arg: unknown): Promise<void> {

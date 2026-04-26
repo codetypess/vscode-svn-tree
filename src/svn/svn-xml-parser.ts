@@ -5,6 +5,8 @@ import type {
     SvnLogPathChange,
     SvnNodeInfo,
     SvnNodeKind,
+    SvnPropertyEntry,
+    SvnRepositoryListEntry,
     SvnStatusEntry,
     SvnWorkingCopyInfo,
     SvnWorkingCopyStatus,
@@ -285,4 +287,58 @@ export function parseLogXml(xml: string): SvnLogEntry[] {
             changes,
         };
     });
+}
+
+export function parsePropertyListXml(xml: string): SvnPropertyEntry[] {
+    const parsed = xmlParser.parse(xml) as {
+        properties?: {
+            target?: MaybeArray<{
+                property?: MaybeArray<{
+                    name?: string;
+                    "#text"?: string;
+                }>;
+            }>;
+        };
+    };
+
+    return asArray(parsed.properties?.target).flatMap((target) =>
+        asArray(target.property).map((property) => ({
+            name: asString(property.name),
+            value: asString(property["#text"]).replace(/\r\n/g, "\n"),
+        }))
+    );
+}
+
+export function parseListXml(xml: string): SvnRepositoryListEntry[] {
+    const parsed = xmlParser.parse(xml) as {
+        lists?: {
+            list?: MaybeArray<{
+                entry?: MaybeArray<{
+                    kind?: string;
+                    name?: string;
+                    size?: string;
+                    commit?: {
+                        revision?: string;
+                        author?: string;
+                        date?: string;
+                    };
+                }>;
+            }>;
+        };
+    };
+
+    return asArray(parsed.lists?.list).flatMap((list) =>
+        asArray(list.entry).map((entry) => {
+            const size = Number.parseInt(asString(entry.size), 10);
+
+            return {
+                name: asString(entry.name),
+                kind: toNodeKind(entry.kind),
+                size: Number.isFinite(size) ? size : undefined,
+                revision: asString(entry.commit?.revision) || undefined,
+                author: asString(entry.commit?.author) || undefined,
+                date: asString(entry.commit?.date) || undefined,
+            };
+        })
+    );
 }

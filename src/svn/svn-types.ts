@@ -56,6 +56,20 @@ export interface SvnStatusEntry {
     date?: string;
 }
 
+export interface SvnPropertyEntry {
+    name: string;
+    value: string;
+}
+
+export interface SvnRepositoryListEntry {
+    name: string;
+    kind: SvnNodeKind;
+    size?: number;
+    revision?: string;
+    author?: string;
+    date?: string;
+}
+
 export interface SvnLogPathChange {
     action: "A" | "D" | "M" | "R";
     kind: SvnNodeKind;
