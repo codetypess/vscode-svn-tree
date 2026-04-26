@@ -426,7 +426,6 @@ button.secondary:hover {
 .details-panel {
   display: grid;
   grid-template-columns: minmax(300px, 0.95fr) minmax(420px, 1.25fr);
-  border-top: 1px solid var(--details-border);
   background: var(--details-bg);
 }
 

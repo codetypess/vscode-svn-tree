@@ -12,11 +12,16 @@ import type {
 } from "../svn/svn-types";
 import { getI18n } from "../vscode-i18n";
 import { isConflictArtifactStatus } from "./conflict-artifact";
+import { isCommittableStatus } from "./commit-utils";
 import { ScmResource } from "./scm-resource";
 
 interface RefreshOptions {
     forceRemote?: boolean;
     allowWhileBusy?: boolean;
+}
+
+interface CommitQuickPickItem extends vscode.QuickPickItem {
+    readonly absolutePath: string;
 }
 
 type RepositoryReferenceKind = "branch" | "tag";
@@ -388,9 +393,19 @@ export class SvnRepository implements vscode.Disposable {
             throw new Error(this.i18n.t("emptyCommitMessageError"));
         }
 
-        await this.svnService.commit(this.rootPath, message, paths);
+        const commitPaths = paths ?? (await this.pickPathsToCommit());
+        if (!commitPaths) {
+            return;
+        }
+
+        if (commitPaths.length === 0) {
+            throw new Error(this.i18n.t("emptyCommitSelectionError"));
+        }
+
+        await this.svnService.commit(this.rootPath, message, commitPaths);
         this.sourceControl.inputBox.value = "";
         await this.refresh({ forceRemote: true });
+        await this.historyPanel.refresh(this);
     }
 
     public async update(paths?: string[]): Promise<void> {
@@ -401,8 +416,41 @@ export class SvnRepository implements vscode.Disposable {
             async () => {
                 await this.svnService.update(this.rootPath, paths);
                 await this.refresh({ forceRemote: true, allowWhileBusy: true });
+                await this.historyPanel.refresh(this);
             }
         );
+    }
+
+    private getCommittableResources(): ScmResource[] {
+        return this.changesGroup.resourceStates.filter(
+            (resource): resource is ScmResource =>
+                resource instanceof ScmResource &&
+                isCommittableStatus(resource.status.wcStatus)
+        );
+    }
+
+    private async pickPathsToCommit(): Promise<string[] | undefined> {
+        const resources = this.getCommittableResources();
+        if (resources.length === 0) {
+            throw new Error(this.i18n.t("noCommittableChangesError"));
+        }
+
+        const pickedResources = await vscode.window.showQuickPick<CommitQuickPickItem>(
+            resources.map((resource) => ({
+                label: resource.status.relativePath,
+                description: this.i18n.formatSvnStatus(resource.status.wcStatus),
+                detail: this.i18n.formatNodeKind(resource.status.kind),
+                picked: true,
+                absolutePath: resource.status.absolutePath,
+            })),
+            {
+                canPickMany: true,
+                title: this.i18n.t("commitSelectFilesTitle"),
+                placeHolder: this.i18n.t("commitSelectFilesPlaceholder"),
+            }
+        );
+
+        return pickedResources?.map((resource) => resource.absolutePath);
     }
 
     public async updateToRevision(revision: number): Promise<void> {
@@ -424,6 +472,7 @@ export class SvnRepository implements vscode.Disposable {
             async () => {
                 await this.svnService.update(this.rootPath, undefined, String(revision));
                 await this.refresh({ forceRemote: true, allowWhileBusy: true });
+                await this.historyPanel.refresh(this);
             }
         );
     }
@@ -912,12 +961,11 @@ export class SvnRepository implements vscode.Disposable {
 
     private async getHistoryCurrentRevision(targetPath?: string): Promise<string | undefined> {
         if (!targetPath) {
-            const info = await this.svnService.getWorkingCopyInfo(this.rootPath);
-            return info?.revision ?? this.info.revision;
+            return this.getCurrentWorkingCopyRevision();
         }
 
         if (isUrlTarget(targetPath)) {
-            return this.info.revision;
+            return this.getCurrentWorkingCopyRevision();
         }
 
         const candidatePath = nodePath.isAbsolute(targetPath)
@@ -925,6 +973,15 @@ export class SvnRepository implements vscode.Disposable {
             : nodePath.join(this.rootPath, targetPath);
         const info = await this.svnService.getWorkingCopyInfo(candidatePath);
         return info?.revision;
+    }
+
+    private async getCurrentWorkingCopyRevision(): Promise<string | undefined> {
+        const info = await this.svnService.getWorkingCopyInfo(this.rootPath);
+        if (info?.revision) {
+            this.info.revision = info.revision;
+        }
+
+        return info?.revision ?? this.info.revision;
     }
 
     private async pickHistoryFileChange(

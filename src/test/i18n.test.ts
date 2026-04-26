@@ -21,3 +21,14 @@ test("createI18n formats reveal labels for file managers", () => {
     assert.equal(chinese.formatRevealInFileManager("windows"), "在资源管理器中显示");
     assert.equal(chinese.formatRevealInFileManager("unknown"), "在文件管理器中显示");
 });
+
+test("createI18n returns commit selection prompts", () => {
+    const english = createI18n("en");
+    const chinese = createI18n("zh-CN");
+
+    assert.equal(english.t("commitSelectFilesTitle"), "Select files to commit");
+    assert.equal(english.t("emptyCommitSelectionError"), "Select at least one file to commit.");
+
+    assert.equal(chinese.t("commitSelectFilesTitle"), "选择要提交的文件");
+    assert.equal(chinese.t("noCommittableChangesError"), "当前没有可提交的变更。");
+});

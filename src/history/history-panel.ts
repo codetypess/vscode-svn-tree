@@ -360,6 +360,20 @@ export class HistoryPanel implements vscode.Disposable {
         }
     }
 
+    public async refresh(repository: SvnRepository): Promise<void> {
+        const panels = [...this.panels.values()].filter(
+            (state) => state.repositoryRootPath === repository.rootPath
+        );
+
+        await Promise.all(
+            panels.map((state) =>
+                this.pushEntries(state.panel, repository, {
+                    scope: state.scope,
+                })
+            )
+        );
+    }
+
     private async pushEntries(
         panel: vscode.WebviewPanel,
         repository: SvnRepository,
