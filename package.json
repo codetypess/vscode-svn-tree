@@ -2,7 +2,7 @@
   "name": "svn-tree",
   "displayName": "%displayName%",
   "description": "%description%",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "publisher": "codetypess",
   "license": "MIT",
   "icon": "media/icon.png",
@@ -51,10 +51,30 @@
         "icon": "$(check)"
       },
       {
+        "command": "svn-tree.commit-selected",
+        "title": "%command.commitSelected.title%",
+        "category": "%command.category%"
+      },
+      {
         "command": "svn-tree.update",
         "title": "%command.update.title%",
         "category": "%command.category%",
         "icon": "$(cloud-download)"
+      },
+      {
+        "command": "svn-tree.update-selected",
+        "title": "%command.updateSelected.title%",
+        "category": "%command.category%"
+      },
+      {
+        "command": "svn-tree.update-selected-to-revision",
+        "title": "%command.updateSelectedToRevision.title%",
+        "category": "%command.category%"
+      },
+      {
+        "command": "svn-tree.update-to-revision",
+        "title": "%command.updateToRevision.title%",
+        "category": "%command.category%"
       },
       {
         "command": "svn-tree.cleanup",
@@ -121,6 +141,11 @@
         "category": "%command.category%"
       },
       {
+        "command": "svn-tree.delete-group",
+        "title": "%command.deleteGroup.title%",
+        "category": "%command.category%"
+      },
+      {
         "command": "svn-tree.open-history-diff",
         "title": "%command.openHistoryDiff.title%",
         "category": "%command.category%"
@@ -144,6 +169,26 @@
       {
         "command": "svn-tree.accept-theirs",
         "title": "%command.acceptTheirs.title%",
+        "category": "%command.category%"
+      },
+      {
+        "command": "svn-tree.resolve-all-conflicts",
+        "title": "%command.resolveAllConflicts.title%",
+        "category": "%command.category%"
+      },
+      {
+        "command": "svn-tree.accept-mine-all",
+        "title": "%command.acceptMineAll.title%",
+        "category": "%command.category%"
+      },
+      {
+        "command": "svn-tree.accept-theirs-all",
+        "title": "%command.acceptTheirsAll.title%",
+        "category": "%command.category%"
+      },
+      {
+        "command": "svn-tree.reveal-in-file-manager",
+        "title": "%command.revealInFileManager.title%",
         "category": "%command.category%"
       }
     ],
@@ -197,16 +242,52 @@
           "group": "1_status@1"
         },
         {
-          "command": "svn-tree.update",
+          "command": "svn-tree.open-history",
           "group": "1_status@2"
         },
         {
-          "command": "svn-tree.cleanup",
+          "command": "svn-tree.update",
           "group": "1_status@3"
         },
         {
+          "command": "svn-tree.update-to-revision",
+          "group": "1_status@4"
+        },
+        {
+          "command": "svn-tree.commit",
+          "group": "2_changes@1"
+        },
+        {
+          "command": "svn-tree.add-group",
+          "group": "2_changes@2"
+        },
+        {
+          "command": "svn-tree.delete-group",
+          "group": "2_changes@3"
+        },
+        {
+          "command": "svn-tree.revert-group",
+          "group": "2_changes@4"
+        },
+        {
+          "command": "svn-tree.resolve-all-conflicts",
+          "group": "3_conflicts@1"
+        },
+        {
+          "command": "svn-tree.accept-mine-all",
+          "group": "3_conflicts@2"
+        },
+        {
+          "command": "svn-tree.accept-theirs-all",
+          "group": "3_conflicts@3"
+        },
+        {
+          "command": "svn-tree.cleanup",
+          "group": "4_tools@1"
+        },
+        {
           "command": "svn-tree.show-output",
-          "group": "2_tools@1"
+          "group": "4_tools@2"
         }
       ],
       "scm/resourceState/context": [
@@ -221,6 +302,16 @@
           "group": "inline@1"
         },
         {
+          "command": "svn-tree.open-file-history",
+          "when": "scmProvider == svn-tree && (scmResourceState == svn-change || scmResourceState == svn-conflict || scmResourceState == svn-remote-change)",
+          "group": "navigation@2"
+        },
+        {
+          "command": "svn-tree.reveal-in-file-manager",
+          "when": "scmProvider == svn-tree",
+          "group": "navigation@3"
+        },
+        {
           "command": "svn-tree.add-resource",
           "when": "scmProvider == svn-tree && scmResourceState == svn-unversioned",
           "group": "inline@2"
@@ -229,6 +320,21 @@
           "command": "svn-tree.revert-resource",
           "when": "scmProvider == svn-tree && (scmResourceState == svn-change || scmResourceState == svn-conflict)",
           "group": "inline@2"
+        },
+        {
+          "command": "svn-tree.commit-selected",
+          "when": "scmProvider == svn-tree && scmResourceState == svn-change",
+          "group": "3_svn@1"
+        },
+        {
+          "command": "svn-tree.update-selected",
+          "when": "scmProvider == svn-tree && scmResourceState == svn-change",
+          "group": "3_svn@2"
+        },
+        {
+          "command": "svn-tree.update-selected-to-revision",
+          "when": "scmProvider == svn-tree && scmResourceState == svn-change",
+          "group": "3_svn@3"
         },
         {
           "command": "svn-tree.resolve-conflict",
@@ -261,6 +367,11 @@
           "command": "svn-tree.add-group",
           "when": "scmProvider == svn-tree && scmResourceGroupState == svn-unversioned-group",
           "group": "inline@1"
+        },
+        {
+          "command": "svn-tree.delete-group",
+          "when": "scmProvider == svn-tree && scmResourceGroupState == svn-unversioned-group",
+          "group": "inline@2"
         }
       ]
     },
@@ -315,9 +426,7 @@
   },
   "dependencies": {
     "@vscode/codicons": "^0.0.45",
-    "fast-xml-parser": "^4.5.1",
-    "react": "^19.2.5",
-    "react-dom": "^19.2.5"
+    "fast-xml-parser": "^4.5.1"
   },
   "devDependencies": {
     "@types/node": "^22.10.1",
@@ -326,6 +435,8 @@
     "@types/vscode": "^1.95.0",
     "esbuild": "^0.28.0",
     "prettier": "^3.8.3",
+    "react": "^19.2.5",
+    "react-dom": "^19.2.5",
     "typescript": "^5.7.2"
   }
 }

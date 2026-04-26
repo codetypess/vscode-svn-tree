@@ -421,6 +421,20 @@ export class SvnRepository implements vscode.Disposable {
         );
     }
 
+    public getChangedPaths(): string[] {
+        return this.getResourcePaths(this.changesGroup.resourceStates);
+    }
+
+    public getConflictedPaths(): string[] {
+        return this.getResources(this.changesGroup.resourceStates)
+            .filter((resource) => resource.status.wcStatus === "conflicted")
+            .map((resource) => resource.status.absolutePath);
+    }
+
+    public getUnversionedPaths(): string[] {
+        return this.getResourcePaths(this.unversionedGroup.resourceStates);
+    }
+
     private getCommittableResources(): ScmResource[] {
         return this.changesGroup.resourceStates.filter(
             (resource): resource is ScmResource =>
@@ -451,6 +465,51 @@ export class SvnRepository implements vscode.Disposable {
         );
 
         return pickedResources?.map((resource) => resource.absolutePath);
+    }
+
+    public async updateSelectedToRevisionPaths(
+        paths: string[],
+        revision: number
+    ): Promise<void> {
+        const selectedPaths = this.normalizeUniquePaths(paths);
+        if (selectedPaths.length === 0) {
+            return;
+        }
+
+        await this.runRepositoryOperation(
+            "update",
+            this.i18n.t("updateSelectedToRevisionProgress", {
+                label: this.label,
+                revision,
+            }),
+            this.i18n.t("updatedSelectedToRevisionInfo", {
+                label: this.label,
+                revision,
+            }),
+            async () => {
+                await this.svnService.update(
+                    this.rootPath,
+                    selectedPaths,
+                    String(revision)
+                );
+                await this.refresh({ forceRemote: true, allowWhileBusy: true });
+                await this.historyPanel.refresh(this);
+            }
+        );
+    }
+
+    private getResourcePaths(
+        resourceStates: readonly vscode.SourceControlResourceState[]
+    ): string[] {
+        return this.getResources(resourceStates).map((resource) => resource.status.absolutePath);
+    }
+
+    private getResources(
+        resourceStates: readonly vscode.SourceControlResourceState[]
+    ): ScmResource[] {
+        return resourceStates.filter(
+            (resource): resource is ScmResource => resource instanceof ScmResource
+        );
     }
 
     public async updateToRevision(revision: number): Promise<void> {
@@ -760,6 +819,19 @@ export class SvnRepository implements vscode.Disposable {
         if (!revealPath) {
             void vscode.window.showWarningMessage(
                 this.i18n.t("cannotMapPathWarning", { path: repositoryPath })
+            );
+            return;
+        }
+
+        await vscode.commands.executeCommand("revealFileInOS", vscode.Uri.file(revealPath));
+    }
+
+    public async revealWorkingCopyPathInFileManager(target: vscode.Uri | string): Promise<void> {
+        const targetPath = typeof target === "string" ? target : target.fsPath;
+        const revealPath = await this.getNearestExistingPath(targetPath);
+        if (!revealPath) {
+            void vscode.window.showWarningMessage(
+                this.i18n.t("cannotMapPathWarning", { path: targetPath })
             );
             return;
         }

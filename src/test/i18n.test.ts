@@ -32,3 +32,24 @@ test("createI18n returns commit selection prompts", () => {
     assert.equal(chinese.t("commitSelectFilesTitle"), "选择要提交的文件");
     assert.equal(chinese.t("noCommittableChangesError"), "当前没有可提交的变更。");
 });
+
+test("createI18n returns repository action prompts", () => {
+    const english = createI18n("en");
+    const chinese = createI18n("zh-CN");
+
+    assert.equal(
+        english.t("updateToRevisionActionLabel"),
+        "Update Working Copy To Revision"
+    );
+    assert.equal(english.t("invalidRevisionError"), "Enter a valid positive revision number.");
+    assert.equal(
+        english.t("resolveAllConflictsActionLabel"),
+        "Mark All Conflicts As Resolved"
+    );
+    assert.equal(english.t("deleteAllButton"), "Delete All");
+
+    assert.equal(chinese.t("addAllUnversionedActionLabel"), "添加全部未纳管项");
+    assert.equal(chinese.t("noLocalChangesInfo"), "当前没有可还原的本地更改。");
+    assert.equal(chinese.t("updateSelectedToRevisionActionLabel"), "将选中的路径更新到指定版本");
+    assert.equal(chinese.t("noConflictsInfo"), "当前没有可处理的冲突。");
+});
