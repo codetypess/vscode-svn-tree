@@ -7,9 +7,11 @@ tsconfig.webview.json
 2.png
 .prettierrc.js
 .gitignore
+.npmignore
 out/test/**
 **/*.map
 svn-tree-*.vsix
+media/icon.svg
 node_modules/@vscode/codicons/_iconCloud/**
 node_modules/@vscode/codicons/.devcontainer/**
 node_modules/@vscode/codicons/.husky/**

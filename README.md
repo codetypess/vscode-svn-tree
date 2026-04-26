@@ -1,47 +1,62 @@
 # SVN Tree
 
-SVN Tree brings a lightweight SVN workflow into Visual Studio Code with a native SCM view, quick diffs, incoming change visibility, and a focused history panel for browsing revisions.
+SVN Tree adds a focused Subversion workflow to Visual Studio Code. It integrates SVN working copies into the Source Control view, keeps diffs inside the editor, and exposes repository-aware actions for day-to-day maintenance, history inspection, and conflict handling.
 
-## Features
+![SVN Tree preview](media/preview.png)
 
-- Detects SVN working copies in the current workspace and registers them in the Source Control view.
-- Shows local changes and optional incoming remote changes with counts and inline actions.
-- Opens working copy, incoming, and revision-to-revision diffs inside the built-in VS Code diff editor.
-- Includes a compact history panel with revision metadata, changed file trees, and direct diff access per file.
-- Supports common SVN actions: refresh, update, commit, add, revert, and delete.
+## Highlights
+
+- Native SCM integration for SVN working copies in the current workspace.
+- Local, unversioned, conflict, and optional incoming remote change groups with inline actions.
+- Built-in diff flows for working copy changes, incoming changes, file history, revision-to-revision comparison, and revision-to-working-copy comparison.
+- Dedicated history webview with search, filters, infinite scroll, changed-file trees, copy/export actions, and revision-level operations.
+- Repository tools for switching references, branch and tag management, cleanup, blame, properties, locks, changelists, and repository browsing.
+- Runtime UI localization in English or Simplified Chinese.
 
 ## Requirements
 
+- Visual Studio Code 1.95 or newer.
 - The `svn` command-line client must be installed and available on your `PATH`.
 - Open a workspace folder that is inside an SVN working copy.
 
-If `svn` is not available, the extension will show a warning and stay inactive until it is installed.
+If `svn` is unavailable, the extension stays inactive and shows a warning until the CLI is available.
 
 ## Getting Started
 
 1. Open a folder that belongs to an SVN working copy.
 2. Open the Source Control view.
-3. Use the repository actions to refresh, update, commit, or open history.
-4. Expand **Changes** or **Remote Changes** to inspect files and open diffs.
-5. Open **History** to browse revisions and inspect file-level changes for any commit.
+3. Review the `Changes`, `Unversioned`, `Conflict Artifacts`, and optional `Remote Changes` groups.
+4. Enter a commit message in the SCM input box and run `SVN Tree: Commit SVN Changes`, or use the repository title actions to refresh, update, or open history.
+5. Use file and repository context menus for path-specific operations such as diff, blame, properties, ignore, lock, or history.
+
+## What You Can Do
+
+- Track working copy changes: refresh status, review diffs, update the working copy, commit the whole repository, commit selected paths, update selected paths, and run cleanup after interrupted operations.
+- Inspect history: open repository or file history, filter revisions by author, commit message, changed path, and date range, then compare revisions, copy commit messages, export files, or update and check out to a selected revision.
+- Manage repository references: switch branch or tag, update to a specific revision, relocate a working copy, and create or delete branches and tags from the working copy.
+- Work with paths and metadata: add, delete, revert, rename, ignore or unignore, lock or unlock, reveal in the file manager, inspect SVN info, edit properties, and open blame or annotate views.
+- Handle conflicts and changelists: mark conflicts as resolved, accept local, base, or incoming variants, postpone resolution, and add or remove files from SVN changelists.
 
 ## Commands
 
-- `SVN Tree: Refresh SVN Status`
-- `SVN Tree: Update SVN Working Copy`
-- `SVN Tree: Commit SVN Changes`
-- `SVN Tree: Open SVN History`
+Most commands are context-sensitive and are available from the Source Control view, file explorer context menus, or repository action menus.
+
+- Repository commands: `Refresh SVN Status`, `Update SVN Working Copy`, `Commit SVN Changes`, `Open SVN History`, `More SVN Actions`, `Show SVN Output`, `Cleanup SVN Working Copy`, `Update Working Copy To Revision`, `Switch Branch Or Tag`, and `Relocate Working Copy`.
+- Path and change commands: `Open Diff`, `Open File`, `Open File History`, `Commit Selected Changes`, `Update Selected Paths`, `Update Selected Paths To Revision`, `Add Resource`, `Revert Resource`, `Delete Resource`, `Rename`, `Ignore Path`, `Unignore Path`, `Lock`, `Unlock`, `Add To Changelist`, `Remove From Changelist`, and `Reveal In File Manager`.
+- Metadata and repository tools: `Blame / Annotate`, `Show Properties`, `Edit Properties`, `Show SVN Info`, `Copy Repository URL`, `Copy Repository Path`, and `Repository Browser`.
+- Branch, tag, and conflict commands: `Create Branch From Working Copy`, `Create Tag From Working Copy`, `Delete Branch / Tag`, `Mark Conflict As Resolved`, `Accept Local Version`, `Accept Base Version`, `Accept Incoming Version`, and `Postpone Conflict Resolution`.
 
 ## Settings
 
-- `svn-tree.enable-remote-status`: Fetch incoming changes with `svn status -u`.
-- `svn-tree.remote-status-interval-seconds`: Interval between automatic incoming-status refreshes.
-- `svn-tree.max-log-entries`: Number of revisions loaded per batch in the history panel. Default: `200`. Older history is fetched automatically as you scroll.
+- `svn-tree.displayLanguage`: preferred runtime UI language for prompts, quick picks, and webviews. Supports `auto` (default), `en`, and `zh-CN`.
+- `svn-tree.enable-remote-status`: fetch incoming changes with `svn status -u`.
+- `svn-tree.remote-status-interval-seconds`: interval between automatic remote status refreshes. Default: `60`. Minimum: `10`.
+- `svn-tree.max-log-entries`: number of revisions loaded per batch in the history webview. Default: `200`. Minimum: `20`.
 
 ## Notes
 
-- The extension uses VS Code's built-in diff editor for all comparisons.
-- Large repositories can make `svn log -v` and `svn status -u` slower, so remote status can be disabled if needed.
+- SVN Tree uses your installed `svn` CLI and its existing authentication configuration.
+- Large repositories can make `svn status -u` and verbose history queries slower. Disable remote status if you prefer a lighter refresh cycle.
 - Command output is written to the `SVN Tree` output channel for troubleshooting.
 
 ## Support
