@@ -15,6 +15,8 @@ interface RepositoryActionItem extends vscode.QuickPickItem {
 export class SvnRepositoryManager implements vscode.Disposable {
     private readonly disposables: vscode.Disposable[] = [];
     private readonly repositories = new Map<string, SvnRepository>();
+    private readonly repositoryWatchers = new Map<string, vscode.FileSystemWatcher>();
+    private readonly saveRefreshTimers = new Map<string, NodeJS.Timeout>();
     private readonly outputChannel = vscode.window.createOutputChannel("SVN Tree");
     private readonly historyStatusBarItem = vscode.window.createStatusBarItem(
         vscode.StatusBarAlignment.Left,
@@ -179,7 +181,7 @@ export class SvnRepositoryManager implements vscode.Disposable {
                 async (arg?: unknown) => this.revealInFileManager(arg)
             ),
             vscode.workspace.onDidSaveTextDocument((document) => {
-                void this.refreshRepositoryForUri(document.uri, false);
+                this.scheduleRefreshRepositoryForUri(document.uri, false);
             }),
             vscode.workspace.onDidCreateFiles((event) => {
                 for (const file of event.files) {
@@ -235,6 +237,14 @@ export class SvnRepositoryManager implements vscode.Disposable {
         }
 
         this.repositories.clear();
+        for (const watcher of this.repositoryWatchers.values()) {
+            watcher.dispose();
+        }
+        this.repositoryWatchers.clear();
+        for (const timer of this.saveRefreshTimers.values()) {
+            clearTimeout(timer);
+        }
+        this.saveRefreshTimers.clear();
         if (this.remoteRefreshTimer) {
             clearInterval(this.remoteRefreshTimer);
             this.remoteRefreshTimer = undefined;
@@ -285,6 +295,7 @@ export class SvnRepositoryManager implements vscode.Disposable {
             }
         }
 
+        this.syncRepositoryWatchers();
         this.refreshLocalization();
         this.updateHistoryStatusBarVisibility();
         await this.refreshAll(true);
@@ -311,6 +322,65 @@ export class SvnRepositoryManager implements vscode.Disposable {
         } catch (error) {
             this.showError(error);
         }
+    }
+
+    private scheduleRefreshRepositoryForUri(
+        uri: vscode.Uri,
+        forceRemote: boolean,
+        delayMs = 150
+    ): void {
+        const repository = this.getRepositoryForUri(uri);
+        if (!repository) {
+            return;
+        }
+
+        const timerKey = repository.rootPath;
+        const existingTimer = this.saveRefreshTimers.get(timerKey);
+        if (existingTimer) {
+            clearTimeout(existingTimer);
+        }
+
+        const timer = setTimeout(() => {
+            this.saveRefreshTimers.delete(timerKey);
+            void this.refreshRepositoryForUri(uri, forceRemote);
+        }, delayMs);
+
+        this.saveRefreshTimers.set(timerKey, timer);
+    }
+
+    private syncRepositoryWatchers(): void {
+        for (const [rootPath, watcher] of this.repositoryWatchers.entries()) {
+            if (!this.repositories.has(rootPath)) {
+                watcher.dispose();
+                this.repositoryWatchers.delete(rootPath);
+            }
+        }
+
+        for (const rootPath of this.repositories.keys()) {
+            if (this.repositoryWatchers.has(rootPath)) {
+                continue;
+            }
+
+            const watcher = vscode.workspace.createFileSystemWatcher(
+                new vscode.RelativePattern(rootPath, "**/*")
+            );
+            const onChange = (uri: vscode.Uri) => {
+                if (this.isInternalSvnPath(uri.fsPath)) {
+                    return;
+                }
+
+                this.scheduleRefreshRepositoryForUri(uri, false, 250);
+            };
+
+            watcher.onDidChange(onChange);
+            watcher.onDidCreate(onChange);
+            watcher.onDidDelete(onChange);
+            this.repositoryWatchers.set(rootPath, watcher);
+        }
+    }
+
+    private isInternalSvnPath(targetPath: string): boolean {
+        return targetPath.split(nodePath.sep).includes(".svn");
     }
 
     private getRepositoryForUri(uri: vscode.Uri): SvnRepository | undefined {

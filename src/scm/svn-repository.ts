@@ -216,6 +216,7 @@ export class SvnRepository implements vscode.Disposable {
     private isRefreshing = false;
     private isRefreshingRemoteCount = false;
     private activeOperation: RepositoryUiOperation | undefined;
+    private pendingRefreshOptions: RefreshOptions | undefined;
 
     public constructor(
         public readonly info: SvnWorkingCopyInfo,
@@ -304,6 +305,7 @@ export class SvnRepository implements vscode.Disposable {
 
     public async refresh(options: RefreshOptions = {}): Promise<void> {
         if (this.isRefreshing) {
+            this.queueRefresh(options);
             return;
         }
 
@@ -312,10 +314,12 @@ export class SvnRepository implements vscode.Disposable {
             this.activeOperation !== undefined &&
             this.activeOperation !== "refresh"
         ) {
+            this.queueRefresh(options);
             return;
         }
 
         this.isRefreshing = true;
+        let refreshError: unknown;
 
         try {
             const includeRemote = this.shouldIncludeRemote(options.forceRemote === true);
@@ -376,6 +380,8 @@ export class SvnRepository implements vscode.Disposable {
             }
 
             this.updateStatusBarCommands(this.remoteChangeCount);
+        } catch (error) {
+            refreshError = error;
         } finally {
             if (this.isRefreshingRemoteCount) {
                 this.isRefreshingRemoteCount = false;
@@ -383,6 +389,12 @@ export class SvnRepository implements vscode.Disposable {
             }
 
             this.isRefreshing = false;
+        }
+
+        await this.runPendingRefresh();
+
+        if (refreshError) {
+            throw refreshError;
         }
     }
 
@@ -1635,7 +1647,43 @@ export class SvnRepository implements vscode.Disposable {
         } finally {
             this.activeOperation = undefined;
             this.updateStatusBarCommands(this.remoteChangeCount);
+            await this.runPendingRefresh();
         }
+    }
+
+    private queueRefresh(options: RefreshOptions): void {
+        this.pendingRefreshOptions = this.mergeRefreshOptions(this.pendingRefreshOptions, options);
+    }
+
+    private async runPendingRefresh(): Promise<void> {
+        const pendingOptions = this.pendingRefreshOptions;
+        if (!pendingOptions) {
+            return;
+        }
+
+        if (
+            !pendingOptions.allowWhileBusy &&
+            this.activeOperation !== undefined &&
+            this.activeOperation !== "refresh"
+        ) {
+            return;
+        }
+
+        this.pendingRefreshOptions = undefined;
+        await this.refresh(pendingOptions);
+    }
+
+    private mergeRefreshOptions(
+        currentOptions: RefreshOptions | undefined,
+        nextOptions: RefreshOptions
+    ): RefreshOptions {
+        return {
+            forceRemote:
+                (currentOptions?.forceRemote ?? false) || (nextOptions.forceRemote ?? false),
+            allowWhileBusy:
+                (currentOptions?.allowWhileBusy ?? false) ||
+                (nextOptions.allowWhileBusy ?? false),
+        };
     }
 
     private async createRepositoryReferenceFromRevision(
