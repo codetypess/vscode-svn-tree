@@ -149,8 +149,22 @@ mark.search-highlight {
 }
 
 .history-list {
+  position: relative;
   max-height: calc(100vh - 94px);
   overflow: auto;
+}
+
+.history-virtualized {
+  position: relative;
+  min-height: 100%;
+}
+
+.history-virtual-item,
+.history-footer[style] {
+  position: absolute;
+  left: 0;
+  right: 0;
+  width: 100%;
 }
 
 .history-footer {
@@ -575,8 +589,8 @@ button.secondary:hover {
   bottom: -1px;
 }
 
-.commit:first-child .graph-stem-top,
-.commit:last-child .graph-stem-bottom {
+.commit.is-first .graph-stem-top,
+.commit.is-last .graph-stem-bottom {
   display: none;
 }
 
