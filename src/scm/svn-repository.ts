@@ -1,5 +1,6 @@
 import * as nodePath from "node:path";
 import * as vscode from "vscode";
+import { markIncomingHistoryEntries, toRevisionNumber } from "../history/history-utils";
 import { HistoryPanel } from "../history/history-panel";
 import { SvnContentProvider } from "../svn/svn-content-provider";
 import { SvnService } from "../svn/svn-service";
@@ -597,17 +598,17 @@ export class SvnRepository implements vscode.Disposable {
         const pageSize = vscode.workspace
             .getConfiguration("svn-tree")
             .get<number>("max-log-entries", 200);
-        const entries = await this.svnService.getLog(
-            this.rootPath,
-            pageSize,
-            beforeRevision,
-            targetPath
-        );
+        const [entries, currentRevision] = await Promise.all([
+            this.svnService.getLog(this.rootPath, pageSize, beforeRevision, targetPath),
+            this.getHistoryCurrentRevision(targetPath),
+        ]);
         const oldestRevision = entries.at(-1)?.revision;
+        const currentRevisionNumber = toRevisionNumber(currentRevision);
 
         return {
-            entries,
+            entries: markIncomingHistoryEntries(entries, currentRevisionNumber),
             hasMore: entries.length === pageSize && oldestRevision !== undefined && oldestRevision > 1,
+            currentRevision: currentRevisionNumber,
         };
     }
 
@@ -780,6 +781,14 @@ export class SvnRepository implements vscode.Disposable {
         }
 
         return relativePath;
+    }
+
+    private async getHistoryCurrentRevision(targetPath?: string): Promise<string | undefined> {
+        const candidatePath = targetPath
+            ? nodePath.join(this.rootPath, targetPath)
+            : this.rootPath;
+        const info = await this.svnService.getWorkingCopyInfo(candidatePath);
+        return info?.revision ?? (!targetPath ? this.info.revision : undefined);
     }
 
     private async pickHistoryFileChange(

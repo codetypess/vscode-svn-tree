@@ -67,9 +67,8 @@ export class SvnService {
         }
 
         const args = ["log", "--xml", "-v", "-l", String(limit)];
-        if (beforeRevision !== undefined) {
-            args.push("-r", `${Math.floor(beforeRevision)}:1`);
-        }
+        const upperBound = beforeRevision !== undefined ? String(Math.floor(beforeRevision)) : "HEAD";
+        args.push("-r", `${upperBound}:1`);
 
         args.push(this.toLogTarget(rootPath, targetPath));
 

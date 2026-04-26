@@ -54,9 +54,11 @@ export interface SvnLogEntry {
     date: string;
     message: string;
     changes: SvnLogPathChange[];
+    incoming?: boolean;
 }
 
 export interface SvnLogPage {
     entries: SvnLogEntry[];
     hasMore: boolean;
+    currentRevision?: number;
 }

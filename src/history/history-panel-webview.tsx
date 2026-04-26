@@ -44,11 +44,13 @@ interface HistoryEntry {
     date: string;
     message: string;
     changes: HistoryChange[];
+    incoming?: boolean;
 }
 
 interface HistoryDataPayload {
     append: boolean;
     hasMore: boolean;
+    currentRevision?: number;
     repositoryLabel: string;
     rootPath: string;
     entries: HistoryEntry[];
@@ -153,6 +155,7 @@ interface HistoryState {
     entries: HistoryEntry[];
     hasMore: boolean;
     isLoading: boolean;
+    currentRevision?: number;
     loadMoreError?: string;
     expandedRevision?: number;
     collapsedDirectories: CollapsedDirectories;
@@ -332,6 +335,17 @@ function isHistoryConfigMessage(
 
     function formatPathCount(count: number, i18n: RuntimeI18n): string {
         return i18n.formatChangedPathCount(count);
+    }
+
+    function isIncomingEntry(entry: HistoryEntry | undefined): boolean {
+        return entry?.incoming === true;
+    }
+
+    function isCurrentRevisionEntry(
+        entry: HistoryEntry,
+        currentRevision: number | undefined
+    ): boolean {
+        return typeof currentRevision === "number" && entry.revision === currentRevision;
     }
 
     function renderHighlightedText(value: string | number | undefined, query: string): React.ReactNode {
@@ -691,11 +705,22 @@ function isHistoryConfigMessage(
                     { className: "details-summary-panel" },
                     h(
                         "div",
-                        { className: "details-title" },
-                        renderHighlightedText(
-                            summarizeMessage(entry.message, props.i18n),
-                            props.searchQuery
-                        )
+                        { className: "details-title-row" },
+                        h(
+                            "div",
+                            { className: "details-title" },
+                            renderHighlightedText(
+                                summarizeMessage(entry.message, props.i18n),
+                                props.searchQuery
+                            )
+                        ),
+                        isIncomingEntry(entry)
+                            ? h(
+                                  "span",
+                                  { className: "summary-badge incoming" },
+                                  props.i18n.t("incomingChange")
+                              )
+                            : null
                     ),
                     h(
                         "div",
@@ -775,6 +800,9 @@ function isHistoryConfigMessage(
                             { className: "context-menu-subtitle" },
                             "r",
                             entry.revision,
+                            isIncomingEntry(entry)
+                                ? " • " + props.i18n.t("incomingChange")
+                                : "",
                             " • ",
                             summarizeMessage(entry.message, props.i18n)
                         )
@@ -875,7 +903,11 @@ function isHistoryConfigMessage(
                     h(
                         "div",
                         { className: "context-menu-subtitle" },
-                        summarizeMessage(entry.message, props.i18n)
+                        isIncomingEntry(entry)
+                            ? props.i18n.t("incomingChange") +
+                                  " • " +
+                                  summarizeMessage(entry.message, props.i18n)
+                            : summarizeMessage(entry.message, props.i18n)
                     )
                 ),
                 h(
@@ -944,38 +976,50 @@ function isHistoryConfigMessage(
                             props.i18n.t("compareWithPreviousRevision")
                         )
                     ),
-                    h(
-                        "button",
-                        {
-                            className: "context-menu-item",
-                            type: "button",
-                            onClick: function () {
-                                props.onAction("revert-to-revision", entry);
-                            },
-                        },
-                        h("span", { className: "codicon codicon-history", "aria-hidden": "true" }),
-                        h(
-                            "span",
-                            { className: "context-menu-label" },
-                            props.i18n.t("revertToThisRevision")
-                        )
-                    ),
-                    h(
-                        "button",
-                        {
-                            className: "context-menu-item",
-                            type: "button",
-                            onClick: function () {
-                                props.onAction("revert-changes-from-revision", entry);
-                            },
-                        },
-                        h("span", { className: "codicon codicon-discard", "aria-hidden": "true" }),
-                        h(
-                            "span",
-                            { className: "context-menu-label" },
-                            props.i18n.t("revertChangesFromThisRevision")
-                        )
-                    ),
+                    isIncomingEntry(entry)
+                        ? null
+                        : h(
+                              React.Fragment,
+                              null,
+                              h(
+                                  "button",
+                                  {
+                                      className: "context-menu-item",
+                                      type: "button",
+                                      onClick: function () {
+                                          props.onAction("revert-to-revision", entry);
+                                      },
+                                  },
+                                  h("span", {
+                                      className: "codicon codicon-history",
+                                      "aria-hidden": "true",
+                                  }),
+                                  h(
+                                      "span",
+                                      { className: "context-menu-label" },
+                                      props.i18n.t("revertToThisRevision")
+                                  )
+                              ),
+                              h(
+                                  "button",
+                                  {
+                                      className: "context-menu-item",
+                                      type: "button",
+                                      onClick: function () {
+                                          props.onAction("revert-changes-from-revision", entry);
+                                      },
+                                  },
+                                  h("span", {
+                                      className: "codicon codicon-discard",
+                                      "aria-hidden": "true",
+                                  }),
+                                  h(
+                                      "span",
+                                      { className: "context-menu-label" },
+                                      props.i18n.t("revertChangesFromThisRevision")
+                                  )
+                              )
+                          ),
                     h("div", { className: "context-menu-separator", "aria-hidden": "true" }),
                     h(
                         "button",
@@ -1072,6 +1116,7 @@ function isHistoryConfigMessage(
             entries: [],
             hasMore: true,
             isLoading: true,
+            currentRevision: undefined,
             loadMoreError: undefined,
             expandedRevision: undefined,
             collapsedDirectories: {},
@@ -1219,6 +1264,7 @@ function isHistoryConfigMessage(
                             entries: nextEntries,
                             hasMore: data.payload.hasMore === true,
                             isLoading: false,
+                            currentRevision: data.payload.currentRevision,
                             loadMoreError: undefined,
                             repositoryLabel: data.payload.repositoryLabel,
                             rootPath: data.payload.rootPath,
@@ -1523,14 +1569,27 @@ function isHistoryConfigMessage(
             return h(
                 React.Fragment,
                 null,
-                filteredEntries.map(function (entry) {
+                filteredEntries.map(function (entry, index) {
                     const isExpanded = entry.revision === state.expandedRevision;
+                    const incoming = isIncomingEntry(entry);
+                    const isCurrentRevision = isCurrentRevisionEntry(
+                        entry,
+                        state.currentRevision
+                    );
+                    const topStemIncoming =
+                        incoming || isIncomingEntry(filteredEntries[index - 1]);
+                    const bottomStemIncoming =
+                        incoming || isIncomingEntry(filteredEntries[index + 1]);
 
                     return h(
                         "article",
                         {
                             key: entry.revision,
-                            className: "commit" + (isExpanded ? " expanded" : ""),
+                            className:
+                                "commit" +
+                                (isExpanded ? " expanded" : "") +
+                                (incoming ? " incoming" : "") +
+                                (isCurrentRevision ? " current" : ""),
                             "data-revision": entry.revision,
                         },
                         h(
@@ -1562,15 +1621,22 @@ function isHistoryConfigMessage(
                                 "div",
                                 { className: "graph-column" },
                                 h("span", {
-                                    className: "graph-stem graph-stem-top",
+                                    className:
+                                        "graph-stem graph-stem-top" +
+                                        (topStemIncoming ? " graph-stem-incoming" : ""),
                                     "aria-hidden": "true",
                                 }),
                                 h("span", {
-                                    className: "graph-dot",
+                                    className:
+                                        "graph-dot" +
+                                        (incoming ? " graph-dot-incoming" : "") +
+                                        (isCurrentRevision ? " graph-dot-current" : ""),
                                     "aria-hidden": "true",
                                 }),
                                 h("span", {
-                                    className: "graph-stem graph-stem-bottom",
+                                    className:
+                                        "graph-stem graph-stem-bottom" +
+                                        (bottomStemIncoming ? " graph-stem-incoming" : ""),
                                     "aria-hidden": "true",
                                 })
                             ),
@@ -1593,7 +1659,14 @@ function isHistoryConfigMessage(
                                         "span",
                                         { className: "summary-meta" },
                                         formatPathCount(entry.changes.length, i18n)
-                                    )
+                                    ),
+                                    incoming
+                                        ? h(
+                                              "span",
+                                              { className: "summary-badge incoming" },
+                                              i18n.t("incomingChange")
+                                          )
+                                        : null
                                 )
                             ),
                             h(

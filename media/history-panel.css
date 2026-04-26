@@ -29,6 +29,9 @@
   --graph-dot-size: 10px;
   --timeline: color-mix(in srgb, var(--graph-node) 88%, transparent);
   --timeline-strong: var(--graph-node);
+  --graph-node-incoming: color-mix(in srgb, var(--muted) 82%, transparent);
+  --timeline-incoming: color-mix(in srgb, var(--muted) 74%, transparent);
+  --timeline-incoming-strong: color-mix(in srgb, var(--muted) 92%, transparent);
   --added: var(--vscode-gitDecoration-addedResourceForeground, #81b88b);
   --modified: var(--vscode-gitDecoration-modifiedResourceForeground, #e2c08d);
   --deleted: var(--vscode-gitDecoration-deletedResourceForeground, #c74e39);
@@ -245,6 +248,10 @@ button.secondary:hover {
   background: var(--row-active);
 }
 
+.commit.expanded {
+  background: var(--details-bg);
+}
+
 .graph-column {
   position: relative;
   display: flex;
@@ -261,6 +268,10 @@ button.secondary:hover {
   width: var(--graph-rail-width);
   border-radius: 999px;
   background: linear-gradient(180deg, var(--timeline-strong), var(--timeline));
+}
+
+.graph-stem-incoming {
+  background: linear-gradient(180deg, var(--timeline-incoming-strong), var(--timeline-incoming));
 }
 
 .graph-stem-top {
@@ -287,6 +298,21 @@ button.secondary:hover {
   background: var(--graph-node);
   border: 1px solid color-mix(in srgb, black 16%, var(--graph-node));
   box-shadow: 0 0 0 1px color-mix(in srgb, black 20%, transparent);
+}
+
+.graph-dot-incoming {
+  background: var(--surface-bg);
+  border: 2px solid var(--graph-node-incoming);
+  box-shadow: 0 0 0 1px color-mix(in srgb, black 20%, transparent);
+}
+
+.graph-dot-current::after {
+  content: "";
+  position: absolute;
+  inset: -4px;
+  border-radius: 999px;
+  border: 1.5px solid color-mix(in srgb, var(--graph-node) 72%, transparent);
+  pointer-events: none;
 }
 
 .commit.expanded .graph-dot {
@@ -317,6 +343,24 @@ button.secondary:hover {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.summary-badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 20px;
+  padding: 0 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+}
+
+.summary-badge.incoming {
+  color: var(--graph-node);
+  background: color-mix(in srgb, var(--graph-node) 12%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--graph-node) 42%, transparent);
 }
 
 .summary-separator {
@@ -375,6 +419,10 @@ button.secondary:hover {
   background: linear-gradient(180deg, var(--timeline-strong), var(--timeline));
 }
 
+.commit.incoming .details-rail::before {
+  background: linear-gradient(180deg, var(--timeline-incoming-strong), var(--timeline-incoming));
+}
+
 .details-panel {
   display: grid;
   grid-template-columns: minmax(300px, 0.95fr) minmax(420px, 1.25fr);
@@ -387,11 +435,18 @@ button.secondary:hover {
   border-right: 1px solid var(--details-border);
 }
 
+.details-title-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
 .details-title {
   font-size: 14px;
   font-weight: 700;
   line-height: 1.4;
-  margin-bottom: 14px;
 }
 
 .details-meta {
@@ -475,6 +530,8 @@ button.secondary:hover {
 }
 
 .change-icon {
+  width: 10px;
+  font-size: 10px;
   color: var(--muted);
 }
 

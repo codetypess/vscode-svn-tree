@@ -352,6 +352,7 @@ export class HistoryPanel implements vscode.Disposable {
                 payload: {
                     append: options.append === true,
                     hasMore: page.hasMore,
+                    currentRevision: page.currentRevision,
                     repositoryLabel: scope.label,
                     rootPath: repository.rootPath,
                     entries: page.entries,
