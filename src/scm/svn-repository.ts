@@ -11,6 +11,7 @@ import type {
     SvnWorkingCopyInfo,
 } from "../svn/svn-types";
 import { getI18n } from "../vscode-i18n";
+import { isConflictArtifactStatus } from "./conflict-artifact";
 import { ScmResource } from "./scm-resource";
 
 interface RefreshOptions {
@@ -19,7 +20,7 @@ interface RefreshOptions {
 }
 
 type RepositoryReferenceKind = "branch" | "tag";
-type RepositoryUiOperation = "refresh" | "update" | "cleanup";
+type RepositoryUiOperation = "refresh" | "update" | "cleanup" | "resolve";
 
 function posixJoin(left: string, right: string): string {
     return `${left.replace(/\/+$/, "")}/${right.replace(/\\/g, "/").replace(/^\/+/, "")}`;
@@ -45,6 +46,10 @@ function isLocalChange(status: SvnStatusEntry): boolean {
 
 function isUnversionedChange(status: SvnStatusEntry): boolean {
     return status.wcStatus === "unversioned";
+}
+
+function isConflictedChange(status: SvnStatusEntry): boolean {
+    return status.wcStatus === "conflicted";
 }
 
 function isRemoteChange(status: SvnStatusEntry): boolean {
@@ -188,6 +193,7 @@ function getReferenceNameSuggestion(repositoryRelativePath: string, revision: nu
 export class SvnRepository implements vscode.Disposable {
     private readonly disposables: vscode.Disposable[] = [];
     private readonly changesGroup: vscode.SourceControlResourceGroup;
+    private readonly conflictArtifactsGroup: vscode.SourceControlResourceGroup;
     private readonly unversionedGroup: vscode.SourceControlResourceGroup;
     private readonly remoteChangesGroup: vscode.SourceControlResourceGroup;
     private readonly repositoryReference: ReturnType<typeof getRepositoryReferenceDisplay>;
@@ -219,6 +225,10 @@ export class SvnRepository implements vscode.Disposable {
             "svn-tree.changes",
             i18n.t("changesGroupLabel")
         );
+        this.conflictArtifactsGroup = this.sourceControl.createResourceGroup(
+            "svn-tree.conflict-artifacts",
+            i18n.t("conflictArtifactsGroupLabel")
+        );
         this.unversionedGroup = this.sourceControl.createResourceGroup(
             "svn-tree.unversioned",
             i18n.t("unversionedGroupLabel")
@@ -233,6 +243,9 @@ export class SvnRepository implements vscode.Disposable {
         this.unversionedGroup.hideWhenEmpty = true;
         this.unversionedGroup.contextValue = "svn-unversioned-group";
         this.unversionedGroup.resourceStates = [];
+        this.conflictArtifactsGroup.hideWhenEmpty = true;
+        this.conflictArtifactsGroup.contextValue = "svn-conflict-artifacts-group";
+        this.conflictArtifactsGroup.resourceStates = [];
         this.remoteChangesGroup.hideWhenEmpty = false;
         this.remoteChangesGroup.contextValue = "svn-remote-changes-group";
         this.remoteChangesGroup.resourceStates = [];
@@ -269,6 +282,7 @@ export class SvnRepository implements vscode.Disposable {
             this.info.repositoryRelativePath
         );
         this.changesGroup.label = this.i18n.t("changesGroupLabel");
+        this.conflictArtifactsGroup.label = this.i18n.t("conflictArtifactsGroupLabel");
         this.unversionedGroup.label = this.i18n.t("unversionedGroupLabel");
         this.remoteChangesGroup.label = this.i18n.t("remoteChangesGroupLabel");
         this.updateStatusBarCommands(this.remoteChangeCount);
@@ -297,12 +311,35 @@ export class SvnRepository implements vscode.Disposable {
             }
 
             const statuses = await this.svnService.getStatus(this.rootPath, includeRemote);
+            const conflictedPaths = new Set(
+                statuses
+                    .filter(isConflictedChange)
+                    .map((status) => status.absolutePath)
+            );
             const changeResources = statuses
                 .filter(isLocalChange)
                 .sort((left, right) => left.relativePath.localeCompare(right.relativePath))
                 .map((status) => new ScmResource(this, status, "change"));
+            const conflictArtifactResources = statuses
+                .filter((status) => isConflictArtifactStatus(status, conflictedPaths))
+                .sort((left, right) => left.relativePath.localeCompare(right.relativePath))
+                .map(
+                    (status) =>
+                        new ScmResource(
+                            this,
+                            {
+                                ...status,
+                                conflictArtifact: true,
+                            },
+                            "change"
+                        )
+                );
             const unversionedResources = statuses
-                .filter(isUnversionedChange)
+                .filter(
+                    (status) =>
+                        isUnversionedChange(status) &&
+                        !isConflictArtifactStatus(status, conflictedPaths)
+                )
                 .sort((left, right) => left.relativePath.localeCompare(right.relativePath))
                 .map((status) => new ScmResource(this, status, "change"));
             const remoteResources = includeRemote
@@ -313,6 +350,7 @@ export class SvnRepository implements vscode.Disposable {
                 : this.remoteChangesGroup.resourceStates;
 
             this.changesGroup.resourceStates = changeResources;
+            this.conflictArtifactsGroup.resourceStates = conflictArtifactResources;
             this.unversionedGroup.resourceStates = unversionedResources;
             this.remoteChangesGroup.resourceStates = remoteResources;
             this.sourceControl.count = changeResources.length + unversionedResources.length;
@@ -593,6 +631,37 @@ export class SvnRepository implements vscode.Disposable {
     public async revert(paths: string[]): Promise<void> {
         await this.svnService.revert(this.rootPath, paths);
         await this.refresh();
+    }
+
+    public async markResolved(paths: string[]): Promise<void> {
+        const conflictPaths = this.normalizeUniquePaths(paths);
+        if (conflictPaths.length === 0) {
+            return;
+        }
+
+        const itemLabel = this.i18n.formatItemCount(conflictPaths.length);
+        const confirmed = await this.confirmConflictResolution("working", itemLabel);
+        if (!confirmed) {
+            return;
+        }
+
+        await this.runRepositoryOperation(
+            "resolve",
+            this.i18n.t("markResolvedProgress", { items: itemLabel }),
+            this.i18n.t("markedResolvedInfo", { items: itemLabel }),
+            async () => {
+                await this.svnService.resolve(this.rootPath, conflictPaths, "working");
+                await this.refresh({ allowWhileBusy: true });
+            }
+        );
+    }
+
+    public async acceptMine(paths: string[]): Promise<void> {
+        await this.acceptConflictVersion(paths, "mine-full");
+    }
+
+    public async acceptTheirs(paths: string[]): Promise<void> {
+        await this.acceptConflictVersion(paths, "theirs-full");
     }
 
     public async add(paths: string[]): Promise<void> {
@@ -1120,6 +1189,8 @@ export class SvnRepository implements vscode.Disposable {
                 return this.i18n.t("updateWorkingCopyRunningTooltip");
             case "cleanup":
                 return this.i18n.t("cleanupWorkingCopyRunningTooltip");
+            case "resolve":
+                return this.i18n.t("resolveConflictsRunningTooltip");
         }
     }
 
@@ -1131,6 +1202,8 @@ export class SvnRepository implements vscode.Disposable {
                 return this.i18n.t("updateWorkingCopyActionLabel");
             case "cleanup":
                 return this.i18n.t("cleanupWorkingCopyActionLabel");
+            case "resolve":
+                return this.i18n.t("resolveConflictsActionLabel");
         }
     }
 
@@ -1324,6 +1397,80 @@ export class SvnRepository implements vscode.Disposable {
 
         const selection = await vscode.window.showWarningMessage(
             this.i18n.t("updateToRevisionQuestion", { revision }),
+            {
+                modal: true,
+                detail: detailLines.join("\n"),
+            },
+            this.i18n.t("continueButton")
+        );
+
+        return selection === this.i18n.t("continueButton");
+    }
+
+    private async acceptConflictVersion(
+        paths: string[],
+        accept: "mine-full" | "theirs-full"
+    ): Promise<void> {
+        const conflictPaths = this.normalizeUniquePaths(paths);
+        if (conflictPaths.length === 0) {
+            return;
+        }
+
+        const itemLabel = this.i18n.formatItemCount(conflictPaths.length);
+        const confirmed = await this.confirmConflictResolution(accept, itemLabel);
+        if (!confirmed) {
+            return;
+        }
+
+        const progressKey =
+            accept === "mine-full" ? "acceptMineProgress" : "acceptTheirsProgress";
+        const completedKey =
+            accept === "mine-full" ? "acceptedMineInfo" : "acceptedTheirsInfo";
+
+        await this.runRepositoryOperation(
+            "resolve",
+            this.i18n.t(progressKey, { items: itemLabel }),
+            this.i18n.t(completedKey, { items: itemLabel }),
+            async () => {
+                await this.svnService.resolve(this.rootPath, conflictPaths, accept);
+                await this.refresh({ allowWhileBusy: true });
+            }
+        );
+    }
+
+    private normalizeUniquePaths(paths: readonly string[]): string[] {
+        const uniquePaths = new Set<string>();
+
+        for (const targetPath of paths) {
+            if (targetPath) {
+                uniquePaths.add(targetPath);
+            }
+        }
+
+        return [...uniquePaths];
+    }
+
+    private async confirmConflictResolution(
+        mode: "working" | "mine-full" | "theirs-full",
+        itemLabel: string
+    ): Promise<boolean> {
+        const message =
+            mode === "working"
+                ? this.i18n.t("markResolvedQuestion", { items: itemLabel })
+                : mode === "mine-full"
+                  ? this.i18n.t("acceptMineQuestion", { items: itemLabel })
+                  : this.i18n.t("acceptTheirsQuestion", { items: itemLabel });
+        const detailLines = [
+            mode === "working"
+                ? this.i18n.t("markResolvedDetail")
+                : mode === "mine-full"
+                  ? this.i18n.t("acceptMineDetail")
+                  : this.i18n.t("acceptTheirsDetail"),
+            this.i18n.t("workingCopyOnlyDetail"),
+        ];
+
+        const selection = await vscode.window.showWarningMessage(
+            message,
             {
                 modal: true,
                 detail: detailLines.join("\n"),

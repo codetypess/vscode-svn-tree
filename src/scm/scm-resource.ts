@@ -6,7 +6,15 @@ import type { SvnStatusEntry } from "../svn/svn-types";
 
 export type ScmResourceKind = "change" | "remote-change";
 
-function toColor(kind: ScmResourceKind, status: string | undefined): vscode.ThemeColor {
+function toColor(
+    kind: ScmResourceKind,
+    status: string | undefined,
+    conflictArtifact: boolean | undefined
+): vscode.ThemeColor {
+    if (conflictArtifact) {
+        return new vscode.ThemeColor("gitDecoration.conflictingResourceForeground");
+    }
+
     if (status === "added" || status === "unversioned") {
         return new vscode.ThemeColor("gitDecoration.addedResourceForeground");
     }
@@ -26,24 +34,35 @@ function toColor(kind: ScmResourceKind, status: string | undefined): vscode.Them
     return new vscode.ThemeColor("gitDecoration.modifiedResourceForeground");
 }
 
-function toIcon(kind: ScmResourceKind, status: string | undefined): vscode.ThemeIcon {
+function toIcon(
+    kind: ScmResourceKind,
+    status: string | undefined,
+    conflictArtifact: boolean | undefined
+): vscode.ThemeIcon {
+    if (conflictArtifact) {
+        return new vscode.ThemeIcon(
+            "warning",
+            toColor(kind, status, conflictArtifact)
+        );
+    }
+
     if (status === "added" || status === "unversioned") {
-        return new vscode.ThemeIcon("diff-added", toColor(kind, status));
+        return new vscode.ThemeIcon("diff-added", toColor(kind, status, conflictArtifact));
     }
 
     if (status === "deleted" || status === "missing") {
-        return new vscode.ThemeIcon("diff-removed", toColor(kind, status));
+        return new vscode.ThemeIcon("diff-removed", toColor(kind, status, conflictArtifact));
     }
 
     if (status === "conflicted") {
-        return new vscode.ThemeIcon("warning", toColor(kind, status));
+        return new vscode.ThemeIcon("warning", toColor(kind, status, conflictArtifact));
     }
 
     if (kind === "remote-change") {
-        return new vscode.ThemeIcon("cloud-download", toColor(kind, status));
+        return new vscode.ThemeIcon("cloud-download", toColor(kind, status, conflictArtifact));
     }
 
-    return new vscode.ThemeIcon("diff-modified", toColor(kind, status));
+    return new vscode.ThemeIcon("diff-modified", toColor(kind, status, conflictArtifact));
 }
 
 export class ScmResource implements vscode.SourceControlResourceState {
@@ -67,21 +86,31 @@ export class ScmResource implements vscode.SourceControlResourceState {
         this.contextValue =
             kind === "remote-change"
                 ? "svn-remote-change"
-                : status.wcStatus === "unversioned"
-                  ? "svn-unversioned"
-                  : "svn-change";
+                : status.conflictArtifact
+                  ? "svn-conflict-artifact"
+                  : status.wcStatus === "conflicted"
+                    ? "svn-conflict"
+                    : status.wcStatus === "unversioned"
+                      ? "svn-unversioned"
+                      : "svn-change";
         this.decorations = {
             strikeThrough: status.wcStatus === "deleted" || status.reposStatus === "deleted",
             faded: status.wcStatus === "missing",
             tooltip: this.tooltip,
-            iconPath: toIcon(kind, kind === "remote-change" ? status.reposStatus : status.wcStatus),
+            iconPath: toIcon(
+                kind,
+                kind === "remote-change" ? status.reposStatus : status.wcStatus,
+                status.conflictArtifact
+            ),
         };
     }
 
     public get tooltip(): string {
         const i18n = getI18n();
         const segments = [
-            this.kind === "remote-change"
+            this.status.conflictArtifact
+                ? i18n.t("conflictArtifactLabel")
+                : this.kind === "remote-change"
                 ? i18n.t("incomingChange")
                 : i18n.t("workingCopyChange"),
             this.status.relativePath,

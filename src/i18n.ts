@@ -48,6 +48,7 @@ const englishMessages = {
     commitAcceptTitle: "Commit",
     commitInputPlaceholder: 'Message ({shortcut} to commit on "{target}")',
     changesGroupLabel: "Changes",
+    conflictArtifactsGroupLabel: "Conflict Artifacts",
     unversionedGroupLabel: "Unversioned",
     remoteChangesGroupLabel: "Remote Changes",
     emptyCommitMessageError: "Enter a commit message before committing.",
@@ -99,6 +100,23 @@ const englishMessages = {
     localChangesConflictWarning:
         "This working copy already has local changes, so conflicts are more likely.",
     continueButton: "Continue",
+    resolveConflictsActionLabel: "Resolve Conflicts",
+    resolveConflictsRunningTooltip: "Resolving conflicts...",
+    markResolvedQuestion: "Mark {items} as resolved?",
+    markResolvedDetail:
+        "Use this after you have manually edited the file content to the final result.",
+    markResolvedProgress: "Marking {items} as resolved...",
+    markedResolvedInfo: "Marked {items} as resolved.",
+    acceptMineQuestion: "Accept the local version for {items}?",
+    acceptMineDetail:
+        "This keeps your current working copy content and marks the conflict as resolved.",
+    acceptMineProgress: "Accepting the local version for {items}...",
+    acceptedMineInfo: "Accepted the local version for {items}.",
+    acceptTheirsQuestion: "Accept the incoming version for {items}?",
+    acceptTheirsDetail:
+        "This replaces your current working copy content with the incoming repository version and marks the conflict as resolved.",
+    acceptTheirsProgress: "Accepting the incoming version for {items}...",
+    acceptedTheirsInfo: "Accepted the incoming version for {items}.",
     revertedWorkingCopyInfo:
         "Reverted working copy to r{revision}. Review the changes and commit when ready.",
     revertedChangesInfo:
@@ -115,6 +133,7 @@ const englishMessages = {
     labelDeletedInHead: "deleted in HEAD",
     labelWorkingCopyMissing: "working copy missing",
     incomingStatusLabel: "incoming",
+    conflictArtifactLabel: "conflict artifact",
     copiedFilePathStatus: "Copied file path for r{revision}",
     copiedRevisionStatus: "Copied revision r{revision}",
     copiedCommitMessageStatus: "Copied commit message for r{revision}",
@@ -238,6 +257,7 @@ const messages: Record<SupportedLocale, MessageCatalog> = {
         commitAcceptTitle: "提交",
         commitInputPlaceholder: "提交说明（{shortcut} 提交到“{target}”）",
         changesGroupLabel: "变更",
+        conflictArtifactsGroupLabel: "冲突辅助文件",
         unversionedGroupLabel: "未纳入版本控制",
         remoteChangesGroupLabel: "远程变更",
         emptyCommitMessageError: "提交前请输入提交说明。",
@@ -288,6 +308,21 @@ const messages: Record<SupportedLocale, MessageCatalog> = {
         localChangesConflictWarning:
             "当前工作副本已经存在本地修改，发生冲突的概率会更高。",
         continueButton: "继续",
+        resolveConflictsActionLabel: "处理冲突",
+        resolveConflictsRunningTooltip: "正在处理冲突...",
+        markResolvedQuestion: "要将 {items} 标记为已解决吗？",
+        markResolvedDetail: "请在你已经手动把文件内容整理为最终结果后再执行此操作。",
+        markResolvedProgress: "正在将 {items} 标记为已解决...",
+        markedResolvedInfo: "已将 {items} 标记为已解决。",
+        acceptMineQuestion: "要对 {items} 接受本地版本吗？",
+        acceptMineDetail: "这会保留你当前工作副本中的内容，并将冲突标记为已解决。",
+        acceptMineProgress: "正在对 {items} 接受本地版本...",
+        acceptedMineInfo: "已对 {items} 接受本地版本。",
+        acceptTheirsQuestion: "要对 {items} 接受远端版本吗？",
+        acceptTheirsDetail:
+            "这会用仓库中的传入版本替换你当前工作副本内容，并将冲突标记为已解决。",
+        acceptTheirsProgress: "正在对 {items} 接受远端版本...",
+        acceptedTheirsInfo: "已对 {items} 接受远端版本。",
         revertedWorkingCopyInfo:
             "已将工作副本还原到 r{revision}。请检查变更并在准备好后提交。",
         revertedChangesInfo:
@@ -304,6 +339,7 @@ const messages: Record<SupportedLocale, MessageCatalog> = {
         labelDeletedInHead: "已在 HEAD 中删除",
         labelWorkingCopyMissing: "工作副本中不存在",
         incomingStatusLabel: "传入变更",
+        conflictArtifactLabel: "冲突辅助文件",
         copiedFilePathStatus: "已复制 r{revision} 的文件路径",
         copiedRevisionStatus: "已复制版本 r{revision}",
         copiedCommitMessageStatus: "已复制 r{revision} 的提交说明",

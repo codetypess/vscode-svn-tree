@@ -71,6 +71,15 @@ export class SvnRepositoryManager implements vscode.Disposable {
             vscode.commands.registerCommand("svn-tree.revert-resource", async (arg?: unknown) =>
                 this.revertResource(arg)
             ),
+            vscode.commands.registerCommand("svn-tree.resolve-conflict", async (arg?: unknown) =>
+                this.resolveConflict(arg)
+            ),
+            vscode.commands.registerCommand("svn-tree.accept-mine", async (arg?: unknown) =>
+                this.acceptMine(arg)
+            ),
+            vscode.commands.registerCommand("svn-tree.accept-theirs", async (arg?: unknown) =>
+                this.acceptTheirs(arg)
+            ),
             vscode.commands.registerCommand("svn-tree.revert-group", async (arg?: unknown) =>
                 this.revertGroup(arg)
             ),
@@ -540,6 +549,51 @@ export class SvnRepositoryManager implements vscode.Disposable {
         }
     }
 
+    private async resolveConflict(arg: unknown): Promise<void> {
+        const resources = this.getSelectedResources(arg, ["svn-conflict"]);
+        if (resources.length === 0) {
+            return;
+        }
+
+        try {
+            await resources[0].repository.markResolved(
+                resources.map((resource) => resource.status.absolutePath)
+            );
+        } catch (error) {
+            this.showError(error);
+        }
+    }
+
+    private async acceptMine(arg: unknown): Promise<void> {
+        const resources = this.getSelectedResources(arg, ["svn-conflict"]);
+        if (resources.length === 0) {
+            return;
+        }
+
+        try {
+            await resources[0].repository.acceptMine(
+                resources.map((resource) => resource.status.absolutePath)
+            );
+        } catch (error) {
+            this.showError(error);
+        }
+    }
+
+    private async acceptTheirs(arg: unknown): Promise<void> {
+        const resources = this.getSelectedResources(arg, ["svn-conflict"]);
+        if (resources.length === 0) {
+            return;
+        }
+
+        try {
+            await resources[0].repository.acceptTheirs(
+                resources.map((resource) => resource.status.absolutePath)
+            );
+        } catch (error) {
+            this.showError(error);
+        }
+    }
+
     private async revertGroup(arg: unknown): Promise<void> {
         const i18n = getI18n();
         const resources = this.getGroupResources(arg, "svn-changes-group");
@@ -657,6 +711,22 @@ export class SvnRepositoryManager implements vscode.Disposable {
         return group.resourceStates.filter(
             (resource): resource is ScmResource => resource instanceof ScmResource
         );
+    }
+
+    private getSelectedResources(
+        arg: unknown,
+        contextValues: readonly string[] = []
+    ): ScmResource[] {
+        const resources = Array.isArray(arg)
+            ? arg.filter((item): item is ScmResource => item instanceof ScmResource)
+            : arg instanceof ScmResource
+              ? [arg]
+              : [];
+        if (resources.length === 0 || contextValues.length === 0) {
+            return resources;
+        }
+
+        return resources.filter((resource) => contextValues.includes(resource.contextValue));
     }
 
     private getUriFromArg(arg: unknown): vscode.Uri | undefined {

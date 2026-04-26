@@ -130,6 +130,21 @@
         "title": "%command.openFileHistory.title%",
         "category": "%command.category%",
         "icon": "$(history)"
+      },
+      {
+        "command": "svn-tree.resolve-conflict",
+        "title": "%command.resolveConflict.title%",
+        "category": "%command.category%"
+      },
+      {
+        "command": "svn-tree.accept-mine",
+        "title": "%command.acceptMine.title%",
+        "category": "%command.category%"
+      },
+      {
+        "command": "svn-tree.accept-theirs",
+        "title": "%command.acceptTheirs.title%",
+        "category": "%command.category%"
       }
     ],
     "submenus": [
@@ -212,8 +227,23 @@
         },
         {
           "command": "svn-tree.revert-resource",
-          "when": "scmProvider == svn-tree && scmResourceState == svn-change",
+          "when": "scmProvider == svn-tree && (scmResourceState == svn-change || scmResourceState == svn-conflict)",
           "group": "inline@2"
+        },
+        {
+          "command": "svn-tree.resolve-conflict",
+          "when": "scmProvider == svn-tree && scmResourceState == svn-conflict",
+          "group": "5_conflict@1"
+        },
+        {
+          "command": "svn-tree.accept-mine",
+          "when": "scmProvider == svn-tree && scmResourceState == svn-conflict",
+          "group": "5_conflict@2"
+        },
+        {
+          "command": "svn-tree.accept-theirs",
+          "when": "scmProvider == svn-tree && scmResourceState == svn-conflict",
+          "group": "5_conflict@3"
         },
         {
           "command": "svn-tree.delete-resource",

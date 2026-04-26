@@ -31,6 +31,7 @@ export interface SvnStatusEntry {
     relativePath: string;
     kind: SvnNodeKind;
     wcStatus: SvnWorkingCopyStatus;
+    conflictArtifact?: boolean;
     reposStatus?: SvnRepositoryStatus;
     revision?: string;
     committedRevision?: string;

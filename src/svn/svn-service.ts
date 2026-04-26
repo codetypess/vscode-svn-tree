@@ -21,6 +21,8 @@ interface RunSvnOptions {
     getTimeoutMs?: (attempt: number, totalAttempts: number) => number | undefined;
 }
 
+type SvnResolveAcceptOption = "working" | "mine-full" | "theirs-full";
+
 export class SvnService {
     public constructor(private readonly outputChannel: vscode.OutputChannel) {}
 
@@ -165,6 +167,16 @@ export class SvnService {
     public async delete(rootPath: string, paths: string[]): Promise<void> {
         const targets = this.toRelativeTargets(rootPath, paths);
         const args = ["delete", "--force", ...targets];
+        await this.run(args, { cwd: rootPath });
+    }
+
+    public async resolve(
+        rootPath: string,
+        paths: string[],
+        accept: SvnResolveAcceptOption
+    ): Promise<void> {
+        const targets = this.toRelativeTargets(rootPath, paths);
+        const args = ["resolve", "--accept", accept, ...targets];
         await this.run(args, { cwd: rootPath });
     }
 
