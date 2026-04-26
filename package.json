@@ -268,6 +268,21 @@
         "category": "%command.category%"
       },
       {
+        "command": "svn-tree.accept-base",
+        "title": "%command.acceptBase.title%",
+        "category": "%command.category%"
+      },
+      {
+        "command": "svn-tree.accept-mine-conflict",
+        "title": "%command.acceptMineConflict.title%",
+        "category": "%command.category%"
+      },
+      {
+        "command": "svn-tree.accept-theirs-conflict",
+        "title": "%command.acceptTheirsConflict.title%",
+        "category": "%command.category%"
+      },
+      {
         "command": "svn-tree.accept-theirs",
         "title": "%command.acceptTheirs.title%",
         "category": "%command.category%"
@@ -283,8 +298,33 @@
         "category": "%command.category%"
       },
       {
+        "command": "svn-tree.accept-base-all",
+        "title": "%command.acceptBaseAll.title%",
+        "category": "%command.category%"
+      },
+      {
+        "command": "svn-tree.accept-mine-conflict-all",
+        "title": "%command.acceptMineConflictAll.title%",
+        "category": "%command.category%"
+      },
+      {
+        "command": "svn-tree.accept-theirs-conflict-all",
+        "title": "%command.acceptTheirsConflictAll.title%",
+        "category": "%command.category%"
+      },
+      {
         "command": "svn-tree.accept-theirs-all",
         "title": "%command.acceptTheirsAll.title%",
+        "category": "%command.category%"
+      },
+      {
+        "command": "svn-tree.postpone-conflict",
+        "title": "%command.postponeConflict.title%",
+        "category": "%command.category%"
+      },
+      {
+        "command": "svn-tree.postpone-all-conflicts",
+        "title": "%command.postponeAllConflicts.title%",
         "category": "%command.category%"
       },
       {
@@ -312,6 +352,22 @@
         "id": "svn-tree.repository-actions",
         "label": "%command.openRepositoryActions.title%",
         "icon": "$(ellipsis)"
+      },
+      {
+        "id": "svn-tree.repository-actions.browse",
+        "label": "%submenu.repositoryBrowse.label%"
+      },
+      {
+        "id": "svn-tree.repository-actions.working-copy",
+        "label": "%submenu.repositoryWorkingCopy.label%"
+      },
+      {
+        "id": "svn-tree.repository-actions.changes",
+        "label": "%submenu.repositoryChanges.label%"
+      },
+      {
+        "id": "svn-tree.repository-actions.conflicts",
+        "label": "%submenu.repositoryConflicts.label%"
       }
     ],
     "menus": {
@@ -416,87 +472,127 @@
       "svn-tree.repository-actions": [
         {
           "command": "svn-tree.refresh",
-          "group": "1_status@1"
-        },
-        {
-          "command": "svn-tree.open-history",
-          "group": "1_status@2"
-        },
-        {
-          "command": "svn-tree.open-revision-graph",
-          "group": "1_status@3"
-        },
-        {
-          "command": "svn-tree.open-repository-browser",
-          "group": "1_status@4"
+          "group": "1_common@1"
         },
         {
           "command": "svn-tree.update",
-          "group": "1_status@5"
-        },
-        {
-          "command": "svn-tree.update-to-revision",
-          "group": "1_status@6"
-        },
-        {
-          "command": "svn-tree.switch-reference",
-          "group": "1_status@7"
-        },
-        {
-          "command": "svn-tree.create-branch-from-working-copy",
-          "group": "1_status@8"
-        },
-        {
-          "command": "svn-tree.create-tag-from-working-copy",
-          "group": "1_status@9"
-        },
-        {
-          "command": "svn-tree.delete-reference",
-          "group": "1_status@10"
-        },
-        {
-          "command": "svn-tree.relocate-working-copy",
-          "group": "1_status@11"
+          "group": "1_common@2"
         },
         {
           "command": "svn-tree.commit",
-          "group": "2_changes@1"
-        },
-        {
-          "command": "svn-tree.commit-changelist",
-          "group": "2_changes@2"
-        },
-        {
-          "command": "svn-tree.add-group",
-          "group": "2_changes@3"
-        },
-        {
-          "command": "svn-tree.delete-group",
-          "group": "2_changes@4"
-        },
-        {
-          "command": "svn-tree.revert-group",
-          "group": "2_changes@5"
-        },
-        {
-          "command": "svn-tree.resolve-all-conflicts",
-          "group": "3_conflicts@1"
-        },
-        {
-          "command": "svn-tree.accept-mine-all",
-          "group": "3_conflicts@2"
-        },
-        {
-          "command": "svn-tree.accept-theirs-all",
-          "group": "3_conflicts@3"
+          "group": "1_common@3"
         },
         {
           "command": "svn-tree.cleanup",
-          "group": "4_tools@1"
+          "group": "1_common@4"
         },
         {
           "command": "svn-tree.show-output",
-          "group": "4_tools@2"
+          "group": "1_common@5"
+        },
+        {
+          "submenu": "svn-tree.repository-actions.browse",
+          "group": "2_browse@1"
+        },
+        {
+          "submenu": "svn-tree.repository-actions.working-copy",
+          "group": "3_working_copy@1"
+        },
+        {
+          "submenu": "svn-tree.repository-actions.changes",
+          "group": "4_changes@1"
+        },
+        {
+          "submenu": "svn-tree.repository-actions.conflicts",
+          "group": "5_conflicts@1"
+        }
+      ],
+      "svn-tree.repository-actions.browse": [
+        {
+          "command": "svn-tree.open-history",
+          "group": "1_browse@1"
+        },
+        {
+          "command": "svn-tree.open-revision-graph",
+          "group": "1_browse@2"
+        },
+        {
+          "command": "svn-tree.open-repository-browser",
+          "group": "1_browse@3"
+        }
+      ],
+      "svn-tree.repository-actions.working-copy": [
+        {
+          "command": "svn-tree.update-to-revision",
+          "group": "1_working_copy@1"
+        },
+        {
+          "command": "svn-tree.switch-reference",
+          "group": "1_working_copy@2"
+        },
+        {
+          "command": "svn-tree.create-branch-from-working-copy",
+          "group": "1_working_copy@3"
+        },
+        {
+          "command": "svn-tree.create-tag-from-working-copy",
+          "group": "1_working_copy@4"
+        },
+        {
+          "command": "svn-tree.delete-reference",
+          "group": "1_working_copy@5"
+        },
+        {
+          "command": "svn-tree.relocate-working-copy",
+          "group": "1_working_copy@6"
+        }
+      ],
+      "svn-tree.repository-actions.changes": [
+        {
+          "command": "svn-tree.commit-changelist",
+          "group": "1_changes@1"
+        },
+        {
+          "command": "svn-tree.add-group",
+          "group": "1_changes@2"
+        },
+        {
+          "command": "svn-tree.delete-group",
+          "group": "1_changes@3"
+        },
+        {
+          "command": "svn-tree.revert-group",
+          "group": "1_changes@4"
+        }
+      ],
+      "svn-tree.repository-actions.conflicts": [
+        {
+          "command": "svn-tree.resolve-all-conflicts",
+          "group": "1_conflicts@1"
+        },
+        {
+          "command": "svn-tree.accept-mine-all",
+          "group": "1_conflicts@2"
+        },
+        {
+          "command": "svn-tree.accept-base-all",
+          "group": "1_conflicts@3"
+        },
+        {
+          "command": "svn-tree.accept-mine-conflict-all",
+          "group": "1_conflicts@4"
+        },
+        {
+          "command": "svn-tree.accept-theirs-conflict-all",
+          "group": "1_conflicts@5"
+        },
+        {
+          "command": "svn-tree.accept-theirs-all",
+          "group": "1_conflicts@6"
+        },
+        {
+          "command": "svn-tree.postpone-all-conflicts",
+          "group": "1_conflicts@7"
         }
       ],
       "scm/resourceState/context": [
@@ -626,9 +722,29 @@
           "group": "5_conflict@2"
         },
         {
-          "command": "svn-tree.accept-theirs",
+          "command": "svn-tree.accept-base",
           "when": "scmProvider == svn-tree && scmResourceState == svn-conflict",
           "group": "5_conflict@3"
+        },
+        {
+          "command": "svn-tree.accept-mine-conflict",
+          "when": "scmProvider == svn-tree && scmResourceState == svn-conflict",
+          "group": "5_conflict@4"
+        },
+        {
+          "command": "svn-tree.accept-theirs-conflict",
+          "when": "scmProvider == svn-tree && scmResourceState == svn-conflict",
+          "group": "5_conflict@5"
+        },
+        {
+          "command": "svn-tree.accept-theirs",
+          "when": "scmProvider == svn-tree && scmResourceState == svn-conflict",
+          "group": "5_conflict@6"
+        },
+        {
+          "command": "svn-tree.postpone-conflict",
+          "when": "scmProvider == svn-tree && scmResourceState == svn-conflict",
+          "group": "5_conflict@7"
         },
         {
           "command": "svn-tree.delete-resource",

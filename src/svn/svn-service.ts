@@ -35,7 +35,14 @@ interface RunSvnOptions {
     getTimeoutMs?: (attempt: number, totalAttempts: number) => number | undefined;
 }
 
-type SvnResolveAcceptOption = "working" | "mine-full" | "theirs-full";
+type SvnResolveAcceptOption =
+    | "working"
+    | "base"
+    | "mine-conflict"
+    | "theirs-conflict"
+    | "mine-full"
+    | "theirs-full"
+    | "postpone";
 
 export class SvnService {
     public constructor(private readonly outputChannel: vscode.OutputChannel) {}

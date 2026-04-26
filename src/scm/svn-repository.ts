@@ -12,6 +12,7 @@ import type {
     SvnStatusEntry,
     SvnWorkingCopyInfo,
 } from "../svn/svn-types";
+import type { MessageKey } from "../i18n";
 import { getI18n } from "../vscode-i18n";
 import { isConflictArtifactStatus } from "./conflict-artifact";
 import { isCommittableStatus } from "./commit-utils";
@@ -42,7 +43,10 @@ interface RepositoryBrowserQuickPickItem extends vscode.QuickPickItem {
         | "show-properties"
         | "copy-url"
         | "copy-path"
-        | "switch-here";
+        | "switch-here"
+        | "create-branch-from-working-copy"
+        | "create-tag-from-working-copy"
+        | "delete-reference";
     readonly repositoryPath?: string;
     readonly url?: string;
 }
@@ -52,11 +56,31 @@ interface RepositoryBrowserFileActionQuickPickItem extends vscode.QuickPickItem 
         | "show-history"
         | "show-properties"
         | "show-blame"
+        | "show-blame-output"
+        | "copy-blame-line"
+        | "open-file"
         | "copy-url"
         | "copy-path";
 }
 
+interface ParsedBlameLine {
+    readonly lineNumber: number;
+    readonly revision: string;
+    readonly author: string;
+    readonly content: string;
+    readonly raw: string;
+}
+
 type RepositoryReferenceKind = "branch" | "tag";
+type BlameDisplayMode = "text" | "output";
+type ConflictResolutionMode =
+    | "working"
+    | "base"
+    | "mine-conflict"
+    | "theirs-conflict"
+    | "mine-full"
+    | "theirs-full"
+    | "postpone";
 type RepositoryUiOperation =
     | "refresh"
     | "update"
@@ -79,6 +103,28 @@ function buildRepositoryUrl(repositoryRoot: string, repositoryPath: string): str
 
 function isUrlTarget(value: string): boolean {
     return /^[a-z][a-z0-9+.-]*:\/\//i.test(value);
+}
+
+function parseBlameLines(blameOutput: string): ParsedBlameLine[] {
+    return blameOutput.split(/\r?\n/).flatMap((line, index) => {
+        if (!line.trim()) {
+            return [];
+        }
+
+        const metadataMatch = line.match(/^\s*(\S+)\s+(\S+)\s+(.*)$/);
+        const remainder = metadataMatch?.[3] ?? "";
+        const contentStartIndex = remainder.indexOf(") ");
+
+        return [
+            {
+                lineNumber: index + 1,
+                revision: metadataMatch?.[1] ?? "?",
+                author: metadataMatch?.[2] ?? "?",
+                content: contentStartIndex >= 0 ? remainder.slice(contentStartIndex + 2) : remainder,
+                raw: line,
+            },
+        ];
+    });
 }
 
 function isLocalChange(status: SvnStatusEntry): boolean {
@@ -950,39 +996,30 @@ export class SvnRepository implements vscode.Disposable {
         await this.createRepositoryReferenceFromWorkingCopy("tag");
     }
 
+    public async createBranchFromWorkingCopyAt(repositoryPath: string): Promise<void> {
+        await this.createRepositoryReferenceFromWorkingCopy("branch", undefined, repositoryPath);
+    }
+
+    public async createTagFromWorkingCopyAt(repositoryPath: string): Promise<void> {
+        await this.createRepositoryReferenceFromWorkingCopy("tag", undefined, repositoryPath);
+    }
+
     public async deleteRepositoryReference(): Promise<void> {
         const target = await this.promptDeleteReferenceTarget();
         if (!target) {
             return;
         }
 
-        const confirmed = await this.confirmDeleteRepositoryReference(target.display);
-        if (!confirmed) {
-            return;
-        }
+        await this.deleteRepositoryReferenceTarget(target);
+    }
 
-        const message = this.i18n.t("deleteReferenceCommitMessage", {
-            target: target.display,
-        });
-
-        await vscode.window.withProgress(
-            {
-                location: vscode.ProgressLocation.Notification,
-                title: this.i18n.t("deleteReferenceProgress", {
-                    target: target.display,
-                }),
-            },
-            async () => {
-                await this.svnService.deleteUrl(target.url, message);
-            }
-        );
-
-        await this.historyPanel.refresh(this);
-        void vscode.window.showInformationMessage(
-            this.i18n.t("deletedReferenceInfo", {
-                target: target.display,
-            })
-        );
+    public async deleteRepositoryReferenceAt(repositoryPath: string): Promise<void> {
+        const target = {
+            display: repositoryPath,
+            repositoryPath,
+            url: buildRepositoryUrl(this.info.repositoryRoot, repositoryPath),
+        };
+        await this.deleteRepositoryReferenceTarget(target);
     }
 
     public async relocateWorkingCopy(): Promise<void> {
@@ -1013,7 +1050,44 @@ export class SvnRepository implements vscode.Disposable {
         );
     }
 
-    public async showBlame(target: vscode.Uri | string): Promise<void> {
+    private async deleteRepositoryReferenceTarget(target: {
+        display: string;
+        repositoryPath: string;
+        url: string;
+    }): Promise<void> {
+        const confirmed = await this.confirmDeleteRepositoryReference(target.display);
+        if (!confirmed) {
+            return;
+        }
+
+        const message = this.i18n.t("deleteReferenceCommitMessage", {
+            target: target.display,
+        });
+
+        await vscode.window.withProgress(
+            {
+                location: vscode.ProgressLocation.Notification,
+                title: this.i18n.t("deleteReferenceProgress", {
+                    target: target.display,
+                }),
+            },
+            async () => {
+                await this.svnService.deleteUrl(target.url, message);
+            }
+        );
+
+        await this.historyPanel.refresh(this);
+        void vscode.window.showInformationMessage(
+            this.i18n.t("deletedReferenceInfo", {
+                target: target.display,
+            })
+        );
+    }
+
+    public async showBlame(
+        target: vscode.Uri | string,
+        displayMode: BlameDisplayMode = "text"
+    ): Promise<void> {
         const targetPath = typeof target === "string" ? target : target.fsPath;
         const targetInfo = await this.svnService.getNodeInfo(targetPath);
         const displayPath =
@@ -1036,21 +1110,16 @@ export class SvnRepository implements vscode.Disposable {
             async () => this.svnService.blame(this.rootPath, targetPath)
         );
 
-        const document = await vscode.workspace.openTextDocument({
-            language: "plaintext",
-            content: [
-                `${this.i18n.t("infoPathLabel")}: ${displayPath}`,
-                `${this.i18n.t("infoRepositoryPathLabel")}: ${targetInfo.repositoryRelativePath}`,
-                `${this.i18n.t("infoUrlLabel")}: ${targetInfo.url}`,
-                "",
+        await this.presentBlameResult(
+            {
+                displayPath,
+                repositoryPath: targetInfo.repositoryRelativePath,
+                url: targetInfo.url,
                 blameOutput,
-            ].join("\n"),
-        });
-        await vscode.window.showTextDocument(document, {
-            preview: true,
-            viewColumn: vscode.ViewColumn.Active,
-        });
-        void vscode.window.setStatusBarMessage(this.i18n.t("openedBlameStatus"), 2000);
+                workingCopyPath: targetPath,
+            },
+            displayMode
+        );
     }
 
     public async showPathProperties(target: vscode.Uri | string): Promise<void> {
@@ -1686,6 +1755,22 @@ export class SvnRepository implements vscode.Disposable {
                 url: currentUrl,
             },
             {
+                label: this.i18n.t("createBranchFromWorkingCopyActionLabel"),
+                description: currentRepositoryPath,
+                itemType: "action",
+                action: "create-branch-from-working-copy",
+                repositoryPath: currentRepositoryPath,
+                url: currentUrl,
+            },
+            {
+                label: this.i18n.t("createTagFromWorkingCopyActionLabel"),
+                description: currentRepositoryPath,
+                itemType: "action",
+                action: "create-tag-from-working-copy",
+                repositoryPath: currentRepositoryPath,
+                url: currentUrl,
+            },
+            {
                 label: this.i18n.t("copyRepositoryUrlActionLabel"),
                 description: currentUrl,
                 itemType: "action",
@@ -1712,6 +1797,17 @@ export class SvnRepository implements vscode.Disposable {
                 description: currentRepositoryPath,
                 itemType: "action",
                 action: "switch-here",
+                repositoryPath: currentRepositoryPath,
+                url: currentUrl,
+            });
+        }
+
+        if (getReferenceKindForRepositoryPath(currentRepositoryPath)) {
+            items.push({
+                label: this.i18n.t("deleteReferenceActionLabel"),
+                description: currentRepositoryPath,
+                itemType: "action",
+                action: "delete-reference",
                 repositoryPath: currentRepositoryPath,
                 url: currentUrl,
             });
@@ -1810,6 +1906,15 @@ export class SvnRepository implements vscode.Disposable {
             case "switch-here":
                 await this.switchWorkingCopyToRepositoryPath(repositoryPath);
                 return;
+            case "create-branch-from-working-copy":
+                await this.createBranchFromWorkingCopyAt(repositoryPath);
+                return;
+            case "create-tag-from-working-copy":
+                await this.createTagFromWorkingCopyAt(repositoryPath);
+                return;
+            case "delete-reference":
+                await this.deleteRepositoryReferenceAt(repositoryPath);
+                return;
         }
     }
 
@@ -1834,6 +1939,21 @@ export class SvnRepository implements vscode.Disposable {
                         label: this.i18n.t("showBlameActionLabel"),
                         description: repositoryPath,
                         action: "show-blame",
+                    },
+                    {
+                        label: this.i18n.t("showBlameOutputActionLabel"),
+                        description: repositoryPath,
+                        action: "show-blame-output",
+                    },
+                    {
+                        label: this.i18n.t("copyBlameLineActionLabel"),
+                        description: repositoryPath,
+                        action: "copy-blame-line",
+                    },
+                    {
+                        label: this.i18n.t("openFile"),
+                        description: repositoryPath,
+                        action: "open-file",
                     },
                     {
                         label: this.i18n.t("copyRepositoryUrlActionLabel"),
@@ -1867,6 +1987,22 @@ export class SvnRepository implements vscode.Disposable {
                 return;
             case "show-blame":
                 await this.showBlameForRepositoryPath(repositoryPath, url);
+                return;
+            case "show-blame-output":
+                await this.showBlameForRepositoryPath(repositoryPath, url, "output");
+                return;
+            case "copy-blame-line":
+                await this.copyBlameLineMetadata(
+                    repositoryPath,
+                    url,
+                    this.getWorkingCopyPathForRepositoryPath(repositoryPath)
+                );
+                return;
+            case "open-file":
+                await this.openBlameWorkingCopyFile(
+                    this.getWorkingCopyPathForRepositoryPath(repositoryPath),
+                    repositoryPath
+                );
                 return;
             case "copy-url":
                 await this.copyValueToClipboard(url, this.i18n.t("copiedRepositoryUrlStatus"));
@@ -1904,7 +2040,8 @@ export class SvnRepository implements vscode.Disposable {
 
     public async showBlameForRepositoryPath(
         repositoryPath: string,
-        url: string
+        url: string,
+        displayMode: BlameDisplayMode = "text"
     ): Promise<void> {
         const blameOutput = await vscode.window.withProgress(
             {
@@ -1914,12 +2051,32 @@ export class SvnRepository implements vscode.Disposable {
             async () => this.svnService.blameTarget(url)
         );
 
-        await this.openBlameDocument({
+        await this.presentBlameResult(
+            {
             displayPath: repositoryPath,
             repositoryPath,
             url,
             blameOutput,
-        });
+                workingCopyPath: this.getWorkingCopyPathForRepositoryPath(repositoryPath),
+            },
+            displayMode
+        );
+    }
+
+    public async acceptBase(paths: string[]): Promise<void> {
+        await this.acceptConflictVersion(paths, "base");
+    }
+
+    public async acceptMineConflict(paths: string[]): Promise<void> {
+        await this.acceptConflictVersion(paths, "mine-conflict");
+    }
+
+    public async acceptTheirsConflict(paths: string[]): Promise<void> {
+        await this.acceptConflictVersion(paths, "theirs-conflict");
+    }
+
+    public async postponeConflicts(paths: string[]): Promise<void> {
+        await this.acceptConflictVersion(paths, "postpone");
     }
 
     private async switchWorkingCopyToRepositoryPath(repositoryPath: string): Promise<void> {
@@ -1944,11 +2101,73 @@ export class SvnRepository implements vscode.Disposable {
         );
     }
 
+    private async presentBlameResult(
+        options: {
+            displayPath: string;
+            repositoryPath: string;
+            url: string;
+            blameOutput: string;
+            workingCopyPath?: string;
+        },
+        displayMode: BlameDisplayMode
+    ): Promise<void> {
+        if (displayMode === "output") {
+            this.writeBlameToOutput(options);
+        } else {
+            await this.openBlameDocument(options);
+        }
+
+        const actions = [this.i18n.t("copyBlameLineActionLabel")];
+        if (displayMode === "output") {
+            actions.unshift(this.i18n.t("showBlameTextActionLabel"));
+        } else {
+            actions.unshift(this.i18n.t("showBlameOutputActionLabel"));
+        }
+
+        if (options.workingCopyPath) {
+            actions.push(this.i18n.t("openFile"));
+        }
+
+        const selection = await vscode.window.showInformationMessage(
+            this.i18n.t("openedBlameStatus"),
+            ...actions
+        );
+
+        if (!selection) {
+            return;
+        }
+
+        if (selection === this.i18n.t("copyBlameLineActionLabel")) {
+            await this.copyBlameLineMetadata(
+                options.displayPath,
+                options.url,
+                options.workingCopyPath,
+                options.blameOutput
+            );
+            return;
+        }
+
+        if (selection === this.i18n.t("openFile")) {
+            await this.openBlameWorkingCopyFile(options.workingCopyPath, options.displayPath);
+            return;
+        }
+
+        if (selection === this.i18n.t("showBlameOutputActionLabel")) {
+            this.writeBlameToOutput(options);
+            return;
+        }
+
+        if (selection === this.i18n.t("showBlameTextActionLabel")) {
+            await this.openBlameDocument(options);
+        }
+    }
+
     private async openBlameDocument(options: {
         displayPath: string;
         repositoryPath: string;
         url: string;
         blameOutput: string;
+        workingCopyPath?: string;
     }): Promise<void> {
         const document = await vscode.workspace.openTextDocument({
             language: "plaintext",
@@ -1967,44 +2186,173 @@ export class SvnRepository implements vscode.Disposable {
         void vscode.window.setStatusBarMessage(this.i18n.t("openedBlameStatus"), 2000);
     }
 
+    private writeBlameToOutput(options: {
+        displayPath: string;
+        repositoryPath: string;
+        url: string;
+        blameOutput: string;
+    }): void {
+        this.writeOutputSection(
+            this.i18n.t("showBlameOutputHeader", { path: options.displayPath }),
+            [
+                `${this.i18n.t("infoPathLabel")}: ${options.displayPath}`,
+                `${this.i18n.t("infoRepositoryPathLabel")}: ${options.repositoryPath}`,
+                `${this.i18n.t("infoUrlLabel")}: ${options.url}`,
+                "",
+                options.blameOutput,
+            ],
+            this.i18n.t("openedBlameStatus")
+        );
+    }
+
     private writePropertiesToOutput(options: {
         displayPath: string;
         repositoryPath: string;
         url: string;
         properties: SvnPropertyEntry[];
     }): void {
-        const contentLines = [
-            `${this.i18n.t("infoPathLabel")}: ${options.displayPath}`,
-            `${this.i18n.t("infoRepositoryPathLabel")}: ${options.repositoryPath}`,
-            `${this.i18n.t("infoUrlLabel")}: ${options.url}`,
-            "",
-            `${this.i18n.t("propertiesHeaderLabel")}:`,
-            ...(options.properties.length === 0
-                ? [this.i18n.t("noPropertiesFoundLabel")]
-                : options.properties.flatMap((property) => {
-                      const valueLines = property.value.split("\n");
-                      if (valueLines.length === 1) {
-                          return `${property.name}: ${valueLines[0]}`;
-                      }
+        this.writeOutputSection(
+            this.i18n.t("showPropertiesOutputHeader", {
+                path: options.displayPath,
+            }),
+            [
+                `${this.i18n.t("infoPathLabel")}: ${options.displayPath}`,
+                `${this.i18n.t("infoRepositoryPathLabel")}: ${options.repositoryPath}`,
+                `${this.i18n.t("infoUrlLabel")}: ${options.url}`,
+                "",
+                `${this.i18n.t("propertiesHeaderLabel")}:`,
+                ...(options.properties.length === 0
+                    ? [this.i18n.t("noPropertiesFoundLabel")]
+                    : options.properties.flatMap((property) => {
+                          const valueLines = property.value.split("\n");
+                          if (valueLines.length === 1) {
+                              return `${property.name}: ${valueLines[0]}`;
+                          }
 
-                      return [
-                          `${property.name}:`,
-                          ...valueLines.map((line) => `  ${line}`),
-                      ];
-                  })),
-        ];
+                          return [
+                              `${property.name}:`,
+                              ...valueLines.map((line) => `  ${line}`),
+                          ];
+                      })),
+            ],
+            this.i18n.t("openedPropertiesStatus")
+        );
+    }
 
+    private writeOutputSection(header: string, lines: string[], statusMessage: string): void {
         this.outputChannel.appendLine("");
-        const headerLine = `=== ${this.i18n.t("showPropertiesOutputHeader", {
-            path: options.displayPath,
-        })} ===`;
+        const headerLine = `=== ${header} ===`;
         this.outputChannel.appendLine(headerLine);
-        for (const line of contentLines) {
+        for (const line of lines) {
             this.outputChannel.appendLine(line);
         }
         this.outputChannel.appendLine("=".repeat(headerLine.length));
         this.outputChannel.show(true);
-        void vscode.window.setStatusBarMessage(this.i18n.t("openedPropertiesStatus"), 2000);
+        void vscode.window.setStatusBarMessage(statusMessage, 2000);
+    }
+
+    private async copyBlameLineMetadata(
+        displayPath: string,
+        url: string,
+        workingCopyPath?: string,
+        blameOutput?: string
+    ): Promise<void> {
+        const resolvedBlameOutput =
+            blameOutput ??
+            (await vscode.window.withProgress(
+                {
+                    location: vscode.ProgressLocation.Notification,
+                    title: this.i18n.t("showBlameProgress", { path: displayPath }),
+                },
+                async () =>
+                    workingCopyPath
+                        ? this.svnService.blame(this.rootPath, workingCopyPath)
+                        : this.svnService.blameTarget(url)
+            ));
+        const parsedLines = parseBlameLines(resolvedBlameOutput);
+        if (parsedLines.length === 0) {
+            return;
+        }
+
+        const selectedLine = await vscode.window.showQuickPick(
+            parsedLines.map((line) => ({
+                label: this.i18n.t("blameLineLabel", {
+                    line: line.lineNumber,
+                    revision: line.revision,
+                    author: line.author,
+                }),
+                detail: line.content || line.raw,
+                blameLine: line,
+            })),
+            {
+                title: this.i18n.t("showBlameActionLabel"),
+                placeHolder: this.i18n.t("blameLinePlaceholder", {
+                    path: displayPath,
+                }),
+            }
+        );
+
+        if (!selectedLine) {
+            return;
+        }
+
+        const metadataSelection = await vscode.window.showQuickPick(
+            [
+                {
+                    label: this.i18n.t("copyBlameRevisionActionLabel"),
+                    description: selectedLine.blameLine.revision,
+                    value: "revision" as const,
+                },
+                {
+                    label: this.i18n.t("copyBlameAuthorActionLabel"),
+                    description: selectedLine.blameLine.author,
+                    value: "author" as const,
+                },
+            ],
+            {
+                title: this.i18n.t("showBlameActionLabel"),
+                placeHolder: this.i18n.t("copyBlameLineMetadataPlaceholder", {
+                    line: selectedLine.blameLine.lineNumber,
+                }),
+            }
+        );
+
+        if (!metadataSelection) {
+            return;
+        }
+
+        if (metadataSelection.value === "revision") {
+            await this.copyValueToClipboard(
+                selectedLine.blameLine.revision,
+                this.i18n.t("copiedBlameRevisionStatus", {
+                    line: selectedLine.blameLine.lineNumber,
+                })
+            );
+            return;
+        }
+
+        await this.copyValueToClipboard(
+            selectedLine.blameLine.author,
+            this.i18n.t("copiedBlameAuthorStatus", {
+                line: selectedLine.blameLine.lineNumber,
+            })
+        );
+    }
+
+    private async openBlameWorkingCopyFile(
+        workingCopyPath: string | undefined,
+        displayPath: string
+    ): Promise<void> {
+        if (!workingCopyPath || !(await this.pathExists(workingCopyPath))) {
+            void vscode.window.showWarningMessage(
+                this.i18n.t("cannotMapPathWarning", { path: displayPath })
+            );
+            return;
+        }
+
+        await vscode.window.showTextDocument(vscode.Uri.file(workingCopyPath), {
+            preview: true,
+        });
     }
 
     private async copyValueToClipboard(value: string, statusMessage: string): Promise<void> {
@@ -2438,16 +2786,23 @@ export class SvnRepository implements vscode.Disposable {
     }
 
     private async createRepositoryReferenceFromWorkingCopy(
-        kind: RepositoryReferenceKind
+        kind: RepositoryReferenceKind,
+        destinationPath?: string,
+        suggestedRepositoryPath?: string
     ): Promise<void> {
-        const destinationPath = await this.promptReferenceDestinationFromWorkingCopy(kind);
-        if (!destinationPath) {
+        const resolvedDestinationPath =
+            destinationPath ??
+            (await this.promptReferenceDestinationFromWorkingCopy(
+                kind,
+                suggestedRepositoryPath
+            ));
+        if (!resolvedDestinationPath) {
             return;
         }
 
         const confirmed = await this.confirmCreateReferenceFromWorkingCopy(
             kind,
-            destinationPath
+            resolvedDestinationPath
         );
         if (!confirmed) {
             return;
@@ -2456,9 +2811,12 @@ export class SvnRepository implements vscode.Disposable {
         const kindLabel = this.getReferenceKindLabel(kind);
         const message = this.i18n.t("createReferenceFromWorkingCopyCommitMessage", {
             kind: kindLabel,
-            destination: destinationPath,
+            destination: resolvedDestinationPath,
         });
-        const destinationUrl = buildRepositoryUrl(this.info.repositoryRoot, destinationPath);
+        const destinationUrl = buildRepositoryUrl(
+            this.info.repositoryRoot,
+            resolvedDestinationPath
+        );
 
         await vscode.window.withProgress(
             {
@@ -2476,16 +2834,16 @@ export class SvnRepository implements vscode.Disposable {
         const selection = await vscode.window.showInformationMessage(
             this.i18n.t("createdReferenceFromWorkingCopyMessage", {
                 kind: kindLabel,
-                destination: destinationPath,
+                destination: resolvedDestinationPath,
             }),
             this.i18n.t("copyPathButton")
         );
         if (selection === this.i18n.t("copyPathButton")) {
-            await vscode.env.clipboard.writeText(destinationPath);
+            await vscode.env.clipboard.writeText(resolvedDestinationPath);
             void vscode.window.setStatusBarMessage(
                 this.i18n.t("copiedReferencePathStatus", {
                     kind: kindLabel,
-                    destination: destinationPath,
+                    destination: resolvedDestinationPath,
                 }),
                 2000
             );
@@ -2574,7 +2932,8 @@ export class SvnRepository implements vscode.Disposable {
     }
 
     private async promptReferenceDestinationFromWorkingCopy(
-        kind: RepositoryReferenceKind
+        kind: RepositoryReferenceKind,
+        suggestedRepositoryPath?: string
     ): Promise<string | undefined> {
         const locationLabel = getReferenceLocationLabel(kind);
         const layoutRoot = getReferenceLayoutRoot(this.info.repositoryRelativePath);
@@ -2582,15 +2941,18 @@ export class SvnRepository implements vscode.Disposable {
             [layoutRoot, locationLabel].filter((segment) => segment !== "/").join("/")
         );
         const kindLabel = this.getReferenceKindLabel(kind);
+        const defaultValue =
+            this.getReferenceNameSuggestionForRepositoryPath(
+                kind,
+                suggestedRepositoryPath
+            ) ??
+            getCommitTargetLabel(this.info.repositoryRelativePath).replace(/^trunk$/, this.label);
         const referencePath = await vscode.window.showInputBox({
             prompt: this.i18n.t("newReferencePathFromWorkingCopyPrompt", {
                 kind: kindLabel,
                 location: locationPath,
             }),
-            value: getCommitTargetLabel(this.info.repositoryRelativePath).replace(
-                /^trunk$/,
-                this.label
-            ),
+            value: defaultValue,
             validateInput: (value) => {
                 const normalizedValue = value.trim().replace(/\\/g, "/");
                 if (!normalizedValue) {
@@ -2622,6 +2984,33 @@ export class SvnRepository implements vscode.Disposable {
             kind,
             trimmedReferencePath
         );
+    }
+
+    private getReferenceNameSuggestionForRepositoryPath(
+        kind: RepositoryReferenceKind,
+        suggestedRepositoryPath?: string
+    ): string | undefined {
+        if (!suggestedRepositoryPath) {
+            return undefined;
+        }
+
+        const layoutRoot = getReferenceLayoutRoot(this.info.repositoryRelativePath);
+        const locationRootPath = normalizeRepositoryPath(
+            [layoutRoot, getReferenceLocationLabel(kind)]
+                .filter((segment) => segment !== "/")
+                .join("/")
+        );
+        const normalizedPath = normalizeRepositoryPath(suggestedRepositoryPath);
+
+        if (normalizedPath === locationRootPath) {
+            return undefined;
+        }
+
+        if (!normalizedPath.startsWith(`${locationRootPath}/`)) {
+            return undefined;
+        }
+
+        return normalizedPath.slice(locationRootPath.length + 1);
     }
 
     private async promptDeleteReferenceTarget(): Promise<
@@ -3031,7 +3420,7 @@ export class SvnRepository implements vscode.Disposable {
 
     private async acceptConflictVersion(
         paths: string[],
-        accept: "mine-full" | "theirs-full"
+        accept: Exclude<ConflictResolutionMode, "working">
     ): Promise<void> {
         const conflictPaths = this.normalizeUniquePaths(paths);
         if (conflictPaths.length === 0) {
@@ -3044,10 +3433,8 @@ export class SvnRepository implements vscode.Disposable {
             return;
         }
 
-        const progressKey =
-            accept === "mine-full" ? "acceptMineProgress" : "acceptTheirsProgress";
-        const completedKey =
-            accept === "mine-full" ? "acceptedMineInfo" : "acceptedTheirsInfo";
+        const progressKey = this.getConflictResolutionProgressKey(accept);
+        const completedKey = this.getConflictResolutionCompletedKey(accept);
 
         await this.runRepositoryOperation(
             "resolve",
@@ -3073,26 +3460,22 @@ export class SvnRepository implements vscode.Disposable {
     }
 
     private async confirmConflictResolution(
-        mode: "working" | "mine-full" | "theirs-full",
+        mode: ConflictResolutionMode,
         itemLabel: string
     ): Promise<boolean> {
-        const message =
+        const messageKey =
             mode === "working"
-                ? this.i18n.t("markResolvedQuestion", { items: itemLabel })
-                : mode === "mine-full"
-                  ? this.i18n.t("acceptMineQuestion", { items: itemLabel })
-                  : this.i18n.t("acceptTheirsQuestion", { items: itemLabel });
+                ? "markResolvedQuestion"
+                : this.getConflictResolutionQuestionKey(mode);
         const detailLines = [
             mode === "working"
                 ? this.i18n.t("markResolvedDetail")
-                : mode === "mine-full"
-                  ? this.i18n.t("acceptMineDetail")
-                  : this.i18n.t("acceptTheirsDetail"),
+                : this.i18n.t(this.getConflictResolutionDetailKey(mode)),
             this.i18n.t("workingCopyOnlyDetail"),
         ];
 
         const selection = await vscode.window.showWarningMessage(
-            message,
+            this.i18n.t(messageKey, { items: itemLabel }),
             {
                 modal: true,
                 detail: detailLines.join("\n"),
@@ -3101,6 +3484,82 @@ export class SvnRepository implements vscode.Disposable {
         );
 
         return selection === this.i18n.t("continueButton");
+    }
+
+    private getConflictResolutionQuestionKey(
+        mode: Exclude<ConflictResolutionMode, "working">
+    ): MessageKey {
+        switch (mode) {
+            case "base":
+                return "acceptBaseQuestion";
+            case "mine-conflict":
+                return "acceptMineConflictQuestion";
+            case "theirs-conflict":
+                return "acceptTheirsConflictQuestion";
+            case "mine-full":
+                return "acceptMineQuestion";
+            case "theirs-full":
+                return "acceptTheirsQuestion";
+            case "postpone":
+                return "postponeConflictQuestion";
+        }
+    }
+
+    private getConflictResolutionDetailKey(
+        mode: Exclude<ConflictResolutionMode, "working">
+    ): MessageKey {
+        switch (mode) {
+            case "base":
+                return "acceptBaseDetail";
+            case "mine-conflict":
+                return "acceptMineConflictDetail";
+            case "theirs-conflict":
+                return "acceptTheirsConflictDetail";
+            case "mine-full":
+                return "acceptMineDetail";
+            case "theirs-full":
+                return "acceptTheirsDetail";
+            case "postpone":
+                return "postponeConflictDetail";
+        }
+    }
+
+    private getConflictResolutionProgressKey(
+        mode: Exclude<ConflictResolutionMode, "working">
+    ): MessageKey {
+        switch (mode) {
+            case "base":
+                return "acceptBaseProgress";
+            case "mine-conflict":
+                return "acceptMineConflictProgress";
+            case "theirs-conflict":
+                return "acceptTheirsConflictProgress";
+            case "mine-full":
+                return "acceptMineProgress";
+            case "theirs-full":
+                return "acceptTheirsProgress";
+            case "postpone":
+                return "postponeConflictProgress";
+        }
+    }
+
+    private getConflictResolutionCompletedKey(
+        mode: Exclude<ConflictResolutionMode, "working">
+    ): MessageKey {
+        switch (mode) {
+            case "base":
+                return "acceptedBaseInfo";
+            case "mine-conflict":
+                return "acceptedMineConflictInfo";
+            case "theirs-conflict":
+                return "acceptedTheirsConflictInfo";
+            case "mine-full":
+                return "acceptedMineInfo";
+            case "theirs-full":
+                return "acceptedTheirsInfo";
+            case "postpone":
+                return "postponedConflictInfo";
+        }
     }
 
     private hasLocalChanges(): boolean {
