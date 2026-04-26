@@ -16,6 +16,12 @@ interface RepositoryActionCategoryItem extends vscode.QuickPickItem {
     readonly actions: RepositoryActionItem[];
 }
 
+type RepositoryCommandHandler = (repository: SvnRepository) => Promise<void>;
+type ConflictCommandHandler = (
+    repository: SvnRepository,
+    paths: string[]
+) => Promise<void>;
+
 export class SvnRepositoryManager implements vscode.Disposable {
     private readonly disposables: vscode.Disposable[] = [];
     private readonly repositories = new Map<string, SvnRepository>();
@@ -37,6 +43,7 @@ export class SvnRepositoryManager implements vscode.Disposable {
         this.historyStatusBarItem.tooltip = getI18n().t("historyStatusTooltip");
         this.historyStatusBarItem.command = "svn-tree.open-history";
         this.historyStatusBarItem.hide();
+
         this.disposables.push(
             this.historyStatusBarItem,
             this.outputChannel,
@@ -45,207 +52,151 @@ export class SvnRepositoryManager implements vscode.Disposable {
                 SvnContentProvider.scheme,
                 this.contentProvider
             ),
-            vscode.commands.registerCommand("svn-tree.refresh", async (arg?: unknown) =>
-                this.runForRepository(arg, (repository) =>
-                    repository.refreshWithProgress({ forceRemote: true })
-                )
+            ...this.registerCommands(),
+            ...this.registerWorkspaceListeners()
+        );
+
+        this.restartRemoteRefreshTimer();
+        void this.initialize();
+    }
+
+    private registerCommands(): vscode.Disposable[] {
+        return [
+            this.registerRepositoryCommand("svn-tree.refresh", (repository) =>
+                repository.refreshWithProgress({ forceRemote: true })
             ),
-            vscode.commands.registerCommand("svn-tree.commit", async (arg?: unknown) =>
-                this.runForRepository(arg, (repository) => repository.commit())
+            this.registerRepositoryCommand("svn-tree.commit", (repository) =>
+                repository.commit()
             ),
-            vscode.commands.registerCommand(
-                "svn-tree.commit-selected",
-                async (arg?: unknown) => this.commitSelected(arg)
+            this.registerCommand("svn-tree.commit-selected", (arg) => this.commitSelected(arg)),
+            this.registerCommand("svn-tree.commit-changelist", (arg) =>
+                this.commitChangelist(arg)
             ),
-            vscode.commands.registerCommand(
-                "svn-tree.commit-changelist",
-                async (arg?: unknown) => this.commitChangelist(arg)
+            this.registerRepositoryCommand("svn-tree.update", (repository) =>
+                repository.update()
             ),
-            vscode.commands.registerCommand("svn-tree.update", async (arg?: unknown) =>
-                this.runForRepository(arg, (repository) => repository.update())
+            this.registerCommand("svn-tree.update-selected", (arg) => this.updateSelected(arg)),
+            this.registerCommand("svn-tree.update-selected-to-revision", (arg) =>
+                this.updateSelectedToRevision(arg)
             ),
-            vscode.commands.registerCommand(
-                "svn-tree.update-selected",
-                async (arg?: unknown) => this.updateSelected(arg)
+            this.registerCommand("svn-tree.switch-reference", (arg) => this.switchReference(arg)),
+            this.registerCommand("svn-tree.show-blame", (arg) => this.showBlame(arg)),
+            this.registerCommand("svn-tree.show-properties", (arg) => this.showProperties(arg)),
+            this.registerCommand("svn-tree.edit-property", (arg) => this.editProperty(arg)),
+            this.registerCommand("svn-tree.open-repository-browser", (arg) =>
+                this.openRepositoryBrowser(arg)
             ),
-            vscode.commands.registerCommand(
-                "svn-tree.update-selected-to-revision",
-                async (arg?: unknown) => this.updateSelectedToRevision(arg)
+            this.registerCommand("svn-tree.open-revision-graph", (arg) =>
+                this.openRevisionGraph(arg)
             ),
-            vscode.commands.registerCommand(
-                "svn-tree.switch-reference",
-                async (arg?: unknown) => this.switchReference(arg)
+            this.registerCommand("svn-tree.create-branch-from-working-copy", (arg) =>
+                this.createBranchFromWorkingCopy(arg)
             ),
-            vscode.commands.registerCommand("svn-tree.show-blame", async (arg?: unknown) =>
-                this.showBlame(arg)
+            this.registerCommand("svn-tree.create-tag-from-working-copy", (arg) =>
+                this.createTagFromWorkingCopy(arg)
             ),
-            vscode.commands.registerCommand("svn-tree.show-properties", async (arg?: unknown) =>
-                this.showProperties(arg)
+            this.registerCommand("svn-tree.delete-reference", (arg) =>
+                this.deleteReference(arg)
             ),
-            vscode.commands.registerCommand("svn-tree.edit-property", async (arg?: unknown) =>
-                this.editProperty(arg)
+            this.registerCommand("svn-tree.relocate-working-copy", (arg) =>
+                this.relocateWorkingCopy(arg)
             ),
-            vscode.commands.registerCommand(
-                "svn-tree.open-repository-browser",
-                async (arg?: unknown) => this.openRepositoryBrowser(arg)
+            this.registerCommand("svn-tree.update-to-revision", (arg) =>
+                this.updateToRevision(arg)
             ),
-            vscode.commands.registerCommand(
-                "svn-tree.open-revision-graph",
-                async (arg?: unknown) => this.openRevisionGraph(arg)
+            this.registerRepositoryCommand("svn-tree.cleanup", (repository) =>
+                repository.cleanup()
             ),
-            vscode.commands.registerCommand(
-                "svn-tree.create-branch-from-working-copy",
-                async (arg?: unknown) => this.createBranchFromWorkingCopy(arg)
+            this.registerRepositoryCommand("svn-tree.open-history", (repository) =>
+                repository.showHistory()
             ),
-            vscode.commands.registerCommand(
-                "svn-tree.create-tag-from-working-copy",
-                async (arg?: unknown) => this.createTagFromWorkingCopy(arg)
+            this.registerCommand("svn-tree.open-repository-actions", (arg) =>
+                this.openRepositoryActions(arg)
             ),
-            vscode.commands.registerCommand(
-                "svn-tree.delete-reference",
-                async (arg?: unknown) => this.deleteReference(arg)
-            ),
-            vscode.commands.registerCommand(
-                "svn-tree.relocate-working-copy",
-                async (arg?: unknown) => this.relocateWorkingCopy(arg)
-            ),
-            vscode.commands.registerCommand(
-                "svn-tree.update-to-revision",
-                async (arg?: unknown) => this.updateToRevision(arg)
-            ),
-            vscode.commands.registerCommand("svn-tree.cleanup", async (arg?: unknown) =>
-                this.runForRepository(arg, (repository) => repository.cleanup())
-            ),
-            vscode.commands.registerCommand("svn-tree.open-history", async (arg?: unknown) =>
-                this.runForRepository(arg, (repository) => repository.showHistory())
-            ),
-            vscode.commands.registerCommand(
-                "svn-tree.open-repository-actions",
-                async (arg?: unknown) => this.openRepositoryActions(arg)
-            ),
-            vscode.commands.registerCommand("svn-tree.show-output", async () => {
+            this.registerCommand("svn-tree.show-output", async () => {
                 this.outputChannel.show(true);
             }),
-            vscode.commands.registerCommand("svn-tree.open-diff", async (arg?: unknown) =>
-                this.openDiff(arg)
-            ),
-            vscode.commands.registerCommand("svn-tree.open-file", async (arg?: unknown) =>
-                this.openFile(arg)
-            ),
-            vscode.commands.registerCommand("svn-tree.revert-resource", async (arg?: unknown) =>
+            this.registerCommand("svn-tree.open-diff", (arg) => this.openDiff(arg)),
+            this.registerCommand("svn-tree.open-file", (arg) => this.openFile(arg)),
+            this.registerCommand("svn-tree.revert-resource", (arg) =>
                 this.revertResource(arg)
             ),
-            vscode.commands.registerCommand("svn-tree.resolve-conflict", async (arg?: unknown) =>
+            this.registerCommand("svn-tree.resolve-conflict", (arg) =>
                 this.resolveConflict(arg)
             ),
-            vscode.commands.registerCommand("svn-tree.accept-mine", async (arg?: unknown) =>
-                this.acceptMine(arg)
+            this.registerCommand("svn-tree.accept-mine", (arg) => this.acceptMine(arg)),
+            this.registerCommand("svn-tree.accept-base", (arg) => this.acceptBase(arg)),
+            this.registerCommand("svn-tree.accept-mine-conflict", (arg) =>
+                this.acceptMineConflict(arg)
             ),
-            vscode.commands.registerCommand("svn-tree.accept-base", async (arg?: unknown) =>
-                this.acceptBase(arg)
+            this.registerCommand("svn-tree.accept-theirs-conflict", (arg) =>
+                this.acceptTheirsConflict(arg)
             ),
-            vscode.commands.registerCommand(
-                "svn-tree.accept-mine-conflict",
-                async (arg?: unknown) => this.acceptMineConflict(arg)
-            ),
-            vscode.commands.registerCommand(
-                "svn-tree.accept-theirs-conflict",
-                async (arg?: unknown) => this.acceptTheirsConflict(arg)
-            ),
-            vscode.commands.registerCommand("svn-tree.accept-theirs", async (arg?: unknown) =>
-                this.acceptTheirs(arg)
-            ),
-            vscode.commands.registerCommand("svn-tree.postpone-conflict", async (arg?: unknown) =>
+            this.registerCommand("svn-tree.accept-theirs", (arg) => this.acceptTheirs(arg)),
+            this.registerCommand("svn-tree.postpone-conflict", (arg) =>
                 this.postponeConflict(arg)
             ),
-            vscode.commands.registerCommand("svn-tree.revert-group", async (arg?: unknown) =>
-                this.revertGroup(arg)
-            ),
-            vscode.commands.registerCommand("svn-tree.add-resource", async (arg?: unknown) =>
-                this.addResource(arg)
-            ),
-            vscode.commands.registerCommand("svn-tree.ignore-resource", async (arg?: unknown) =>
+            this.registerCommand("svn-tree.revert-group", (arg) => this.revertGroup(arg)),
+            this.registerCommand("svn-tree.add-resource", (arg) => this.addResource(arg)),
+            this.registerCommand("svn-tree.ignore-resource", (arg) =>
                 this.ignoreResource(arg)
             ),
-            vscode.commands.registerCommand("svn-tree.add-group", async (arg?: unknown) =>
-                this.addGroup(arg)
-            ),
-            vscode.commands.registerCommand("svn-tree.delete-resource", async (arg?: unknown) =>
+            this.registerCommand("svn-tree.add-group", (arg) => this.addGroup(arg)),
+            this.registerCommand("svn-tree.delete-resource", (arg) =>
                 this.deleteResource(arg)
             ),
-            vscode.commands.registerCommand("svn-tree.rename-path", async (arg?: unknown) =>
-                this.renamePath(arg)
+            this.registerCommand("svn-tree.rename-path", (arg) => this.renamePath(arg)),
+            this.registerCommand("svn-tree.lock-path", (arg) => this.lockPath(arg)),
+            this.registerCommand("svn-tree.unlock-path", (arg) => this.unlockPath(arg)),
+            this.registerCommand("svn-tree.ignore-path", (arg) => this.ignorePath(arg)),
+            this.registerCommand("svn-tree.unignore-path", (arg) => this.unignorePath(arg)),
+            this.registerCommand("svn-tree.show-path-info", (arg) => this.showPathInfo(arg)),
+            this.registerCommand("svn-tree.copy-repository-url", (arg) =>
+                this.copyRepositoryUrl(arg)
             ),
-            vscode.commands.registerCommand("svn-tree.lock-path", async (arg?: unknown) =>
-                this.lockPath(arg)
+            this.registerCommand("svn-tree.copy-repository-path", (arg) =>
+                this.copyRepositoryPath(arg)
             ),
-            vscode.commands.registerCommand("svn-tree.unlock-path", async (arg?: unknown) =>
-                this.unlockPath(arg)
-            ),
-            vscode.commands.registerCommand("svn-tree.ignore-path", async (arg?: unknown) =>
-                this.ignorePath(arg)
-            ),
-            vscode.commands.registerCommand("svn-tree.unignore-path", async (arg?: unknown) =>
-                this.unignorePath(arg)
-            ),
-            vscode.commands.registerCommand("svn-tree.show-path-info", async (arg?: unknown) =>
-                this.showPathInfo(arg)
-            ),
-            vscode.commands.registerCommand(
-                "svn-tree.copy-repository-url",
-                async (arg?: unknown) => this.copyRepositoryUrl(arg)
-            ),
-            vscode.commands.registerCommand(
-                "svn-tree.copy-repository-path",
-                async (arg?: unknown) => this.copyRepositoryPath(arg)
-            ),
-            vscode.commands.registerCommand("svn-tree.delete-group", async (arg?: unknown) =>
-                this.deleteGroup(arg)
-            ),
-            vscode.commands.registerCommand("svn-tree.open-history-diff", async (arg?: unknown) =>
-                this.openDiff(arg)
-            ),
-            vscode.commands.registerCommand("svn-tree.open-file-history", async (arg?: unknown) =>
+            this.registerCommand("svn-tree.delete-group", (arg) => this.deleteGroup(arg)),
+            this.registerCommand("svn-tree.open-history-diff", (arg) => this.openDiff(arg)),
+            this.registerCommand("svn-tree.open-file-history", (arg) =>
                 this.openFileHistory(arg)
             ),
-            vscode.commands.registerCommand(
-                "svn-tree.resolve-all-conflicts",
-                async (arg?: unknown) => this.resolveAllConflicts(arg)
+            this.registerCommand("svn-tree.resolve-all-conflicts", (arg) =>
+                this.resolveAllConflicts(arg)
             ),
-            vscode.commands.registerCommand("svn-tree.accept-mine-all", async (arg?: unknown) =>
+            this.registerCommand("svn-tree.accept-mine-all", (arg) =>
                 this.acceptMineAll(arg)
             ),
-            vscode.commands.registerCommand("svn-tree.accept-base-all", async (arg?: unknown) =>
+            this.registerCommand("svn-tree.accept-base-all", (arg) =>
                 this.acceptBaseAll(arg)
             ),
-            vscode.commands.registerCommand(
-                "svn-tree.accept-mine-conflict-all",
-                async (arg?: unknown) => this.acceptMineConflictAll(arg)
+            this.registerCommand("svn-tree.accept-mine-conflict-all", (arg) =>
+                this.acceptMineConflictAll(arg)
             ),
-            vscode.commands.registerCommand(
-                "svn-tree.accept-theirs-conflict-all",
-                async (arg?: unknown) => this.acceptTheirsConflictAll(arg)
+            this.registerCommand("svn-tree.accept-theirs-conflict-all", (arg) =>
+                this.acceptTheirsConflictAll(arg)
             ),
-            vscode.commands.registerCommand(
-                "svn-tree.accept-theirs-all",
-                async (arg?: unknown) => this.acceptTheirsAll(arg)
+            this.registerCommand("svn-tree.accept-theirs-all", (arg) =>
+                this.acceptTheirsAll(arg)
             ),
-            vscode.commands.registerCommand(
-                "svn-tree.postpone-all-conflicts",
-                async (arg?: unknown) => this.postponeAllConflicts(arg)
+            this.registerCommand("svn-tree.postpone-all-conflicts", (arg) =>
+                this.postponeAllConflicts(arg)
             ),
-            vscode.commands.registerCommand(
-                "svn-tree.add-to-changelist",
-                async (arg?: unknown) => this.addToChangelist(arg)
+            this.registerCommand("svn-tree.add-to-changelist", (arg) =>
+                this.addToChangelist(arg)
             ),
-            vscode.commands.registerCommand(
-                "svn-tree.remove-from-changelist",
-                async (arg?: unknown) => this.removeFromChangelist(arg)
+            this.registerCommand("svn-tree.remove-from-changelist", (arg) =>
+                this.removeFromChangelist(arg)
             ),
-            vscode.commands.registerCommand(
-                "svn-tree.reveal-in-file-manager",
-                async (arg?: unknown) => this.revealInFileManager(arg)
+            this.registerCommand("svn-tree.reveal-in-file-manager", (arg) =>
+                this.revealInFileManager(arg)
             ),
+        ];
+    }
+
+    private registerWorkspaceListeners(): vscode.Disposable[] {
+        return [
             vscode.workspace.onDidSaveTextDocument((document) => {
                 this.scheduleRefreshRepositoryForUri(document.uri, false);
             }),
@@ -290,11 +241,24 @@ export class SvnRepositoryManager implements vscode.Disposable {
                 if (languageChanged || remoteChanged) {
                     void this.refreshAll(false);
                 }
-            })
-        );
+            }),
+        ];
+    }
 
-        this.restartRemoteRefreshTimer();
-        void this.initialize();
+    private registerRepositoryCommand(
+        command: string,
+        action: RepositoryCommandHandler
+    ): vscode.Disposable {
+        return vscode.commands.registerCommand(command, async (arg?: unknown) =>
+            this.runForRepository(arg, action)
+        );
+    }
+
+    private registerCommand(
+        command: string,
+        action: (arg?: unknown) => Promise<void>
+    ): vscode.Disposable {
+        return vscode.commands.registerCommand(command, async (arg?: unknown) => action(arg));
     }
 
     public dispose(): void {
@@ -1441,242 +1405,122 @@ export class SvnRepositoryManager implements vscode.Disposable {
         await this.runForRepository(arg, (repository) => repository.relocateWorkingCopy());
     }
 
-    private async resolveAllConflicts(arg: unknown): Promise<void> {
-        const repository = await this.resolveRepository(arg);
-        if (!repository) {
-            return;
-        }
+    private async runAllConflictAction(
+        arg: unknown,
+        action: ConflictCommandHandler
+    ): Promise<void> {
+        await this.runForRepository(arg, async (repository) => {
+            const conflictedPaths = repository.getConflictedPaths();
+            if (conflictedPaths.length === 0) {
+                void vscode.window.showInformationMessage(getI18n().t("noConflictsInfo"));
+                return;
+            }
 
-        const conflictedPaths = repository.getConflictedPaths();
-        if (conflictedPaths.length === 0) {
-            void vscode.window.showInformationMessage(getI18n().t("noConflictsInfo"));
+            await action(repository, conflictedPaths);
+        });
+    }
+
+    private async runSelectedConflictAction(
+        arg: unknown,
+        action: ConflictCommandHandler
+    ): Promise<void> {
+        const resources = this.getSelectedResources(arg, ["svn-conflict"]);
+        if (resources.length === 0) {
             return;
         }
 
         try {
-            await repository.markResolved(conflictedPaths);
+            await action(
+                resources[0].repository,
+                resources.map((resource) => resource.status.absolutePath)
+            );
         } catch (error) {
             this.showError(error);
         }
+    }
+
+    private async resolveAllConflicts(arg: unknown): Promise<void> {
+        await this.runAllConflictAction(arg, (repository, paths) =>
+            repository.markResolved(paths)
+        );
     }
 
     private async acceptMineAll(arg: unknown): Promise<void> {
-        const repository = await this.resolveRepository(arg);
-        if (!repository) {
-            return;
-        }
-
-        const conflictedPaths = repository.getConflictedPaths();
-        if (conflictedPaths.length === 0) {
-            void vscode.window.showInformationMessage(getI18n().t("noConflictsInfo"));
-            return;
-        }
-
-        try {
-            await repository.acceptMine(conflictedPaths);
-        } catch (error) {
-            this.showError(error);
-        }
+        await this.runAllConflictAction(arg, (repository, paths) =>
+            repository.acceptMine(paths)
+        );
     }
 
     private async acceptBaseAll(arg: unknown): Promise<void> {
-        const repository = await this.resolveRepository(arg);
-        if (!repository) {
-            return;
-        }
-
-        const conflictedPaths = repository.getConflictedPaths();
-        if (conflictedPaths.length === 0) {
-            void vscode.window.showInformationMessage(getI18n().t("noConflictsInfo"));
-            return;
-        }
-
-        try {
-            await repository.acceptBase(conflictedPaths);
-        } catch (error) {
-            this.showError(error);
-        }
+        await this.runAllConflictAction(arg, (repository, paths) =>
+            repository.acceptBase(paths)
+        );
     }
 
     private async acceptMineConflictAll(arg: unknown): Promise<void> {
-        const repository = await this.resolveRepository(arg);
-        if (!repository) {
-            return;
-        }
-
-        const conflictedPaths = repository.getConflictedPaths();
-        if (conflictedPaths.length === 0) {
-            void vscode.window.showInformationMessage(getI18n().t("noConflictsInfo"));
-            return;
-        }
-
-        try {
-            await repository.acceptMineConflict(conflictedPaths);
-        } catch (error) {
-            this.showError(error);
-        }
+        await this.runAllConflictAction(arg, (repository, paths) =>
+            repository.acceptMineConflict(paths)
+        );
     }
 
     private async acceptTheirsConflictAll(arg: unknown): Promise<void> {
-        const repository = await this.resolveRepository(arg);
-        if (!repository) {
-            return;
-        }
-
-        const conflictedPaths = repository.getConflictedPaths();
-        if (conflictedPaths.length === 0) {
-            void vscode.window.showInformationMessage(getI18n().t("noConflictsInfo"));
-            return;
-        }
-
-        try {
-            await repository.acceptTheirsConflict(conflictedPaths);
-        } catch (error) {
-            this.showError(error);
-        }
+        await this.runAllConflictAction(arg, (repository, paths) =>
+            repository.acceptTheirsConflict(paths)
+        );
     }
 
     private async acceptTheirsAll(arg: unknown): Promise<void> {
-        const repository = await this.resolveRepository(arg);
-        if (!repository) {
-            return;
-        }
-
-        const conflictedPaths = repository.getConflictedPaths();
-        if (conflictedPaths.length === 0) {
-            void vscode.window.showInformationMessage(getI18n().t("noConflictsInfo"));
-            return;
-        }
-
-        try {
-            await repository.acceptTheirs(conflictedPaths);
-        } catch (error) {
-            this.showError(error);
-        }
+        await this.runAllConflictAction(arg, (repository, paths) =>
+            repository.acceptTheirs(paths)
+        );
     }
 
     private async postponeAllConflicts(arg: unknown): Promise<void> {
-        const repository = await this.resolveRepository(arg);
-        if (!repository) {
-            return;
-        }
-
-        const conflictedPaths = repository.getConflictedPaths();
-        if (conflictedPaths.length === 0) {
-            void vscode.window.showInformationMessage(getI18n().t("noConflictsInfo"));
-            return;
-        }
-
-        try {
-            await repository.postponeConflicts(conflictedPaths);
-        } catch (error) {
-            this.showError(error);
-        }
+        await this.runAllConflictAction(arg, (repository, paths) =>
+            repository.postponeConflicts(paths)
+        );
     }
 
     private async resolveConflict(arg: unknown): Promise<void> {
-        const resources = this.getSelectedResources(arg, ["svn-conflict"]);
-        if (resources.length === 0) {
-            return;
-        }
-
-        try {
-            await resources[0].repository.markResolved(
-                resources.map((resource) => resource.status.absolutePath)
-            );
-        } catch (error) {
-            this.showError(error);
-        }
+        await this.runSelectedConflictAction(arg, (repository, paths) =>
+            repository.markResolved(paths)
+        );
     }
 
     private async acceptMine(arg: unknown): Promise<void> {
-        const resources = this.getSelectedResources(arg, ["svn-conflict"]);
-        if (resources.length === 0) {
-            return;
-        }
-
-        try {
-            await resources[0].repository.acceptMine(
-                resources.map((resource) => resource.status.absolutePath)
-            );
-        } catch (error) {
-            this.showError(error);
-        }
+        await this.runSelectedConflictAction(arg, (repository, paths) =>
+            repository.acceptMine(paths)
+        );
     }
 
     private async acceptBase(arg: unknown): Promise<void> {
-        const resources = this.getSelectedResources(arg, ["svn-conflict"]);
-        if (resources.length === 0) {
-            return;
-        }
-
-        try {
-            await resources[0].repository.acceptBase(
-                resources.map((resource) => resource.status.absolutePath)
-            );
-        } catch (error) {
-            this.showError(error);
-        }
+        await this.runSelectedConflictAction(arg, (repository, paths) =>
+            repository.acceptBase(paths)
+        );
     }
 
     private async acceptMineConflict(arg: unknown): Promise<void> {
-        const resources = this.getSelectedResources(arg, ["svn-conflict"]);
-        if (resources.length === 0) {
-            return;
-        }
-
-        try {
-            await resources[0].repository.acceptMineConflict(
-                resources.map((resource) => resource.status.absolutePath)
-            );
-        } catch (error) {
-            this.showError(error);
-        }
+        await this.runSelectedConflictAction(arg, (repository, paths) =>
+            repository.acceptMineConflict(paths)
+        );
     }
 
     private async acceptTheirs(arg: unknown): Promise<void> {
-        const resources = this.getSelectedResources(arg, ["svn-conflict"]);
-        if (resources.length === 0) {
-            return;
-        }
-
-        try {
-            await resources[0].repository.acceptTheirs(
-                resources.map((resource) => resource.status.absolutePath)
-            );
-        } catch (error) {
-            this.showError(error);
-        }
+        await this.runSelectedConflictAction(arg, (repository, paths) =>
+            repository.acceptTheirs(paths)
+        );
     }
 
     private async acceptTheirsConflict(arg: unknown): Promise<void> {
-        const resources = this.getSelectedResources(arg, ["svn-conflict"]);
-        if (resources.length === 0) {
-            return;
-        }
-
-        try {
-            await resources[0].repository.acceptTheirsConflict(
-                resources.map((resource) => resource.status.absolutePath)
-            );
-        } catch (error) {
-            this.showError(error);
-        }
+        await this.runSelectedConflictAction(arg, (repository, paths) =>
+            repository.acceptTheirsConflict(paths)
+        );
     }
 
     private async postponeConflict(arg: unknown): Promise<void> {
-        const resources = this.getSelectedResources(arg, ["svn-conflict"]);
-        if (resources.length === 0) {
-            return;
-        }
-
-        try {
-            await resources[0].repository.postponeConflicts(
-                resources.map((resource) => resource.status.absolutePath)
-            );
-        } catch (error) {
-            this.showError(error);
-        }
+        await this.runSelectedConflictAction(arg, (repository, paths) =>
+            repository.postponeConflicts(paths)
+        );
     }
 
     private async revertGroup(arg: unknown): Promise<void> {
