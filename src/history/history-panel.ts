@@ -1,5 +1,9 @@
 import * as vscode from "vscode";
-import { getHtmlLanguage, type SupportedLocale } from "../i18n";
+import {
+    getHtmlLanguage,
+    normalizeFileManagerPlatform,
+    type SupportedLocale,
+} from "../i18n";
 import type { SvnRepository } from "../scm/svn-repository";
 import type { SvnLogPathChange } from "../svn/svn-types";
 import { getDisplayLocale, getI18n } from "../vscode-i18n";
@@ -163,6 +167,14 @@ export class HistoryPanel implements vscode.Disposable {
                 }
 
                 if (
+                    payload.type === "update-to-revision" &&
+                    typeof payload.revision === "number"
+                ) {
+                    await repository.updateToRevision(payload.revision);
+                    return;
+                }
+
+                if (
                     payload.type === "checkout-revision" &&
                     typeof payload.revision === "number"
                 ) {
@@ -255,6 +267,19 @@ export class HistoryPanel implements vscode.Disposable {
                         payload.path,
                         getI18n().t("copiedFilePathStatus", { revision: payload.revision })
                     );
+                    return;
+                }
+
+                if (
+                    payload.type === "reveal-in-file-manager" &&
+                    typeof payload.path === "string"
+                ) {
+                    await repository.revealRepositoryPathInFileManager(payload.path);
+                    return;
+                }
+
+                if (payload.type === "show-file-history" && typeof payload.path === "string") {
+                    await repository.showHistoryForRepositoryPath(payload.path);
                     return;
                 }
 
@@ -426,7 +451,8 @@ export class HistoryPanel implements vscode.Disposable {
       window.__SVN_HISTORY_BOOTSTRAP__ = {
         repositoryLabel: ${JSON.stringify(scope.label)},
         rootPath: ${JSON.stringify(repository.rootPath)},
-        locale: ${JSON.stringify(locale as SupportedLocale)}
+        locale: ${JSON.stringify(locale as SupportedLocale)},
+        platform: ${JSON.stringify(normalizeFileManagerPlatform(process.platform))}
       };
     </script>
     <script src="${appScriptUri}"></script>

@@ -88,9 +88,14 @@ export class SvnService {
         await this.run(args, { cwd: rootPath });
     }
 
-    public async update(rootPath: string, paths?: string[]): Promise<void> {
+    public async update(rootPath: string, paths?: string[], revision?: string): Promise<void> {
         const targets = this.toRelativeTargets(rootPath, paths);
-        const args = ["update", ...targets];
+        const args = ["update"];
+        if (revision) {
+            args.push("-r", revision);
+        }
+
+        args.push(...targets);
         await this.run(args, { cwd: rootPath });
     }
 

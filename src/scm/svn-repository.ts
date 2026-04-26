@@ -31,6 +31,10 @@ function buildRepositoryUrl(repositoryRoot: string, repositoryPath: string): str
     return url.toString();
 }
 
+function isUrlTarget(value: string): boolean {
+    return /^[a-z][a-z0-9+.-]*:\/\//i.test(value);
+}
+
 function isLocalChange(status: SvnStatusEntry): boolean {
     return (
         status.wcStatus !== "normal" &&
@@ -363,6 +367,29 @@ export class SvnRepository implements vscode.Disposable {
         );
     }
 
+    public async updateToRevision(revision: number): Promise<void> {
+        const confirmed = await this.confirmUpdateToRevision(revision);
+        if (!confirmed) {
+            return;
+        }
+
+        await this.runRepositoryOperation(
+            "update",
+            this.i18n.t("updateToRevisionProgress", {
+                label: this.label,
+                revision,
+            }),
+            this.i18n.t("updatedToRevisionInfo", {
+                label: this.label,
+                revision,
+            }),
+            async () => {
+                await this.svnService.update(this.rootPath, undefined, String(revision));
+                await this.refresh({ forceRemote: true, allowWhileBusy: true });
+            }
+        );
+    }
+
     public async checkoutRevision(revision: number): Promise<void> {
         const destinationPath = await this.promptRevisionDestination("checkout", revision);
         if (!destinationPath) {
@@ -591,6 +618,37 @@ export class SvnRepository implements vscode.Disposable {
         });
     }
 
+    public async showHistoryForRepositoryPath(repositoryPath: string): Promise<void> {
+        const label =
+            this.getWorkingCopyRelativePathForRepositoryPath(repositoryPath) ??
+            repositoryPath.replace(/^\/+/, "");
+        await this.historyPanel.show(this, {
+            key: `${this.rootPath}::repository-file::${repositoryPath}`,
+            label,
+            targetPath: buildRepositoryUrl(this.info.repositoryRoot, repositoryPath),
+        });
+    }
+
+    public async revealRepositoryPathInFileManager(repositoryPath: string): Promise<void> {
+        const absolutePath = this.getWorkingCopyPathForRepositoryPath(repositoryPath);
+        if (!absolutePath) {
+            void vscode.window.showWarningMessage(
+                this.i18n.t("cannotMapPathWarning", { path: repositoryPath })
+            );
+            return;
+        }
+
+        const revealPath = await this.getNearestExistingPath(absolutePath);
+        if (!revealPath) {
+            void vscode.window.showWarningMessage(
+                this.i18n.t("cannotMapPathWarning", { path: repositoryPath })
+            );
+            return;
+        }
+
+        await vscode.commands.executeCommand("revealFileInOS", vscode.Uri.file(revealPath));
+    }
+
     public async loadHistoryPage(
         beforeRevision?: number,
         targetPath?: string
@@ -784,11 +842,20 @@ export class SvnRepository implements vscode.Disposable {
     }
 
     private async getHistoryCurrentRevision(targetPath?: string): Promise<string | undefined> {
-        const candidatePath = targetPath
-            ? nodePath.join(this.rootPath, targetPath)
-            : this.rootPath;
+        if (!targetPath) {
+            const info = await this.svnService.getWorkingCopyInfo(this.rootPath);
+            return info?.revision ?? this.info.revision;
+        }
+
+        if (isUrlTarget(targetPath)) {
+            return this.info.revision;
+        }
+
+        const candidatePath = nodePath.isAbsolute(targetPath)
+            ? targetPath
+            : nodePath.join(this.rootPath, targetPath);
         const info = await this.svnService.getWorkingCopyInfo(candidatePath);
-        return info?.revision ?? (!targetPath ? this.info.revision : undefined);
+        return info?.revision;
     }
 
     private async pickHistoryFileChange(
@@ -903,12 +970,41 @@ export class SvnRepository implements vscode.Disposable {
         return nodePath.join(this.rootPath, ...relativePath.split("/"));
     }
 
+    private getWorkingCopyRelativePathForRepositoryPath(
+        repositoryPath: string
+    ): string | undefined {
+        const absolutePath = this.getWorkingCopyPathForRepositoryPath(repositoryPath);
+        if (!absolutePath) {
+            return undefined;
+        }
+
+        const relativePath = nodePath.relative(this.rootPath, absolutePath).replace(/\\/g, "/");
+        return relativePath.length > 0 ? relativePath : undefined;
+    }
+
     private async pathExists(targetPath: string): Promise<boolean> {
         try {
             await vscode.workspace.fs.stat(vscode.Uri.file(targetPath));
             return true;
         } catch {
             return false;
+        }
+    }
+
+    private async getNearestExistingPath(targetPath: string): Promise<string | undefined> {
+        let candidatePath = targetPath;
+
+        while (true) {
+            if (await this.pathExists(candidatePath)) {
+                return candidatePath;
+            }
+
+            const parentPath = nodePath.dirname(candidatePath);
+            if (parentPath === candidatePath) {
+                return undefined;
+            }
+
+            candidatePath = parentPath;
         }
     }
 
@@ -1185,9 +1281,7 @@ export class SvnRepository implements vscode.Disposable {
         mode: "revert-to-revision" | "revert-changes-from-revision",
         revision: number
     ): Promise<boolean> {
-        const hasLocalChanges =
-            this.changesGroup.resourceStates.length > 0 ||
-            this.unversionedGroup.resourceStates.length > 0;
+        const hasLocalChanges = this.hasLocalChanges();
         const message =
             mode === "revert-to-revision"
                 ? this.i18n.t("revertWorkingCopyQuestion", { revision })
@@ -1214,5 +1308,36 @@ export class SvnRepository implements vscode.Disposable {
         );
 
         return selection === this.i18n.t("continueButton");
+    }
+
+    private async confirmUpdateToRevision(revision: number): Promise<boolean> {
+        const detailLines = [
+            this.i18n.t("updateToRevisionDetail", { revision }),
+            this.i18n.t("updateToRevisionRecoveryDetail"),
+            this.i18n.t("cleanWorkingCopyRecommended"),
+            this.i18n.t("workingCopyOnlyDetail"),
+        ];
+
+        if (this.hasLocalChanges()) {
+            detailLines.push(this.i18n.t("localChangesConflictWarning"));
+        }
+
+        const selection = await vscode.window.showWarningMessage(
+            this.i18n.t("updateToRevisionQuestion", { revision }),
+            {
+                modal: true,
+                detail: detailLines.join("\n"),
+            },
+            this.i18n.t("continueButton")
+        );
+
+        return selection === this.i18n.t("continueButton");
+    }
+
+    private hasLocalChanges(): boolean {
+        return (
+            this.changesGroup.resourceStates.length > 0 ||
+            this.unversionedGroup.resourceStates.length > 0
+        );
     }
 }

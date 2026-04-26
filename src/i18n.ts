@@ -1,5 +1,6 @@
 export type SupportedLocale = "en" | "zh-CN";
 export type DisplayLanguageSetting = "auto" | SupportedLocale;
+export type FileManagerPlatform = "mac" | "windows" | "linux" | "unknown";
 
 const englishMessages = {
     openDiff: "Open Diff",
@@ -22,6 +23,12 @@ const englishMessages = {
     updateWorkingCopyProgress: "Updating working copy {label}...",
     updateWorkingCopyCompleted: "Working copy update completed for {label}",
     updateWorkingCopyRunningTooltip: "Updating working copy...",
+    updateToRevisionQuestion: "Update the current working copy to r{revision}?",
+    updateToRevisionDetail:
+        "This will update the current working copy to r{revision}.",
+    updateToRevisionRecoveryDetail: "You can update back to HEAD later if needed.",
+    updateToRevisionProgress: "Updating working copy {label} to r{revision}...",
+    updatedToRevisionInfo: "Updated working copy {label} to r{revision}.",
     cleanupWorkingCopyActionLabel: "Cleanup Working Copy",
     cleanupWorkingCopyActionDescription: "Run svn cleanup for this working copy",
     cleanupWorkingCopyProgress: "Cleaning up working copy {label}...",
@@ -123,14 +130,19 @@ const englishMessages = {
     noChangedPathsReported: "No changed paths were reported for this revision.",
     changedFilesLabel: "Changed Files",
     filesLabel: "Files",
-    checkoutToThisRevision: "Checkout To This Revision",
+    checkoutToThisRevision: "Checkout This Revision To New Folder",
     exportThisRevision: "Export This Revision",
+    updateWorkingCopyToThisRevision: "Update Current Working Copy To This Revision",
     compareWithWorkingCopy: "Compare With Working Copy",
     compareWithPreviousRevision: "Compare With Previous Revision",
     revertToThisRevision: "Revert To This Revision",
     revertChangesFromThisRevision: "Revert Changes From This Revision",
     createBranchFromThisRevision: "Create Branch From This Revision",
     createTagFromThisRevision: "Create Tag From This Revision",
+    showFileHistory: "Show Full History For This File",
+    revealInFinder: "Reveal in Finder",
+    revealInExplorer: "Reveal in Explorer",
+    revealInFileManager: "Reveal in File Manager",
     copyFilePath: "Copy File Path",
     copyRevisionNumber: "Copy Revision Number",
     copyCommitMessage: "Copy Commit Message",
@@ -202,6 +214,11 @@ const messages: Record<SupportedLocale, MessageCatalog> = {
         updateWorkingCopyProgress: "正在更新工作副本 {label}...",
         updateWorkingCopyCompleted: "已完成 {label} 的工作副本更新",
         updateWorkingCopyRunningTooltip: "正在更新工作副本...",
+        updateToRevisionQuestion: "要将当前工作副本更新到 r{revision} 吗？",
+        updateToRevisionDetail: "这会把当前工作副本更新到 r{revision}。",
+        updateToRevisionRecoveryDetail: "如有需要，后续仍可再更新回 HEAD。",
+        updateToRevisionProgress: "正在将工作副本 {label} 更新到 r{revision}...",
+        updatedToRevisionInfo: "已将工作副本 {label} 更新到 r{revision}。",
         cleanupWorkingCopyActionLabel: "清理工作副本",
         cleanupWorkingCopyActionDescription: "对当前工作副本执行 svn cleanup",
         cleanupWorkingCopyProgress: "正在清理工作副本 {label}...",
@@ -302,14 +319,19 @@ const messages: Record<SupportedLocale, MessageCatalog> = {
         noChangedPathsReported: "此版本没有报告任何变更路径。",
         changedFilesLabel: "变更文件",
         filesLabel: "文件数",
-        checkoutToThisRevision: "检出到此版本",
+        checkoutToThisRevision: "检出此版本到新目录",
         exportThisRevision: "导出此版本",
+        updateWorkingCopyToThisRevision: "更新当前工作副本到此版本",
         compareWithWorkingCopy: "与当前工作副本比较",
         compareWithPreviousRevision: "与上一版本比较",
         revertToThisRevision: "还原到此版本",
         revertChangesFromThisRevision: "还原此版本引入的更改",
         createBranchFromThisRevision: "从此版本创建分支",
         createTagFromThisRevision: "从此版本创建标签",
+        showFileHistory: "查看此文件的所有变更记录",
+        revealInFinder: "在 Finder 中显示",
+        revealInExplorer: "在资源管理器中显示",
+        revealInFileManager: "在文件管理器中显示",
         copyFilePath: "复制文件路径",
         copyRevisionNumber: "复制版本号",
         copyCommitMessage: "复制提交说明",
@@ -365,6 +387,21 @@ function normalizeLocale(language: string | undefined): SupportedLocale {
     return language?.toLowerCase().startsWith("zh") ? "zh-CN" : "en";
 }
 
+export function normalizeFileManagerPlatform(platform: string | undefined): FileManagerPlatform {
+    switch (platform) {
+        case "darwin":
+        case "mac":
+            return "mac";
+        case "win32":
+        case "windows":
+            return "windows";
+        case "linux":
+            return "linux";
+        default:
+            return "unknown";
+    }
+}
+
 export interface RuntimeI18n {
     readonly locale: SupportedLocale;
     readonly isChinese: boolean;
@@ -375,6 +412,7 @@ export interface RuntimeI18n {
     formatSvnStatus(status: string | undefined): string;
     formatNodeKind(kind: string | undefined): string;
     formatHistoryAction(action: string | undefined): string;
+    formatRevealInFileManager(platform: FileManagerPlatform): string;
 }
 
 export function resolveDisplayLanguage(
@@ -471,6 +509,16 @@ export function createI18n(locale: SupportedLocale): RuntimeI18n {
                     return translate("historyActionModified");
                 default:
                     return action ?? "";
+            }
+        },
+        formatRevealInFileManager: (platform) => {
+            switch (platform) {
+                case "mac":
+                    return translate("revealInFinder");
+                case "windows":
+                    return translate("revealInExplorer");
+                default:
+                    return translate("revealInFileManager");
             }
         },
     };

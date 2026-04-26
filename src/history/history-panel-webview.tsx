@@ -1,9 +1,15 @@
 import React from "react";
 import { createRoot } from "react-dom/client";
-import { createI18n, type RuntimeI18n, type SupportedLocale } from "../i18n";
+import {
+    createI18n,
+    type FileManagerPlatform,
+    type RuntimeI18n,
+    type SupportedLocale,
+} from "../i18n";
 
 type HistoryViewStyle = "summary" | "detail";
 type ContextActionType =
+    | "update-to-revision"
     | "checkout-revision"
     | "export-revision"
     | "compare-with-working-copy"
@@ -20,12 +26,15 @@ type FileContextActionType =
     | "open-file-diff"
     | "compare-file-with-working-copy"
     | "compare-file-with-previous-revision"
+    | "show-file-history"
+    | "reveal-in-file-manager"
     | "copy-file-path";
 
 interface HistoryBootstrap {
     repositoryLabel: string;
     rootPath: string;
     locale: SupportedLocale;
+    platform: FileManagerPlatform;
 }
 
 interface HistoryChange {
@@ -96,6 +105,7 @@ type HistoryRequestMessage =
       }
     | {
           type:
+              | "update-to-revision"
               | "checkout-revision"
               | "export-revision"
               | "revert-to-revision"
@@ -110,6 +120,10 @@ type HistoryRequestMessage =
           revision: number;
           path: string;
           action: string;
+      }
+    | {
+          type: "show-file-history" | "reveal-in-file-manager";
+          path: string;
       }
     | {
           type: "copy-file-path";
@@ -164,6 +178,7 @@ interface HistoryState {
     repositoryLabel: string;
     rootPath: string;
     locale: SupportedLocale;
+    platform: FileManagerPlatform;
 }
 
 interface ChangeTreeDirectory {
@@ -216,6 +231,7 @@ interface CommitDetailsProps {
 
 interface ContextMenuProps {
     i18n: RuntimeI18n;
+    platform: FileManagerPlatform;
     menu?: ContextMenuState;
     entry?: HistoryEntry;
     onClose: () => void;
@@ -281,6 +297,7 @@ function isHistoryConfigMessage(
         repositoryLabel: "",
         rootPath: "",
         locale: "en",
+        platform: "unknown",
     };
     const h = React.createElement;
 
@@ -865,6 +882,48 @@ function isHistoryConfigMessage(
                                 props.i18n.t("compareWithPreviousRevision")
                             )
                         ),
+                        h(
+                            "button",
+                            {
+                                className: "context-menu-item",
+                                type: "button",
+                                onClick: function () {
+                                    props.onFileAction("show-file-history", entry.revision, change);
+                                },
+                            },
+                            h("span", {
+                                className: "codicon codicon-history",
+                                "aria-hidden": "true",
+                            }),
+                            h(
+                                "span",
+                                { className: "context-menu-label" },
+                                props.i18n.t("showFileHistory")
+                            )
+                        ),
+                        h(
+                            "button",
+                            {
+                                className: "context-menu-item",
+                                type: "button",
+                                onClick: function () {
+                                    props.onFileAction(
+                                        "reveal-in-file-manager",
+                                        entry.revision,
+                                        change
+                                    );
+                                },
+                            },
+                            h("span", {
+                                className: "codicon codicon-folder-opened",
+                                "aria-hidden": "true",
+                            }),
+                            h(
+                                "span",
+                                { className: "context-menu-label" },
+                                props.i18n.formatRevealInFileManager(props.platform)
+                            )
+                        ),
                         h("div", { className: "context-menu-separator", "aria-hidden": "true" }),
                         h(
                             "button",
@@ -913,6 +972,25 @@ function isHistoryConfigMessage(
                 h(
                     "div",
                     { className: "context-menu-actions" },
+                    h(
+                        "button",
+                        {
+                            className: "context-menu-item",
+                            type: "button",
+                            onClick: function () {
+                                props.onAction("update-to-revision", entry);
+                            },
+                        },
+                        h("span", {
+                            className: "codicon codicon-cloud-download",
+                            "aria-hidden": "true",
+                        }),
+                        h(
+                            "span",
+                            { className: "context-menu-label" },
+                            props.i18n.t("updateWorkingCopyToThisRevision")
+                        )
+                    ),
                     h(
                         "button",
                         {
@@ -1125,6 +1203,7 @@ function isHistoryConfigMessage(
             repositoryLabel: bootstrap.repositoryLabel,
             rootPath: bootstrap.rootPath,
             locale: bootstrap.locale,
+            platform: bootstrap.platform,
         });
         const i18n = createI18n(state.locale);
 
@@ -1511,6 +1590,14 @@ function isHistoryConfigMessage(
                 return;
             }
 
+            if (type === "show-file-history" || type === "reveal-in-file-manager") {
+                vscode.postMessage({
+                    type: type,
+                    path: change.path,
+                });
+                return;
+            }
+
             vscode.postMessage({
                 type: "copy-file-path",
                 revision: revision,
@@ -1840,6 +1927,7 @@ function isHistoryConfigMessage(
             ),
             h(ContextMenu, {
                 i18n: i18n,
+                platform: state.platform,
                 menu: state.contextMenu,
                 entry: contextEntry,
                 onClose: hideContextMenu,
