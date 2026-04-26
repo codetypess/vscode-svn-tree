@@ -16,6 +16,7 @@
     ]
   },
   "include": [
-    "src/history/history-panel-webview.tsx"
+    "src/history/history-panel-webview.tsx",
+    "src/revision-graph/revision-graph-webview.tsx"
   ]
 }

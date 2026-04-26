@@ -39,11 +39,32 @@ export function splitRepositoryPath(value: string): string[] {
     return normalized === "/" ? [] : normalized.slice(1).split("/");
 }
 
+export function getRepositoryReferenceRoot(repositoryPath: string): string | undefined {
+    const segments = splitRepositoryPath(repositoryPath);
+    const trunkIndex = segments.indexOf("trunk");
+    if (trunkIndex !== -1) {
+        return normalizeRepositoryPath(segments.slice(0, trunkIndex + 1).join("/"));
+    }
+
+    const branchesIndex = segments.indexOf("branches");
+    if (branchesIndex !== -1 && branchesIndex + 1 < segments.length) {
+        return normalizeRepositoryPath(segments.slice(0, branchesIndex + 2).join("/"));
+    }
+
+    const tagsIndex = segments.indexOf("tags");
+    if (tagsIndex !== -1 && tagsIndex + 1 < segments.length) {
+        return normalizeRepositoryPath(segments.slice(0, tagsIndex + 2).join("/"));
+    }
+
+    return undefined;
+}
+
 export function getRepositoryReferenceDisplay(repositoryRelativePath: string): {
     icon: string;
     label: string;
 } {
-    const segments = splitRepositoryPath(repositoryRelativePath);
+    const referenceRoot = getRepositoryReferenceRoot(repositoryRelativePath);
+    const segments = splitRepositoryPath(referenceRoot ?? repositoryRelativePath);
     if (segments.length === 0) {
         return {
             icon: "repo",
@@ -51,8 +72,7 @@ export function getRepositoryReferenceDisplay(repositoryRelativePath: string): {
         };
     }
 
-    const trunkIndex = segments.indexOf("trunk");
-    if (trunkIndex !== -1) {
+    if (segments.at(-1) === "trunk") {
         return {
             icon: "git-branch",
             label: "trunk",
@@ -82,13 +102,14 @@ export function getRepositoryReferenceDisplay(repositoryRelativePath: string): {
 }
 
 export function getCommitTargetLabel(repositoryRelativePath: string): string {
-    const segments = splitRepositoryPath(repositoryRelativePath);
+    const segments = splitRepositoryPath(
+        getRepositoryReferenceRoot(repositoryRelativePath) ?? repositoryRelativePath
+    );
     if (segments.length === 0) {
         return "/";
     }
 
-    const trunkIndex = segments.indexOf("trunk");
-    if (trunkIndex !== -1) {
+    if (segments.at(-1) === "trunk") {
         return "trunk";
     }
 

@@ -6,10 +6,14 @@ import {
     toRevisionNumber,
 } from "../history/history-utils";
 import { HistoryPanel } from "../history/history-panel";
+import { buildRevisionGraph } from "../revision-graph/revision-graph-utils";
+import { RevisionGraphPanel } from "../revision-graph/revision-graph-panel";
+import type { RevisionGraphData } from "../revision-graph/revision-graph-types";
 import { SvnContentProvider } from "../svn/svn-content-provider";
 import { SvnService } from "../svn/svn-service";
 import type {
     SvnHistoryFilters,
+    SvnLogEntry,
     SvnLogPage,
     SvnLogPathChange,
     SvnPropertyEntry,
@@ -50,6 +54,7 @@ import {
     getCommitTargetLabel,
     getReferenceLayoutRoot,
     getReferenceNameSuggestion,
+    getRepositoryReferenceRoot,
     getRepositoryReferenceDisplay,
     getWorkingCopyPathForRepositoryPath,
     getWorkingCopyRelativePathForRepositoryPath,
@@ -97,6 +102,10 @@ type RepositoryUiOperation =
     | "lock"
     | "unlock";
 type RepositoryRevisionTransferOperation = "checkout" | "export";
+
+const revisionGraphMinEntryCount = 300;
+const revisionGraphMaxEntryCount = 1000;
+const revisionGraphEntryMultiplier = 3;
 
 const conflictResolutionMessages: Record<
     SelectableConflictResolutionMode,
@@ -251,6 +260,7 @@ export class SvnRepository implements vscode.Disposable {
         public readonly info: SvnWorkingCopyInfo,
         private readonly svnService: SvnService,
         private readonly historyPanel: HistoryPanel,
+        private readonly revisionGraphPanel: RevisionGraphPanel,
         private readonly contentProvider: SvnContentProvider,
         private readonly outputChannel: vscode.OutputChannel
     ) {
@@ -1294,6 +1304,45 @@ export class SvnRepository implements vscode.Disposable {
 
     public async showHistory(): Promise<void> {
         await this.historyPanel.show(this);
+    }
+
+    public async showRevisionGraph(repositoryPath?: string): Promise<void> {
+        await this.revisionGraphPanel.show(this, repositoryPath);
+    }
+
+    public async loadRevisionGraph(repositoryPath?: string): Promise<RevisionGraphData> {
+        const selectedRepositoryPath = normalizeRepositoryPath(
+            repositoryPath ?? this.info.repositoryRelativePath
+        );
+        const selectedReferencePath =
+            getRepositoryReferenceRoot(selectedRepositoryPath) ?? selectedRepositoryPath;
+        const graphRootPath = this.getRevisionGraphRootPath(selectedReferencePath);
+        const { entries, truncated } = await this.loadRevisionGraphEntries(graphRootPath);
+        const graph = buildRevisionGraph({
+            entries,
+            currentRepositoryPath: this.info.repositoryRelativePath,
+            selectedRepositoryPath: selectedReferencePath,
+        });
+
+        return {
+            scopeLabel: getCommitTargetLabel(selectedReferencePath),
+            layoutRootPath: graphRootPath,
+            selectedRepositoryPath,
+            selectedReferencePath: graph.selectedReferencePath,
+            currentReferencePath: graph.currentReferencePath,
+            nodes: graph.nodes,
+            edges: graph.edges,
+            scannedEntryCount: entries.length,
+            truncated,
+        };
+    }
+
+    public getRepositoryUrlForPath(repositoryPath: string): string {
+        return buildRepositoryUrl(this.info.repositoryRoot, repositoryPath);
+    }
+
+    public async switchToRepositoryPath(repositoryPath: string): Promise<void> {
+        await this.switchWorkingCopyToRepositoryPath(repositoryPath);
     }
 
     public async openRepositoryBrowser(initialRepositoryPath?: string): Promise<void> {
@@ -2435,6 +2484,67 @@ export class SvnRepository implements vscode.Disposable {
         }
 
         await vscode.commands.executeCommand("revealFileInOS", vscode.Uri.file(destinationPath));
+    }
+
+    private getRevisionGraphRootPath(repositoryPath: string): string {
+        const referencePath = getRepositoryReferenceRoot(repositoryPath);
+        if (!referencePath) {
+            return normalizeRepositoryPath(repositoryPath);
+        }
+
+        return getReferenceLayoutRoot(referencePath);
+    }
+
+    private getRevisionGraphEntryLimit(): number {
+        const configuredPageSize = vscode.workspace
+            .getConfiguration("svn-tree")
+            .get<number>("max-log-entries", 200);
+        return Math.min(
+            revisionGraphMaxEntryCount,
+            Math.max(
+                revisionGraphMinEntryCount,
+                Math.floor(configuredPageSize * revisionGraphEntryMultiplier)
+            )
+        );
+    }
+
+    private async loadRevisionGraphEntries(
+        graphRootPath: string
+    ): Promise<{ entries: SvnLogEntry[]; truncated: boolean }> {
+        const target = buildRepositoryUrl(this.info.repositoryRoot, graphRootPath);
+        const entries: SvnLogEntry[] = [];
+        const entryLimit = this.getRevisionGraphEntryLimit();
+        const pageSize = Math.min(
+            entryLimit,
+            vscode.workspace.getConfiguration("svn-tree").get<number>("max-log-entries", 200)
+        );
+
+        let beforeRevision: number | undefined;
+        let hasMore = true;
+
+        while (entries.length < entryLimit && hasMore) {
+            const remaining = entryLimit - entries.length;
+            const page = await this.svnService.getLog(
+                this.rootPath,
+                Math.min(pageSize, remaining),
+                beforeRevision,
+                target
+            );
+
+            if (page.entries.length === 0) {
+                hasMore = false;
+                break;
+            }
+
+            entries.push(...page.entries);
+            hasMore = page.hasMore;
+            beforeRevision = page.nextBeforeRevision;
+        }
+
+        return {
+            entries,
+            truncated: hasMore,
+        };
     }
 
     private updateStatusBarCommands(remoteCount: number): void {

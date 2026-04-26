@@ -8,6 +8,7 @@ import {
     getReferenceKindForRepositoryPath,
     getReferenceLayoutRoot,
     getReferenceNameSuggestion,
+    getRepositoryReferenceRoot,
     getRepositoryReferenceDisplay,
     getWorkingCopyPathForRepositoryPath,
     getWorkingCopyRelativePathForRepositoryPath,
@@ -25,11 +26,33 @@ test("repository path helpers normalize and split repository paths", () => {
 
 test("repository path helpers derive labels and layout roots from standard svn layouts", () => {
     assert.equal(getCommitTargetLabel("/project/trunk"), "trunk");
+    assert.equal(getCommitTargetLabel("/project/trunk/src/app.ts"), "trunk");
     assert.equal(getCommitTargetLabel("/project/branches/feature-x"), "branches/feature-x");
+    assert.equal(
+        getCommitTargetLabel("/project/branches/feature-x/src/app.ts"),
+        "branches/feature-x"
+    );
     assert.equal(getReferenceLayoutRoot("/project/trunk/src"), "/project");
+    assert.equal(
+        getRepositoryReferenceRoot("/project/trunk/src/components/button.ts"),
+        "/project/trunk"
+    );
+    assert.equal(
+        getRepositoryReferenceRoot("/project/branches/feature-x/src/index.ts"),
+        "/project/branches/feature-x"
+    );
+    assert.equal(
+        getRepositoryReferenceRoot("/project/tags/v1.0.0/src/index.ts"),
+        "/project/tags/v1.0.0"
+    );
+    assert.equal(getRepositoryReferenceRoot("/project/releases/current"), undefined);
     assert.deepEqual(getRepositoryReferenceDisplay("/project/tags/v1.0.0"), {
         icon: "tag",
         label: "tags/v1.0.0",
+    });
+    assert.deepEqual(getRepositoryReferenceDisplay("/project/branches/feature-x/src/index.ts"), {
+        icon: "git-branch",
+        label: "branches/feature-x",
     });
 });
 

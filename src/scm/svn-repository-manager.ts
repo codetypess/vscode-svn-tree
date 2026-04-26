@@ -1,6 +1,7 @@
 import * as nodePath from "node:path";
 import * as vscode from "vscode";
 import { HistoryPanel } from "../history/history-panel";
+import { RevisionGraphPanel } from "../revision-graph/revision-graph-panel";
 import type { SvnNodeInfo } from "../svn/svn-types";
 import { getI18n } from "../vscode-i18n";
 import { SvnContentProvider } from "../svn/svn-content-provider";
@@ -35,10 +36,12 @@ export class SvnRepositoryManager implements vscode.Disposable {
     private readonly svnService = new SvnService(this.outputChannel);
     private readonly contentProvider = new SvnContentProvider(this.svnService);
     private readonly historyPanel: HistoryPanel;
+    private readonly revisionGraphPanel: RevisionGraphPanel;
     private remoteRefreshTimer: NodeJS.Timeout | undefined;
 
     public constructor(context: vscode.ExtensionContext) {
         this.historyPanel = new HistoryPanel(context.extensionUri);
+        this.revisionGraphPanel = new RevisionGraphPanel(context.extensionUri);
         this.historyStatusBarItem.text = "$(history)";
         this.historyStatusBarItem.tooltip = getI18n().t("historyStatusTooltip");
         this.historyStatusBarItem.command = "svn-tree.open-history";
@@ -48,6 +51,7 @@ export class SvnRepositoryManager implements vscode.Disposable {
             this.historyStatusBarItem,
             this.outputChannel,
             this.historyPanel,
+            this.revisionGraphPanel,
             vscode.workspace.registerTextDocumentContentProvider(
                 SvnContentProvider.scheme,
                 this.contentProvider
@@ -311,6 +315,7 @@ export class SvnRepositoryManager implements vscode.Disposable {
                     },
                     this.svnService,
                     this.historyPanel,
+                    this.revisionGraphPanel,
                     this.contentProvider,
                     this.outputChannel
                 );
@@ -1204,7 +1209,7 @@ export class SvnRepositoryManager implements vscode.Disposable {
         const target = this.resolvePathTarget(arg);
         if (target) {
             try {
-                await target.repository.showHistoryForRepositoryPath(
+                await target.repository.showRevisionGraph(
                     target.repository.resolveRepositoryPath(target.uri.fsPath)
                 );
             } catch (error) {
@@ -1213,7 +1218,7 @@ export class SvnRepositoryManager implements vscode.Disposable {
             return;
         }
 
-        await this.runForRepository(arg, (repository) => repository.showHistory());
+        await this.runForRepository(arg, (repository) => repository.showRevisionGraph());
     }
 
     private async renamePath(arg: unknown): Promise<void> {
@@ -1787,6 +1792,7 @@ export class SvnRepositoryManager implements vscode.Disposable {
         for (const repository of this.repositories.values()) {
             repository.refreshLocalization();
             this.historyPanel.refreshLocalization(repository);
+            this.revisionGraphPanel.refreshLocalization(repository);
         }
     }
 
