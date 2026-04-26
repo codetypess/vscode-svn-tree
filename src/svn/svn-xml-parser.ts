@@ -123,36 +123,44 @@ export function parseInfoXml(xml: string, fallbackPath: string): SvnWorkingCopyI
 }
 
 export function parseStatusXml(xml: string, rootPath: string): SvnStatusEntry[] {
+    type ParsedStatusEntry = {
+        path?: string;
+        kind?: string;
+        "wc-status"?: {
+            item?: string;
+            revision?: string;
+            commit?: {
+                revision?: string;
+                author?: string;
+                date?: string;
+            };
+        };
+        "repos-status"?: {
+            item?: string;
+        };
+    };
+
     const parsed = xmlParser.parse(xml) as {
         status?: {
             target?: MaybeArray<{
                 path?: string;
-                entry?: MaybeArray<{
-                    path?: string;
-                    kind?: string;
-                    "wc-status"?: {
-                        item?: string;
-                        revision?: string;
-                        commit?: {
-                            revision?: string;
-                            author?: string;
-                            date?: string;
-                        };
-                    };
-                    "repos-status"?: {
-                        item?: string;
-                    };
-                }>;
+                entry?: MaybeArray<ParsedStatusEntry>;
+            }>;
+            changelist?: MaybeArray<{
+                name?: string;
+                entry?: MaybeArray<ParsedStatusEntry>;
             }>;
         };
     };
 
     const targets = asArray(parsed.status?.target);
-
-    return targets.flatMap((target) => {
-        const targetBasePath = target.path ? nodePath.resolve(rootPath, target.path) : rootPath;
-
-        return asArray(target.entry).map((entry) => {
+    const changelists = asArray(parsed.status?.changelist);
+    const toStatusEntries = (
+        entries: MaybeArray<ParsedStatusEntry> | undefined,
+        targetBasePath: string,
+        changelist?: string
+    ) =>
+        asArray(entries).map((entry) => {
             const absolutePath = nodePath.resolve(targetBasePath, entry.path ?? ".");
             const relativePath =
                 nodePath.relative(rootPath, absolutePath) || nodePath.basename(absolutePath);
@@ -164,6 +172,7 @@ export function parseStatusXml(xml: string, rootPath: string): SvnStatusEntry[] 
                 relativePath,
                 kind: toNodeKind(entry.kind),
                 wcStatus,
+                changelist,
                 reposStatus,
                 revision: asString(entry["wc-status"]?.revision) || undefined,
                 committedRevision: asString(entry["wc-status"]?.commit?.revision) || undefined,
@@ -171,7 +180,22 @@ export function parseStatusXml(xml: string, rootPath: string): SvnStatusEntry[] 
                 date: asString(entry["wc-status"]?.commit?.date) || undefined,
             };
         });
-    });
+
+    return [
+        ...targets.flatMap((target) =>
+            toStatusEntries(
+                target.entry,
+                target.path ? nodePath.resolve(rootPath, target.path) : rootPath
+            )
+        ),
+        ...changelists.flatMap((changelist) =>
+            toStatusEntries(
+                changelist.entry,
+                rootPath,
+                asString(changelist.name) || undefined
+            )
+        ),
+    ];
 }
 
 export function parseLogXml(xml: string): SvnLogEntry[] {

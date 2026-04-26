@@ -135,6 +135,14 @@ export class ScmResource implements vscode.SourceControlResourceState {
             );
         }
 
+        if (this.status.changelist) {
+            segments.push(
+                i18n.t("changelistLabel", {
+                    name: this.status.changelist,
+                })
+            );
+        }
+
         return segments.join("\n");
     }
 

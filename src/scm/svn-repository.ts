@@ -25,7 +25,13 @@ interface CommitQuickPickItem extends vscode.QuickPickItem {
 }
 
 type RepositoryReferenceKind = "branch" | "tag";
-type RepositoryUiOperation = "refresh" | "update" | "cleanup" | "resolve";
+type RepositoryUiOperation =
+    | "refresh"
+    | "update"
+    | "cleanup"
+    | "resolve"
+    | "switch"
+    | "rename";
 
 function posixJoin(left: string, right: string): string {
     return `${left.replace(/\/+$/, "")}/${right.replace(/\\/g, "/").replace(/^\/+/, "")}`;
@@ -201,7 +207,7 @@ export class SvnRepository implements vscode.Disposable {
     private readonly conflictArtifactsGroup: vscode.SourceControlResourceGroup;
     private readonly unversionedGroup: vscode.SourceControlResourceGroup;
     private readonly remoteChangesGroup: vscode.SourceControlResourceGroup;
-    private readonly repositoryReference: ReturnType<typeof getRepositoryReferenceDisplay>;
+    private repositoryReference: ReturnType<typeof getRepositoryReferenceDisplay>;
     private readonly sourceControl: vscode.SourceControl;
     private remoteChangeCount = 0;
     private lastRemoteRefreshAt = 0;
@@ -278,6 +284,7 @@ export class SvnRepository implements vscode.Disposable {
     }
 
     public refreshLocalization(): void {
+        this.repositoryReference = getRepositoryReferenceDisplay(this.info.repositoryRelativePath);
         this.sourceControl.acceptInputCommand = {
             command: "svn-tree.commit",
             title: this.i18n.t("commitAcceptTitle"),
@@ -435,6 +442,130 @@ export class SvnRepository implements vscode.Disposable {
         return this.getResourcePaths(this.unversionedGroup.resourceStates);
     }
 
+    public async ignoreWorkingCopyPath(targetPath: string): Promise<void> {
+        if (nodePath.resolve(targetPath) === nodePath.resolve(this.rootPath)) {
+            throw new Error(this.i18n.t("cannotIgnoreWorkingCopyRootError"));
+        }
+
+        await this.updateIgnoredName(nodePath.dirname(targetPath), nodePath.basename(targetPath), true);
+        await this.refresh({ allowWhileBusy: true });
+    }
+
+    public async unignoreWorkingCopyPath(targetPath: string): Promise<void> {
+        if (nodePath.resolve(targetPath) === nodePath.resolve(this.rootPath)) {
+            throw new Error(this.i18n.t("cannotIgnoreWorkingCopyRootError"));
+        }
+
+        await this.updateIgnoredName(nodePath.dirname(targetPath), nodePath.basename(targetPath), false);
+        await this.refresh({ allowWhileBusy: true });
+    }
+
+    public async renameWorkingCopyPath(targetPath: string, newName: string): Promise<string> {
+        const resolvedTargetPath = nodePath.resolve(targetPath);
+        const trimmedName = newName.trim();
+        const currentName = nodePath.basename(resolvedTargetPath);
+        const relativePath =
+            nodePath.relative(this.rootPath, resolvedTargetPath).replace(/\\/g, "/") ||
+            currentName;
+
+        if (resolvedTargetPath === nodePath.resolve(this.rootPath)) {
+            throw new Error(this.i18n.t("cannotRenameWorkingCopyRootError"));
+        }
+
+        if (!trimmedName) {
+            throw new Error(this.i18n.t("renamePathRequired"));
+        }
+
+        if (trimmedName.includes("/") || trimmedName.includes("\\")) {
+            throw new Error(this.i18n.t("renamePathPathSeparatorError"));
+        }
+
+        if (trimmedName === "." || trimmedName === "..") {
+            throw new Error(this.i18n.t("renamePathInvalidNameError"));
+        }
+
+        if (trimmedName === currentName) {
+            throw new Error(this.i18n.t("renamePathSameNameError"));
+        }
+
+        const destinationPath = nodePath.join(nodePath.dirname(resolvedTargetPath), trimmedName);
+        if (await this.pathExists(destinationPath)) {
+            throw new Error(
+                this.i18n.t("renamePathExistsError", {
+                    name: trimmedName,
+                })
+            );
+        }
+
+        await this.runRepositoryOperation(
+            "rename",
+            this.i18n.t("renamePathProgress", { path: relativePath }),
+            this.i18n.t("renamedPathCompleted", {
+                from: currentName,
+                to: trimmedName,
+            }),
+            async () => {
+                const trackedInfo = await this.svnService.getWorkingCopyInfo(resolvedTargetPath);
+                if (trackedInfo) {
+                    await this.svnService.move(
+                        this.rootPath,
+                        resolvedTargetPath,
+                        destinationPath
+                    );
+                } else {
+                    await vscode.workspace.fs.rename(
+                        vscode.Uri.file(resolvedTargetPath),
+                        vscode.Uri.file(destinationPath),
+                        { overwrite: false }
+                    );
+                }
+
+                await this.refresh({ allowWhileBusy: true });
+            }
+        );
+
+        return destinationPath;
+    }
+
+    public async addToChangelist(paths: string[], name: string): Promise<void> {
+        const changelistName = name.trim();
+        const selectedPaths = this.normalizeUniquePaths(paths);
+        if (!changelistName || selectedPaths.length === 0) {
+            return;
+        }
+
+        await this.svnService.addToChangelist(this.rootPath, selectedPaths, changelistName);
+        await this.refresh({ allowWhileBusy: true });
+    }
+
+    public async removeFromChangelist(paths: string[]): Promise<void> {
+        const selectedPaths = this.normalizeUniquePaths(paths);
+        if (selectedPaths.length === 0) {
+            return;
+        }
+
+        await this.svnService.removeFromChangelist(this.rootPath, selectedPaths);
+        await this.refresh({ allowWhileBusy: true });
+    }
+
+    public async commitChangelist(name: string): Promise<void> {
+        const changelistName = name.trim();
+        const message = this.sourceControl.inputBox.value.trim();
+
+        if (!message) {
+            throw new Error(this.i18n.t("emptyCommitMessageError"));
+        }
+
+        if (!changelistName) {
+            throw new Error(this.i18n.t("changelistNameRequired"));
+        }
+
+        await this.svnService.commitChangelist(this.rootPath, message, changelistName);
+        this.sourceControl.inputBox.value = "";
+        await this.refresh({ forceRemote: true });
+        await this.historyPanel.refresh(this);
+    }
+
     private getCommittableResources(): ScmResource[] {
         return this.changesGroup.resourceStates.filter(
             (resource): resource is ScmResource =>
@@ -498,6 +629,31 @@ export class SvnRepository implements vscode.Disposable {
         );
     }
 
+    public async switchRepositoryReference(): Promise<void> {
+        const target = await this.promptSwitchTarget();
+        if (!target) {
+            return;
+        }
+
+        await this.runRepositoryOperation(
+            "switch",
+            this.i18n.t("switchWorkingCopyProgress", {
+                label: this.label,
+                target: target.display,
+            }),
+            this.i18n.t("switchedWorkingCopyCompleted", {
+                label: this.label,
+                target: target.display,
+            }),
+            async () => {
+                await this.svnService.switch(this.rootPath, target.url);
+                await this.refreshWorkingCopyInfo();
+                await this.refresh({ forceRemote: true, allowWhileBusy: true });
+                await this.historyPanel.refresh(this);
+            }
+        );
+    }
+
     private getResourcePaths(
         resourceStates: readonly vscode.SourceControlResourceState[]
     ): string[] {
@@ -510,6 +666,38 @@ export class SvnRepository implements vscode.Disposable {
         return resourceStates.filter(
             (resource): resource is ScmResource => resource instanceof ScmResource
         );
+    }
+
+    private async updateIgnoredName(
+        parentPath: string,
+        name: string,
+        ignored: boolean
+    ): Promise<void> {
+        const currentValue = await this.svnService.getProperty(parentPath, "svn:ignore");
+        const entries = new Set(
+            (currentValue ?? "")
+                .split(/\r?\n/)
+                .map((entry) => entry.trim())
+                .filter(Boolean)
+        );
+
+        if (ignored) {
+            entries.add(name);
+        } else {
+            entries.delete(name);
+        }
+
+        const nextValue = [...entries].sort((left, right) => left.localeCompare(right)).join("\n");
+        if (!nextValue) {
+            if (currentValue !== undefined) {
+                await this.svnService.deleteProperty(parentPath, "svn:ignore");
+            }
+            return;
+        }
+
+        if (nextValue !== currentValue) {
+            await this.svnService.setProperty(parentPath, "svn:ignore", nextValue);
+        }
     }
 
     public async updateToRevision(revision: number): Promise<void> {
@@ -1056,6 +1244,21 @@ export class SvnRepository implements vscode.Disposable {
         return info?.revision ?? this.info.revision;
     }
 
+    private async refreshWorkingCopyInfo(): Promise<void> {
+        const info = await this.svnService.getWorkingCopyInfo(this.rootPath);
+        if (!info) {
+            return;
+        }
+
+        this.info.rootPath = info.rootPath;
+        this.info.workingCopyRoot = info.workingCopyRoot;
+        this.info.url = info.url;
+        this.info.repositoryRoot = info.repositoryRoot;
+        this.info.repositoryRelativePath = info.repositoryRelativePath;
+        this.info.revision = info.revision;
+        this.refreshLocalization();
+    }
+
     private async pickHistoryFileChange(
         revision: number,
         changes: SvnLogPathChange[],
@@ -1320,6 +1523,10 @@ export class SvnRepository implements vscode.Disposable {
                 return this.i18n.t("cleanupWorkingCopyRunningTooltip");
             case "resolve":
                 return this.i18n.t("resolveConflictsRunningTooltip");
+            case "switch":
+                return this.i18n.t("switchWorkingCopyRunningTooltip");
+            case "rename":
+                return this.i18n.t("renamePathRunningTooltip");
         }
     }
 
@@ -1333,6 +1540,10 @@ export class SvnRepository implements vscode.Disposable {
                 return this.i18n.t("cleanupWorkingCopyActionLabel");
             case "resolve":
                 return this.i18n.t("resolveConflictsActionLabel");
+            case "switch":
+                return this.i18n.t("switchWorkingCopyActionLabel");
+            case "rename":
+                return this.i18n.t("renamePathActionLabel");
         }
     }
 
@@ -1477,6 +1688,63 @@ export class SvnRepository implements vscode.Disposable {
             kind,
             trimmedReferencePath
         );
+    }
+
+    private async promptSwitchTarget(): Promise<{ display: string; url: string } | undefined> {
+        const switchTarget = await vscode.window.showInputBox({
+            title: this.i18n.t("switchWorkingCopyActionLabel"),
+            prompt: this.i18n.t("switchTargetPrompt", {
+                layoutRoot: getReferenceLayoutRoot(this.info.repositoryRelativePath),
+            }),
+            placeHolder: this.i18n.t("switchTargetPlaceholder"),
+            value: getCommitTargetLabel(this.info.repositoryRelativePath),
+            validateInput: (value) => this.validateSwitchTarget(value),
+        });
+        const trimmedTarget = switchTarget?.trim();
+        if (!trimmedTarget) {
+            return undefined;
+        }
+
+        return this.resolveSwitchTarget(trimmedTarget);
+    }
+
+    private validateSwitchTarget(value: string): string | undefined {
+        const trimmedValue = value.trim();
+        if (!trimmedValue) {
+            return this.i18n.t("switchTargetRequired");
+        }
+
+        if (isUrlTarget(trimmedValue)) {
+            return undefined;
+        }
+
+        const segments = trimmedValue.replace(/\\/g, "/").split("/").filter(Boolean);
+        if (segments.some((segment) => segment === "." || segment === "..")) {
+            return this.i18n.t("switchTargetInvalid");
+        }
+
+        return undefined;
+    }
+
+    private resolveSwitchTarget(target: string): { display: string; url: string } {
+        if (isUrlTarget(target)) {
+            return {
+                display: target,
+                url: target,
+            };
+        }
+
+        const layoutRoot = getReferenceLayoutRoot(this.info.repositoryRelativePath);
+        const repositoryPath = target.startsWith("/")
+            ? normalizeRepositoryPath(target)
+            : normalizeRepositoryPath(
+                  [layoutRoot, target].filter((segment) => segment !== "/").join("/")
+              );
+
+        return {
+            display: repositoryPath,
+            url: buildRepositoryUrl(this.info.repositoryRoot, repositoryPath),
+        };
     }
 
     private async confirmReverseMerge(

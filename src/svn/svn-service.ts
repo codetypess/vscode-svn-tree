@@ -101,6 +101,10 @@ export class SvnService {
         await this.run(args, { cwd: rootPath });
     }
 
+    public async switch(rootPath: string, target: string): Promise<void> {
+        await this.run(["switch", target, "."], { cwd: rootPath });
+    }
+
     public async checkout(target: string, revision: string, destinationPath: string): Promise<void> {
         const args = ["checkout", "-r", revision, target, destinationPath];
         await this.run(args);
@@ -170,6 +174,39 @@ export class SvnService {
         await this.run(args, { cwd: rootPath });
     }
 
+    public async move(
+        rootPath: string,
+        sourcePath: string,
+        destinationPath: string
+    ): Promise<void> {
+        const [sourceTarget, destinationTarget] = this.toRelativeTargets(rootPath, [
+            sourcePath,
+            destinationPath,
+        ]);
+        await this.run(["move", sourceTarget, destinationTarget], { cwd: rootPath });
+    }
+
+    public async addToChangelist(rootPath: string, paths: string[], name: string): Promise<void> {
+        const targets = this.toRelativeTargets(rootPath, paths);
+        await this.run(["changelist", name, ...targets], { cwd: rootPath });
+    }
+
+    public async removeFromChangelist(rootPath: string, paths: string[]): Promise<void> {
+        const targets = this.toRelativeTargets(rootPath, paths);
+        await this.run(["changelist", "--remove", ...targets], { cwd: rootPath });
+    }
+
+    public async commitChangelist(
+        rootPath: string,
+        message: string,
+        changelist: string
+    ): Promise<void> {
+        await this.run(
+            ["commit", "--changelist", changelist, "-m", message, "."],
+            { cwd: rootPath }
+        );
+    }
+
     public async resolve(
         rootPath: string,
         paths: string[],
@@ -178,6 +215,27 @@ export class SvnService {
         const targets = this.toRelativeTargets(rootPath, paths);
         const args = ["resolve", "--accept", accept, ...targets];
         await this.run(args, { cwd: rootPath });
+    }
+
+    public async getProperty(target: string, name: string): Promise<string | undefined> {
+        try {
+            const { stdout } = await this.run(["propget", name, target], { quiet: true });
+            return stdout.replace(/\r\n/g, "\n").replace(/\n$/, "");
+        } catch {
+            return undefined;
+        }
+    }
+
+    public async setProperty(target: string, name: string, value: string): Promise<void> {
+        await this.run(["propset", name, value, target], {
+            cwd: nodePath.isAbsolute(target) ? nodePath.dirname(target) : undefined,
+        });
+    }
+
+    public async deleteProperty(target: string, name: string): Promise<void> {
+        await this.run(["propdel", name, target], {
+            cwd: nodePath.isAbsolute(target) ? nodePath.dirname(target) : undefined,
+        });
     }
 
     public async cat(target: string, revision: string): Promise<string> {

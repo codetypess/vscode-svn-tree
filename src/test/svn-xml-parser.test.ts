@@ -42,15 +42,22 @@ test("parseStatusXml extracts local and remote states", () => {
       <wc-status item="unversioned" />
     </entry>
   </target>
+  <changelist name="feature-a">
+    <entry path="src/feature.ts" kind="file">
+      <wc-status item="modified" revision="12" />
+    </entry>
+  </changelist>
 </status>`;
 
     const statuses = parseStatusXml(xml, "/workspace/project");
 
-    assert.equal(statuses.length, 2);
+    assert.equal(statuses.length, 3);
     assert.equal(statuses[0].relativePath, "src/app.ts");
     assert.equal(statuses[0].wcStatus, "modified");
     assert.equal(statuses[0].reposStatus, "modified");
     assert.equal(statuses[1].wcStatus, "unversioned");
+    assert.equal(statuses[2].relativePath, "src/feature.ts");
+    assert.equal(statuses[2].changelist, "feature-a");
 });
 
 test("parseLogXml extracts revisions and changed paths", () => {
