@@ -162,6 +162,16 @@
         "category": "%command.category%"
       },
       {
+        "command": "svn-tree.lock-path",
+        "title": "%command.lockPath.title%",
+        "category": "%command.category%"
+      },
+      {
+        "command": "svn-tree.unlock-path",
+        "title": "%command.unlockPath.title%",
+        "category": "%command.category%"
+      },
+      {
         "command": "svn-tree.ignore-path",
         "title": "%command.ignorePath.title%",
         "category": "%command.category%"
@@ -169,6 +179,21 @@
       {
         "command": "svn-tree.unignore-path",
         "title": "%command.unignorePath.title%",
+        "category": "%command.category%"
+      },
+      {
+        "command": "svn-tree.show-path-info",
+        "title": "%command.showPathInfo.title%",
+        "category": "%command.category%"
+      },
+      {
+        "command": "svn-tree.copy-repository-url",
+        "title": "%command.copyRepositoryUrl.title%",
+        "category": "%command.category%"
+      },
+      {
+        "command": "svn-tree.copy-repository-path",
+        "title": "%command.copyRepositoryPath.title%",
         "category": "%command.category%"
       },
       {
@@ -264,14 +289,39 @@
           "group": "2_history@1"
         },
         {
+          "command": "svn-tree.copy-repository-url",
+          "when": "resourceScheme == file",
+          "group": "3_copy@1"
+        },
+        {
+          "command": "svn-tree.copy-repository-path",
+          "when": "resourceScheme == file",
+          "group": "3_copy@2"
+        },
+        {
+          "command": "svn-tree.lock-path",
+          "when": "explorerResourceIsFolder == false && resourceScheme == file",
+          "group": "4_lock@1"
+        },
+        {
+          "command": "svn-tree.unlock-path",
+          "when": "explorerResourceIsFolder == false && resourceScheme == file",
+          "group": "4_lock@2"
+        },
+        {
           "command": "svn-tree.ignore-path",
           "when": "resourceScheme == file",
-          "group": "3_ignore@1"
+          "group": "5_ignore@1"
         },
         {
           "command": "svn-tree.unignore-path",
           "when": "resourceScheme == file",
-          "group": "3_ignore@2"
+          "group": "5_ignore@2"
+        },
+        {
+          "command": "svn-tree.show-path-info",
+          "when": "resourceScheme == file",
+          "group": "6_info@1"
         }
       ],
       "scm/title": [
@@ -382,6 +432,21 @@
           "group": "navigation@4"
         },
         {
+          "command": "svn-tree.copy-repository-url",
+          "when": "scmProvider == svn-tree && (scmResourceState == svn-change || scmResourceState == svn-conflict || scmResourceState == svn-remote-change)",
+          "group": "navigation@5"
+        },
+        {
+          "command": "svn-tree.copy-repository-path",
+          "when": "scmProvider == svn-tree && (scmResourceState == svn-change || scmResourceState == svn-conflict || scmResourceState == svn-remote-change)",
+          "group": "navigation@6"
+        },
+        {
+          "command": "svn-tree.show-path-info",
+          "when": "scmProvider == svn-tree && (scmResourceState == svn-change || scmResourceState == svn-conflict || scmResourceState == svn-remote-change)",
+          "group": "navigation@7"
+        },
+        {
           "command": "svn-tree.add-resource",
           "when": "scmProvider == svn-tree && scmResourceState == svn-unversioned",
           "group": "inline@2"
@@ -420,6 +485,16 @@
           "command": "svn-tree.remove-from-changelist",
           "when": "scmProvider == svn-tree && (scmResourceState == svn-change || scmResourceState == svn-conflict)",
           "group": "3_svn@5"
+        },
+        {
+          "command": "svn-tree.lock-path",
+          "when": "scmProvider == svn-tree && (scmResourceState == svn-change || scmResourceState == svn-conflict)",
+          "group": "3_svn@6"
+        },
+        {
+          "command": "svn-tree.unlock-path",
+          "when": "scmProvider == svn-tree && (scmResourceState == svn-change || scmResourceState == svn-conflict)",
+          "group": "3_svn@7"
         },
         {
           "command": "svn-tree.resolve-conflict",

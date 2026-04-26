@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { parseInfoXml, parseLogXml, parseStatusXml } from "../svn/svn-xml-parser";
+import { parseInfoXml, parseLogXml, parseNodeInfoXml, parseStatusXml } from "../svn/svn-xml-parser";
 
 test("parseInfoXml extracts working copy metadata", () => {
     const xml = `<?xml version="1.0"?>
@@ -58,6 +58,41 @@ test("parseStatusXml extracts local and remote states", () => {
     assert.equal(statuses[1].wcStatus, "unversioned");
     assert.equal(statuses[2].relativePath, "src/feature.ts");
     assert.equal(statuses[2].changelist, "feature-a");
+});
+
+test("parseNodeInfoXml extracts node metadata and lock info", () => {
+    const xml = `<?xml version="1.0"?>
+<info>
+  <entry kind="file" path="src/app.ts" revision="42">
+    <url>https://svn.example.com/repos/project/trunk/src/app.ts</url>
+    <relative-url>^/project/trunk/src/app.ts</relative-url>
+    <repository>
+      <root>https://svn.example.com/repos</root>
+    </repository>
+    <wc-info>
+      <wcroot-abspath>/workspace/project</wcroot-abspath>
+    </wc-info>
+    <commit revision="41">
+      <author>alice</author>
+      <date>2026-04-24T01:02:03.000000Z</date>
+    </commit>
+    <lock>
+      <owner>bob</owner>
+      <comment>editing</comment>
+      <created>2026-04-25T01:02:03.000000Z</created>
+    </lock>
+  </entry>
+</info>`;
+
+    const info = parseNodeInfoXml(xml, "/workspace/project/src/app.ts");
+
+    assert.ok(info);
+    assert.equal(info.absolutePath, "/workspace/project/src/app.ts");
+    assert.equal(info.kind, "file");
+    assert.equal(info.repositoryRelativePath, "/project/trunk/src/app.ts");
+    assert.equal(info.committedRevision, "41");
+    assert.equal(info.lockOwner, "bob");
+    assert.equal(info.lockComment, "editing");
 });
 
 test("parseLogXml extracts revisions and changed paths", () => {

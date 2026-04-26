@@ -3,6 +3,7 @@ import { XMLParser } from "fast-xml-parser";
 import type {
     SvnLogEntry,
     SvnLogPathChange,
+    SvnNodeInfo,
     SvnNodeKind,
     SvnStatusEntry,
     SvnWorkingCopyInfo,
@@ -83,25 +84,42 @@ function trimCaretPrefix(value: string): string {
     return value.startsWith("^") ? value.slice(1) : value;
 }
 
-export function parseInfoXml(xml: string, fallbackPath: string): SvnWorkingCopyInfo | undefined {
+type ParsedInfoEntry = {
+    path?: string;
+    kind?: string;
+    revision?: string;
+    url?: string;
+    "relative-url"?: string;
+    repository?: {
+        root?: string;
+    };
+    "wc-info"?: {
+        "wcroot-abspath"?: string;
+    };
+    commit?: {
+        revision?: string;
+        author?: string;
+        date?: string;
+    };
+    lock?: {
+        owner?: string;
+        comment?: string;
+        created?: string;
+    };
+};
+
+function parseInfoEntry(xml: string): ParsedInfoEntry | undefined {
     const parsed = xmlParser.parse(xml) as {
         info?: {
-            entry?: {
-                path?: string;
-                revision?: string;
-                url?: string;
-                "relative-url"?: string;
-                repository?: {
-                    root?: string;
-                };
-                "wc-info"?: {
-                    "wcroot-abspath"?: string;
-                };
-            };
+            entry?: ParsedInfoEntry;
         };
     };
 
-    const entry = parsed.info?.entry;
+    return parsed.info?.entry;
+}
+
+export function parseInfoXml(xml: string, fallbackPath: string): SvnWorkingCopyInfo | undefined {
+    const entry = parseInfoEntry(xml);
     const url = asString(entry?.url);
     const repositoryRoot = asString(entry?.repository?.root);
     const workingCopyRoot = asString(entry?.["wc-info"]?.["wcroot-abspath"]);
@@ -119,6 +137,33 @@ export function parseInfoXml(xml: string, fallbackPath: string): SvnWorkingCopyI
         repositoryRoot,
         repositoryRelativePath,
         revision: asString(entry?.revision) || undefined,
+    };
+}
+
+export function parseNodeInfoXml(xml: string, fallbackPath: string): SvnNodeInfo | undefined {
+    const entry = parseInfoEntry(xml);
+    const url = asString(entry?.url);
+    const repositoryRoot = asString(entry?.repository?.root);
+    const repositoryRelativePath = trimCaretPrefix(asString(entry?.["relative-url"])) || "/";
+
+    if (!url || !repositoryRoot || !repositoryRelativePath) {
+        return undefined;
+    }
+
+    return {
+        absolutePath: fallbackPath,
+        kind: toNodeKind(entry?.kind),
+        url,
+        repositoryRoot,
+        repositoryRelativePath,
+        workingCopyRoot: asString(entry?.["wc-info"]?.["wcroot-abspath"]) || undefined,
+        revision: asString(entry?.revision) || undefined,
+        committedRevision: asString(entry?.commit?.revision) || undefined,
+        author: asString(entry?.commit?.author) || undefined,
+        date: asString(entry?.commit?.date) || undefined,
+        lockOwner: asString(entry?.lock?.owner) || undefined,
+        lockComment: asString(entry?.lock?.comment) || undefined,
+        lockCreated: asString(entry?.lock?.created) || undefined,
     };
 }
 

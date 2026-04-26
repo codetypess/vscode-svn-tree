@@ -1,6 +1,7 @@
 import * as nodePath from "node:path";
 import * as vscode from "vscode";
 import { HistoryPanel } from "../history/history-panel";
+import type { SvnNodeInfo } from "../svn/svn-types";
 import { getI18n } from "../vscode-i18n";
 import { SvnContentProvider } from "../svn/svn-content-provider";
 import { SvnService } from "../svn/svn-service";
@@ -122,11 +123,28 @@ export class SvnRepositoryManager implements vscode.Disposable {
             vscode.commands.registerCommand("svn-tree.rename-path", async (arg?: unknown) =>
                 this.renamePath(arg)
             ),
+            vscode.commands.registerCommand("svn-tree.lock-path", async (arg?: unknown) =>
+                this.lockPath(arg)
+            ),
+            vscode.commands.registerCommand("svn-tree.unlock-path", async (arg?: unknown) =>
+                this.unlockPath(arg)
+            ),
             vscode.commands.registerCommand("svn-tree.ignore-path", async (arg?: unknown) =>
                 this.ignorePath(arg)
             ),
             vscode.commands.registerCommand("svn-tree.unignore-path", async (arg?: unknown) =>
                 this.unignorePath(arg)
+            ),
+            vscode.commands.registerCommand("svn-tree.show-path-info", async (arg?: unknown) =>
+                this.showPathInfo(arg)
+            ),
+            vscode.commands.registerCommand(
+                "svn-tree.copy-repository-url",
+                async (arg?: unknown) => this.copyRepositoryUrl(arg)
+            ),
+            vscode.commands.registerCommand(
+                "svn-tree.copy-repository-path",
+                async (arg?: unknown) => this.copyRepositoryPath(arg)
             ),
             vscode.commands.registerCommand("svn-tree.delete-group", async (arg?: unknown) =>
                 this.deleteGroup(arg)
@@ -741,29 +759,220 @@ export class SvnRepositoryManager implements vscode.Disposable {
         }
     }
 
-    private async renamePath(arg: unknown): Promise<void> {
-        const uri = this.getUriFromArg(arg);
-        if (!uri) {
-            return;
-        }
-
-        const repository = this.getRepositoryForUri(uri);
-        if (!repository) {
+    private async showPathInfo(arg: unknown): Promise<void> {
+        const target = this.resolvePathTarget(arg);
+        if (!target) {
             void vscode.window.showInformationMessage(getI18n().t("noWorkingCopyInfo"));
             return;
         }
 
-        const newName = await this.promptRenamePathName(repository, uri.fsPath);
+        try {
+            const nodeInfo = await this.resolveNodeInfo(target);
+            const displayPath = this.getTargetDisplayPath(target.repository, target.uri);
+            if (!nodeInfo) {
+                throw new Error(getI18n().t("noSvnInfoForPathError", { path: displayPath }));
+            }
+
+            const i18n = getI18n();
+            const lines = [
+                `${i18n.t("infoPathLabel")}: ${nodeInfo.absolutePath}`,
+                `${i18n.t("infoKindLabel")}: ${i18n.formatNodeKind(nodeInfo.kind)}`,
+                `${i18n.t("infoRepositoryPathLabel")}: ${nodeInfo.repositoryRelativePath}`,
+                `${i18n.t("infoUrlLabel")}: ${nodeInfo.url}`,
+                `${i18n.t("infoRepositoryRootLabel")}: ${nodeInfo.repositoryRoot}`,
+            ];
+
+            if (nodeInfo.workingCopyRoot) {
+                lines.push(
+                    `${i18n.t("infoWorkingCopyRootLabel")}: ${nodeInfo.workingCopyRoot}`
+                );
+            }
+
+            if (nodeInfo.revision) {
+                lines.push(`${i18n.t("infoRevisionLabel")}: r${nodeInfo.revision}`);
+            }
+
+            if (nodeInfo.committedRevision) {
+                lines.push(
+                    `${i18n.t("infoLastChangedRevisionLabel")}: r${nodeInfo.committedRevision}`
+                );
+            }
+
+            if (nodeInfo.author) {
+                lines.push(`${i18n.t("infoLastChangedAuthorLabel")}: ${nodeInfo.author}`);
+            }
+
+            if (nodeInfo.date) {
+                lines.push(`${i18n.t("infoLastChangedDateLabel")}: ${nodeInfo.date}`);
+            }
+
+            if (nodeInfo.lockOwner) {
+                lines.push(`${i18n.t("infoLockOwnerLabel")}: ${nodeInfo.lockOwner}`);
+            }
+
+            if (nodeInfo.lockCreated) {
+                lines.push(`${i18n.t("infoLockCreatedLabel")}: ${nodeInfo.lockCreated}`);
+            }
+
+            if (nodeInfo.lockComment) {
+                lines.push(`${i18n.t("infoLockCommentLabel")}: ${nodeInfo.lockComment}`);
+            }
+
+            this.outputChannel.appendLine("");
+            this.outputChannel.appendLine(
+                `=== ${i18n.t("showPathInfoOutputHeader", { path: displayPath })} ===`
+            );
+            for (const line of lines) {
+                this.outputChannel.appendLine(line);
+            }
+            this.outputChannel.show(true);
+            void vscode.window.setStatusBarMessage(i18n.t("openedPathInfoStatus"), 2000);
+        } catch (error) {
+            this.showError(error);
+        }
+    }
+
+    private async copyRepositoryUrl(arg: unknown): Promise<void> {
+        const target = this.resolvePathTarget(arg);
+        if (!target) {
+            void vscode.window.showInformationMessage(getI18n().t("noWorkingCopyInfo"));
+            return;
+        }
+
+        try {
+            const nodeInfo = await this.resolveNodeInfo(target);
+            if (!nodeInfo) {
+                throw new Error(
+                    getI18n().t("noSvnInfoForPathError", {
+                        path: this.getTargetDisplayPath(target.repository, target.uri),
+                    })
+                );
+            }
+
+            await vscode.env.clipboard.writeText(nodeInfo.url);
+            void vscode.window.setStatusBarMessage(
+                getI18n().t("copiedRepositoryUrlStatus"),
+                2000
+            );
+        } catch (error) {
+            this.showError(error);
+        }
+    }
+
+    private async copyRepositoryPath(arg: unknown): Promise<void> {
+        const target = this.resolvePathTarget(arg);
+        if (!target) {
+            void vscode.window.showInformationMessage(getI18n().t("noWorkingCopyInfo"));
+            return;
+        }
+
+        try {
+            const nodeInfo = await this.resolveNodeInfo(target);
+            if (!nodeInfo) {
+                throw new Error(
+                    getI18n().t("noSvnInfoForPathError", {
+                        path: this.getTargetDisplayPath(target.repository, target.uri),
+                    })
+                );
+            }
+
+            await vscode.env.clipboard.writeText(nodeInfo.repositoryRelativePath);
+            void vscode.window.setStatusBarMessage(
+                getI18n().t("copiedRepositoryPathStatus"),
+                2000
+            );
+        } catch (error) {
+            this.showError(error);
+        }
+    }
+
+    private async renamePath(arg: unknown): Promise<void> {
+        const target = this.resolvePathTarget(arg);
+        if (!target) {
+            void vscode.window.showInformationMessage(getI18n().t("noWorkingCopyInfo"));
+            return;
+        }
+
+        const newName = await this.promptRenamePathName(target.repository, target.uri.fsPath);
         if (!newName) {
             return;
         }
 
         try {
-            const renamedPath = await repository.renameWorkingCopyPath(uri.fsPath, newName);
+            const renamedPath = await target.repository.renameWorkingCopyPath(
+                target.uri.fsPath,
+                newName
+            );
             await vscode.commands.executeCommand(
                 "revealInExplorer",
                 vscode.Uri.file(renamedPath)
             );
+        } catch (error) {
+            this.showError(error);
+        }
+    }
+
+    private async lockPath(arg: unknown): Promise<void> {
+        const resources = this.getSelectedResources(arg, ["svn-change", "svn-conflict"]).filter(
+            (resource) => resource.status.kind === "file"
+        );
+        if (resources.length > 0) {
+            try {
+                await resources[0].repository.lockWorkingCopyPaths(
+                    resources.map((resource) => resource.status.absolutePath)
+                );
+            } catch (error) {
+                this.showError(error);
+            }
+            return;
+        }
+
+        const target = this.resolvePathTarget(arg);
+        if (!target) {
+            void vscode.window.showInformationMessage(getI18n().t("noWorkingCopyInfo"));
+            return;
+        }
+
+        if (target.resource?.status.kind && target.resource.status.kind !== "file") {
+            void vscode.window.showInformationMessage(getI18n().t("noLockablePathsInfo"));
+            return;
+        }
+
+        try {
+            await target.repository.lockWorkingCopyPaths([target.uri.fsPath]);
+        } catch (error) {
+            this.showError(error);
+        }
+    }
+
+    private async unlockPath(arg: unknown): Promise<void> {
+        const resources = this.getSelectedResources(arg, ["svn-change", "svn-conflict"]).filter(
+            (resource) => resource.status.kind === "file"
+        );
+        if (resources.length > 0) {
+            try {
+                await resources[0].repository.unlockWorkingCopyPaths(
+                    resources.map((resource) => resource.status.absolutePath)
+                );
+            } catch (error) {
+                this.showError(error);
+            }
+            return;
+        }
+
+        const target = this.resolvePathTarget(arg);
+        if (!target) {
+            void vscode.window.showInformationMessage(getI18n().t("noWorkingCopyInfo"));
+            return;
+        }
+
+        if (target.resource?.status.kind && target.resource.status.kind !== "file") {
+            void vscode.window.showInformationMessage(getI18n().t("noLockablePathsInfo"));
+            return;
+        }
+
+        try {
+            await target.repository.unlockWorkingCopyPaths([target.uri.fsPath]);
         } catch (error) {
             this.showError(error);
         }
@@ -1350,6 +1559,81 @@ export class SvnRepositoryManager implements vscode.Disposable {
         }
 
         return undefined;
+    }
+
+    private getResourceFromArg(arg: unknown): ScmResource | undefined {
+        if (arg instanceof ScmResource) {
+            return arg;
+        }
+
+        if (Array.isArray(arg)) {
+            return arg.find((item): item is ScmResource => item instanceof ScmResource);
+        }
+
+        return undefined;
+    }
+
+    private resolvePathTarget(
+        arg: unknown
+    ): { repository: SvnRepository; uri: vscode.Uri; resource?: ScmResource } | undefined {
+        const resource = this.getResourceFromArg(arg);
+        if (resource) {
+            return {
+                repository: resource.repository,
+                uri: resource.resourceUri,
+                resource,
+            };
+        }
+
+        const uri = this.getUriFromArg(arg) ?? vscode.window.activeTextEditor?.document.uri;
+        if (!uri) {
+            return undefined;
+        }
+
+        const repository = this.getRepositoryForUri(uri);
+        if (!repository) {
+            return undefined;
+        }
+
+        return { repository, uri };
+    }
+
+    private async resolveNodeInfo(target: {
+        repository: SvnRepository;
+        uri: vscode.Uri;
+        resource?: ScmResource;
+    }): Promise<SvnNodeInfo | undefined> {
+        const nodeInfo = await this.svnService.getNodeInfo(target.uri.fsPath);
+        if (nodeInfo) {
+            return nodeInfo;
+        }
+
+        if (target.resource && target.resource.contextValue !== "svn-unversioned") {
+            return {
+                absolutePath: target.resource.status.absolutePath,
+                kind: target.resource.status.kind,
+                url: target.repository.resolveRepositoryUrl(target.resource.status.absolutePath),
+                repositoryRoot: target.repository.info.repositoryRoot,
+                repositoryRelativePath: target.repository.resolveRepositoryPath(
+                    target.resource.status.absolutePath
+                ),
+                workingCopyRoot: target.repository.rootPath,
+                revision: target.resource.status.revision,
+                committedRevision: target.resource.status.committedRevision,
+                author: target.resource.status.author,
+                date: target.resource.status.date,
+            };
+        }
+
+        return undefined;
+    }
+
+    private getTargetDisplayPath(repository: SvnRepository, uri: vscode.Uri): string {
+        const relativePath = nodePath
+            .relative(repository.rootPath, uri.fsPath)
+            .replace(/\\/g, "/");
+
+        return relativePath.length > 0 ? relativePath : nodePath.basename(repository.rootPath);
     }
 
     private restartRemoteRefreshTimer(): void {

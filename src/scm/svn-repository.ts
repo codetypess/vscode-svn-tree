@@ -31,7 +31,9 @@ type RepositoryUiOperation =
     | "cleanup"
     | "resolve"
     | "switch"
-    | "rename";
+    | "rename"
+    | "lock"
+    | "unlock";
 
 function posixJoin(left: string, right: string): string {
     return `${left.replace(/\/+$/, "")}/${right.replace(/\\/g, "/").replace(/^\/+/, "")}`;
@@ -525,6 +527,42 @@ export class SvnRepository implements vscode.Disposable {
         );
 
         return destinationPath;
+    }
+
+    public async lockWorkingCopyPaths(paths: string[]): Promise<void> {
+        const lockablePaths = this.normalizeUniquePaths(paths);
+        if (lockablePaths.length === 0) {
+            return;
+        }
+
+        const itemLabel = this.i18n.formatItemCount(lockablePaths.length);
+        await this.runRepositoryOperation(
+            "lock",
+            this.i18n.t("lockPathProgress", { items: itemLabel }),
+            this.i18n.t("lockedPathCompleted", { items: itemLabel }),
+            async () => {
+                await this.svnService.lock(this.rootPath, lockablePaths);
+                await this.refresh({ allowWhileBusy: true });
+            }
+        );
+    }
+
+    public async unlockWorkingCopyPaths(paths: string[]): Promise<void> {
+        const lockablePaths = this.normalizeUniquePaths(paths);
+        if (lockablePaths.length === 0) {
+            return;
+        }
+
+        const itemLabel = this.i18n.formatItemCount(lockablePaths.length);
+        await this.runRepositoryOperation(
+            "unlock",
+            this.i18n.t("unlockPathProgress", { items: itemLabel }),
+            this.i18n.t("unlockedPathCompleted", { items: itemLabel }),
+            async () => {
+                await this.svnService.unlock(this.rootPath, lockablePaths);
+                await this.refresh({ allowWhileBusy: true });
+            }
+        );
     }
 
     public async addToChangelist(paths: string[], name: string): Promise<void> {
@@ -1201,10 +1239,18 @@ export class SvnRepository implements vscode.Disposable {
     }
 
     public resolveRepositoryUrl(absolutePath: string): string {
-        const relativePath = nodePath.relative(this.rootPath, absolutePath);
         return buildRepositoryUrl(
             this.info.repositoryRoot,
-            posixJoin(this.info.repositoryRelativePath, relativePath)
+            this.resolveRepositoryPath(absolutePath)
+        );
+    }
+
+    public resolveRepositoryPath(absolutePath: string): string {
+        const relativePath = nodePath.relative(this.rootPath, absolutePath).replace(/\\/g, "/");
+        return normalizeRepositoryPath(
+            relativePath.length > 0
+                ? posixJoin(this.info.repositoryRelativePath, relativePath)
+                : this.info.repositoryRelativePath
         );
     }
 
@@ -1527,6 +1573,10 @@ export class SvnRepository implements vscode.Disposable {
                 return this.i18n.t("switchWorkingCopyRunningTooltip");
             case "rename":
                 return this.i18n.t("renamePathRunningTooltip");
+            case "lock":
+                return this.i18n.t("lockPathRunningTooltip");
+            case "unlock":
+                return this.i18n.t("unlockPathRunningTooltip");
         }
     }
 
@@ -1544,6 +1594,10 @@ export class SvnRepository implements vscode.Disposable {
                 return this.i18n.t("switchWorkingCopyActionLabel");
             case "rename":
                 return this.i18n.t("renamePathActionLabel");
+            case "lock":
+                return this.i18n.t("lockPathActionLabel");
+            case "unlock":
+                return this.i18n.t("unlockPathActionLabel");
         }
     }
 

@@ -26,6 +26,22 @@ export interface SvnWorkingCopyInfo {
     revision?: string;
 }
 
+export interface SvnNodeInfo {
+    absolutePath: string;
+    kind: SvnNodeKind;
+    url: string;
+    repositoryRoot: string;
+    repositoryRelativePath: string;
+    workingCopyRoot?: string;
+    revision?: string;
+    committedRevision?: string;
+    author?: string;
+    date?: string;
+    lockOwner?: string;
+    lockComment?: string;
+    lockCreated?: string;
+}
+
 export interface SvnStatusEntry {
     absolutePath: string;
     relativePath: string;

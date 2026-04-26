@@ -2,8 +2,8 @@ import { execFile } from "node:child_process";
 import * as nodePath from "node:path";
 import { promisify } from "node:util";
 import * as vscode from "vscode";
-import { parseInfoXml, parseLogXml, parseStatusXml } from "./svn-xml-parser";
-import type { SvnLogEntry, SvnStatusEntry, SvnWorkingCopyInfo } from "./svn-types";
+import { parseInfoXml, parseLogXml, parseNodeInfoXml, parseStatusXml } from "./svn-xml-parser";
+import type { SvnLogEntry, SvnNodeInfo, SvnStatusEntry, SvnWorkingCopyInfo } from "./svn-types";
 
 const execFileAsync = promisify(execFile);
 const historyLogRetryCount = 1;
@@ -41,6 +41,15 @@ export class SvnService {
         try {
             const { stdout } = await this.run(["info", "--xml", candidatePath], { quiet: true });
             return parseInfoXml(stdout, candidatePath);
+        } catch {
+            return undefined;
+        }
+    }
+
+    public async getNodeInfo(candidatePath: string): Promise<SvnNodeInfo | undefined> {
+        try {
+            const { stdout } = await this.run(["info", "--xml", candidatePath], { quiet: true });
+            return parseNodeInfoXml(stdout, candidatePath);
         } catch {
             return undefined;
         }
@@ -184,6 +193,16 @@ export class SvnService {
             destinationPath,
         ]);
         await this.run(["move", sourceTarget, destinationTarget], { cwd: rootPath });
+    }
+
+    public async lock(rootPath: string, paths: string[]): Promise<void> {
+        const targets = this.toRelativeTargets(rootPath, paths);
+        await this.run(["lock", ...targets], { cwd: rootPath });
+    }
+
+    public async unlock(rootPath: string, paths: string[]): Promise<void> {
+        const targets = this.toRelativeTargets(rootPath, paths);
+        await this.run(["unlock", ...targets], { cwd: rootPath });
     }
 
     public async addToChangelist(rootPath: string, paths: string[], name: string): Promise<void> {
