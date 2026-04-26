@@ -1,10 +1,15 @@
 import * as nodePath from "node:path";
 import * as vscode from "vscode";
-import { markIncomingHistoryEntries, toRevisionNumber } from "../history/history-utils";
+import {
+    markIncomingHistoryEntries,
+    normalizeHistoryFilters,
+    toRevisionNumber,
+} from "../history/history-utils";
 import { HistoryPanel } from "../history/history-panel";
 import { SvnContentProvider } from "../svn/svn-content-provider";
 import { SvnService } from "../svn/svn-service";
 import type {
+    SvnHistoryFilters,
     SvnLogPage,
     SvnLogPathChange,
     SvnPropertyEntry,
@@ -1540,22 +1545,30 @@ export class SvnRepository implements vscode.Disposable {
 
     public async loadHistoryPage(
         beforeRevision?: number,
-        targetPath?: string
+        targetPath?: string,
+        filters?: SvnHistoryFilters
     ): Promise<SvnLogPage> {
         const pageSize = vscode.workspace
             .getConfiguration("svn-tree")
             .get<number>("max-log-entries", 200);
-        const [entries, currentRevision] = await Promise.all([
-            this.svnService.getLog(this.rootPath, pageSize, beforeRevision, targetPath),
+        const normalizedFilters = normalizeHistoryFilters(filters);
+        const [logPage, currentRevision] = await Promise.all([
+            this.svnService.getLog(
+                this.rootPath,
+                pageSize,
+                beforeRevision,
+                targetPath,
+                normalizedFilters
+            ),
             this.getHistoryCurrentRevision(targetPath),
         ]);
-        const oldestRevision = entries.at(-1)?.revision;
         const currentRevisionNumber = toRevisionNumber(currentRevision);
 
         return {
-            entries: markIncomingHistoryEntries(entries, currentRevisionNumber),
-            hasMore: entries.length === pageSize && oldestRevision !== undefined && oldestRevision > 1,
+            entries: markIncomingHistoryEntries(logPage.entries, currentRevisionNumber),
+            hasMore: logPage.hasMore,
             currentRevision: currentRevisionNumber,
+            nextBeforeRevision: logPage.nextBeforeRevision,
         };
     }
 

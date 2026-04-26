@@ -1,5 +1,14 @@
 import React from "react";
 import { createRoot } from "react-dom/client";
+import { DayPicker } from "react-day-picker";
+import { enUS, zhCN } from "react-day-picker/locale";
+import {
+    areHistoryFiltersEqual,
+    hasActiveHistoryFilters,
+    hasInvalidHistoryDateRange,
+    normalizeHistoryFilters,
+} from "./history-utils";
+import type { SvnHistoryFilters } from "../svn/svn-types";
 import {
     createI18n,
     type FileManagerPlatform,
@@ -61,6 +70,7 @@ interface HistoryDataPayload {
     append: boolean;
     hasMore: boolean;
     currentRevision?: number;
+    nextBeforeRevision?: number;
     repositoryLabel: string;
     rootPath: string;
     entries: HistoryEntry[];
@@ -75,8 +85,88 @@ interface HistoryConfigPayload {
     locale: SupportedLocale;
 }
 
+interface HistoryFilterFormState {
+    author: string;
+    message: string;
+    changedPath: string;
+    dateFrom: string;
+    dateTo: string;
+}
+
+type HistoryDateFieldKey = "dateFrom" | "dateTo";
+
 function getDisplayChangePath(changePath: string): string {
     return String(changePath || "").replace(/^\/+/, "");
+}
+
+function createEmptyHistoryFilterForm(): HistoryFilterFormState {
+    return {
+        author: "",
+        message: "",
+        changedPath: "",
+        dateFrom: "",
+        dateTo: "",
+    };
+}
+
+function createHistoryFilterForm(
+    filters?: Partial<SvnHistoryFilters>
+): HistoryFilterFormState {
+    const normalizedFilters = normalizeHistoryFilters(filters);
+
+    return {
+        author: normalizedFilters.author ?? "",
+        message: normalizedFilters.message ?? "",
+        changedPath: normalizedFilters.changedPath ?? "",
+        dateFrom: normalizedFilters.dateFrom ?? "",
+        dateTo: normalizedFilters.dateTo ?? "",
+    };
+}
+
+function countActiveHistoryFilters(filters?: Partial<SvnHistoryFilters>): number {
+    const normalizedFilters = normalizeHistoryFilters(filters);
+
+    return [
+        normalizedFilters.author,
+        normalizedFilters.message,
+        normalizedFilters.changedPath,
+        normalizedFilters.dateFrom,
+        normalizedFilters.dateTo,
+    ].filter(Boolean).length;
+}
+
+function parseHistoryDateValue(value: string): Date | undefined {
+    const trimmedValue = value.trim();
+    const match = trimmedValue.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (!match) {
+        return undefined;
+    }
+
+    const year = Number(match[1]);
+    const month = Number(match[2]);
+    const day = Number(match[3]);
+    const date = new Date(year, month - 1, day);
+    if (
+        Number.isNaN(date.getTime()) ||
+        date.getFullYear() !== year ||
+        date.getMonth() !== month - 1 ||
+        date.getDate() !== day
+    ) {
+        return undefined;
+    }
+
+    return date;
+}
+
+function formatHistoryDateValue(date: Date | undefined): string {
+    if (!date || Number.isNaN(date.getTime())) {
+        return "";
+    }
+
+    const year = String(date.getFullYear()).padStart(4, "0");
+    const month = String(date.getMonth() + 1).padStart(2, "0");
+    const day = String(date.getDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
 }
 
 type HistoryResponseMessage =
@@ -96,13 +186,16 @@ type HistoryResponseMessage =
 type HistoryRequestMessage =
     | {
           type: "ready";
+          filters: SvnHistoryFilters;
       }
     | {
           type: "refresh";
+          filters: SvnHistoryFilters;
       }
     | {
           type: "load-more";
           beforeRevision: number;
+          filters: SvnHistoryFilters;
       }
     | {
           type:
@@ -175,11 +268,17 @@ interface HistoryState {
     hasMore: boolean;
     isLoading: boolean;
     currentRevision?: number;
+    nextBeforeRevision?: number;
     loadMoreError?: string;
     expandedRevision?: number;
     collapsedDirectories: CollapsedDirectories;
     contextMenu?: ContextMenuState;
-    query: string;
+    localQuery: string;
+    appliedFilters: SvnHistoryFilters;
+    draftFilters: HistoryFilterFormState;
+    filtersOpen: boolean;
+    filterError?: string;
+    activeDatePicker?: HistoryDateFieldKey;
     repositoryLabel: string;
     rootPath: string;
     locale: SupportedLocale;
@@ -1231,22 +1330,33 @@ function isHistoryConfigMessage(
 
     function HistoryApp(): React.ReactElement {
         const historyListRef = React.useRef<HTMLDivElement | null>(null);
+        const dateFromFieldRef = React.useRef<HTMLDivElement | null>(null);
+        const dateToFieldRef = React.useRef<HTMLDivElement | null>(null);
         const [state, setState] = React.useState<HistoryState>({
             entries: [],
             hasMore: true,
             isLoading: true,
             currentRevision: undefined,
+            nextBeforeRevision: undefined,
             loadMoreError: undefined,
             expandedRevision: undefined,
             collapsedDirectories: {},
             contextMenu: undefined,
-            query: "",
+            localQuery: "",
+            appliedFilters: normalizeHistoryFilters(),
+            draftFilters: createEmptyHistoryFilterForm(),
+            filtersOpen: false,
+            filterError: undefined,
+            activeDatePicker: undefined,
             repositoryLabel: bootstrap.repositoryLabel,
             rootPath: bootstrap.rootPath,
             locale: bootstrap.locale,
             platform: bootstrap.platform,
         });
         const i18n = createI18n(state.locale);
+        const dayPickerLocale = state.locale === "zh-CN" ? zhCN : enUS;
+        const selectedDateFrom = parseHistoryDateValue(state.draftFilters.dateFrom);
+        const selectedDateTo = parseHistoryDateValue(state.draftFilters.dateTo);
 
         React.useEffect(
             function () {
@@ -1259,11 +1369,16 @@ function isHistoryConfigMessage(
         );
 
         React.useEffect(function () {
-            vscode.postMessage({ type: "ready" });
+            vscode.postMessage({
+                type: "ready",
+                filters: normalizeHistoryFilters(state.appliedFilters),
+            });
         }, []);
 
-        const searchQuery = state.query.trim();
+        const searchQuery = state.localQuery.trim();
         const normalizedQuery = searchQuery.toLowerCase();
+        const activeFilterCount = countActiveHistoryFilters(state.appliedFilters);
+        const hasAppliedFilters = hasActiveHistoryFilters(state.appliedFilters);
 
         const filteredEntries = normalizedQuery
             ? state.entries.filter(function (entry) {
@@ -1305,12 +1420,16 @@ function isHistoryConfigMessage(
         }
 
         function requestMoreEntries() {
-            if (state.isLoading || !state.hasMore || state.entries.length === 0) {
+            if (state.isLoading || !state.hasMore) {
                 return;
             }
 
-            const beforeRevision = Number(state.entries[state.entries.length - 1].revision) - 1;
-            if (!Number.isFinite(beforeRevision) || beforeRevision < 1) {
+            const beforeRevision = state.nextBeforeRevision;
+            if (
+                typeof beforeRevision !== "number" ||
+                !Number.isFinite(beforeRevision) ||
+                beforeRevision < 1
+            ) {
                 setState(function (previous) {
                     return {
                         ...previous,
@@ -1331,20 +1450,152 @@ function isHistoryConfigMessage(
             vscode.postMessage({
                 type: "load-more",
                 beforeRevision: beforeRevision,
+                filters: normalizeHistoryFilters(state.appliedFilters),
             });
         }
 
-        function requestRefresh() {
+        function requestRefresh(
+            nextFilters: SvnHistoryFilters = state.appliedFilters,
+            options: {
+                replaceEntries?: boolean;
+                closeFilters?: boolean;
+                syncDraftFilters?: boolean;
+            } = {}
+        ) {
+            const normalizedFilters = normalizeHistoryFilters(nextFilters);
             setState(function (previous) {
                 return {
                     ...previous,
+                    entries: options.replaceEntries === true ? [] : previous.entries,
                     isLoading: true,
                     hasMore: true,
+                    nextBeforeRevision: undefined,
                     loadMoreError: undefined,
+                    contextMenu: undefined,
+                    filterError: undefined,
+                    activeDatePicker: undefined,
+                    filtersOpen:
+                        options.closeFilters === true ? false : previous.filtersOpen,
+                    appliedFilters: normalizedFilters,
+                    draftFilters:
+                        options.syncDraftFilters === true
+                            ? createHistoryFilterForm(normalizedFilters)
+                            : previous.draftFilters,
+                };
+            });
+            vscode.postMessage({
+                type: "refresh",
+                filters: normalizedFilters,
+            });
+        }
+
+        function updateDraftFilter(
+            key: keyof HistoryFilterFormState,
+            value: string
+        ): void {
+            setState(function (previous) {
+                return {
+                    ...previous,
+                    draftFilters: {
+                        ...previous.draftFilters,
+                        [key]: value,
+                    },
+                    filterError: undefined,
+                };
+            });
+        }
+
+        function toggleFiltersOpen(): void {
+            setState(function (previous) {
+                return {
+                    ...previous,
+                    filtersOpen: !previous.filtersOpen,
+                    activeDatePicker: undefined,
                     contextMenu: undefined,
                 };
             });
-            vscode.postMessage({ type: "refresh" });
+        }
+
+        function closeDatePicker(): void {
+            setState(function (previous) {
+                if (!previous.activeDatePicker) {
+                    return previous;
+                }
+
+                return {
+                    ...previous,
+                    activeDatePicker: undefined,
+                };
+            });
+        }
+
+        function toggleDatePicker(field: HistoryDateFieldKey): void {
+            setState(function (previous) {
+                return {
+                    ...previous,
+                    activeDatePicker:
+                        previous.activeDatePicker === field ? undefined : field,
+                };
+            });
+        }
+
+        function selectDateFromPicker(
+            field: HistoryDateFieldKey,
+            date: Date | undefined
+        ): void {
+            updateDraftFilter(field, formatHistoryDateValue(date));
+            setState(function (previous) {
+                return {
+                    ...previous,
+                    activeDatePicker: undefined,
+                };
+            });
+        }
+
+        function applyHistoryFilters(): void {
+            const nextFilters = normalizeHistoryFilters(state.draftFilters);
+            if (hasInvalidHistoryDateRange(nextFilters)) {
+                setState(function (previous) {
+                    return {
+                        ...previous,
+                        filterError: i18n.t("historyFilterInvalidDateRange"),
+                    };
+                });
+                return;
+            }
+
+            requestRefresh(nextFilters, {
+                replaceEntries: !areHistoryFiltersEqual(
+                    nextFilters,
+                    state.appliedFilters
+                ),
+                closeFilters: true,
+                syncDraftFilters: true,
+            });
+        }
+
+        function clearHistoryFilters(): void {
+            const emptyFilters = normalizeHistoryFilters();
+            const filtersChanged = !areHistoryFiltersEqual(
+                emptyFilters,
+                state.appliedFilters
+            );
+
+            setState(function (previous) {
+                return {
+                    ...previous,
+                    draftFilters: createEmptyHistoryFilterForm(),
+                    filterError: undefined,
+                    activeDatePicker: undefined,
+                };
+            });
+
+            if (filtersChanged) {
+                requestRefresh(emptyFilters, {
+                    replaceEntries: true,
+                    syncDraftFilters: true,
+                });
+            }
         }
 
         function maybeLoadMoreOnScroll() {
@@ -1385,6 +1636,7 @@ function isHistoryConfigMessage(
                             hasMore: data.payload.hasMore === true,
                             isLoading: false,
                             currentRevision: data.payload.currentRevision,
+                            nextBeforeRevision: data.payload.nextBeforeRevision,
                             loadMoreError: undefined,
                             repositoryLabel: data.payload.repositoryLabel,
                             rootPath: data.payload.rootPath,
@@ -1411,6 +1663,7 @@ function isHistoryConfigMessage(
                             entries: [],
                             hasMore: false,
                             isLoading: false,
+                            nextBeforeRevision: undefined,
                             loadMoreError: data.payload.message,
                             contextMenu: undefined,
                         };
@@ -1430,22 +1683,44 @@ function isHistoryConfigMessage(
 
             function handleResize(): void {
                 hideContextMenu();
+                closeDatePicker();
             }
 
             function handleKeydown(event: KeyboardEvent): void {
                 if (event.key === "Escape") {
                     hideContextMenu();
+                    closeDatePicker();
                 }
+            }
+
+            function handleMouseDown(event: MouseEvent): void {
+                const activeField =
+                    state.activeDatePicker === "dateFrom"
+                        ? dateFromFieldRef.current
+                        : state.activeDatePicker === "dateTo"
+                          ? dateToFieldRef.current
+                          : null;
+                if (!activeField) {
+                    return;
+                }
+
+                if (event.target instanceof Node && activeField.contains(event.target)) {
+                    return;
+                }
+
+                closeDatePicker();
             }
 
             window.addEventListener("message", handleMessage);
             window.addEventListener("resize", handleResize);
             window.addEventListener("keydown", handleKeydown);
+            window.addEventListener("mousedown", handleMouseDown);
 
             return function () {
                 window.removeEventListener("message", handleMessage);
                 window.removeEventListener("resize", handleResize);
                 window.removeEventListener("keydown", handleKeydown);
+                window.removeEventListener("mousedown", handleMouseDown);
             };
         });
 
@@ -1654,6 +1929,80 @@ function isHistoryConfigMessage(
                 revision: revision,
                 path: change.path,
             });
+        }
+
+        function renderDateFilterField(
+            field: HistoryDateFieldKey,
+            label: string,
+            value: string,
+            selectedDate: Date | undefined,
+            ref: React.RefObject<HTMLDivElement | null>
+        ): React.ReactElement {
+            const isOpen = state.activeDatePicker === field;
+
+            return h(
+                "label",
+                {
+                    className: "filter-field filter-date-field" + (isOpen ? " is-open" : ""),
+                    ref: ref,
+                },
+                h("span", { className: "filter-label" }, label),
+                h(
+                    "div",
+                    { className: "filter-date-input" },
+                    h("input", {
+                        className: "filter-input",
+                        type: "text",
+                        inputMode: "numeric",
+                        placeholder: "YYYY-MM-DD",
+                        value: value,
+                        onChange: function (event: React.ChangeEvent<HTMLInputElement>) {
+                            updateDraftFilter(field, event.currentTarget.value);
+                        },
+                        onKeyDown: function (event: React.KeyboardEvent<HTMLInputElement>) {
+                            if (event.key === "ArrowDown" || event.key === "Enter") {
+                                event.preventDefault();
+                                toggleDatePicker(field);
+                            }
+                        },
+                    }),
+                    h(
+                        "button",
+                        {
+                            className: "filter-date-button",
+                            type: "button",
+                            title: i18n.t("openDatePicker"),
+                            "aria-label": label + ": " + i18n.t("openDatePicker"),
+                            "aria-expanded": isOpen,
+                            onClick: function () {
+                                toggleDatePicker(field);
+                            },
+                        },
+                        h("span", {
+                            className: "codicon codicon-calendar",
+                            "aria-hidden": "true",
+                        })
+                    )
+                ),
+                isOpen
+                    ? h(
+                          "div",
+                          { className: "filter-date-popover" },
+                          h(DayPicker, {
+                              mode: "single",
+                              selected: selectedDate,
+                              onSelect: function (date: Date | undefined) {
+                                  selectDateFromPicker(field, date);
+                              },
+                              defaultMonth: selectedDate ?? new Date(),
+                              locale: dayPickerLocale,
+                              navLayout: "around",
+                              showOutsideDays: true,
+                              fixedWeeks: true,
+                          })
+                      )
+                    : null
+            );
         }
 
         function renderHistoryContent() {
@@ -1921,17 +2270,43 @@ function isHistoryConfigMessage(
                                 className: "search",
                                 type: "search",
                                 placeholder: i18n.t("filterPlaceholder"),
-                                value: state.query,
+                                value: state.localQuery,
                                 onChange: function (event: React.ChangeEvent<HTMLInputElement>) {
                                     const query = event.currentTarget.value;
                                     setState(function (previous) {
                                         return {
                                             ...previous,
-                                            query,
+                                            localQuery: query,
                                         };
                                     });
                                 },
                             }),
+                            h(
+                                "button",
+                                {
+                                    className:
+                                        "toolbar-button secondary" +
+                                        (state.filtersOpen || hasAppliedFilters
+                                            ? " is-active"
+                                            : ""),
+                                    type: "button",
+                                    title: i18n.t("historyFiltersButton"),
+                                    "aria-label": i18n.t("historyFiltersButton"),
+                                    onClick: toggleFiltersOpen,
+                                },
+                                h("span", {
+                                    className: "codicon codicon-filter",
+                                    "aria-hidden": "true",
+                                }),
+                                h(
+                                    "span",
+                                    { className: "toolbar-button-label" },
+                                    i18n.t("historyFiltersButton") +
+                                        (activeFilterCount > 0
+                                            ? ` (${activeFilterCount})`
+                                            : "")
+                                )
+                            ),
                             h(
                                 "button",
                                 {
@@ -1953,6 +2328,133 @@ function isHistoryConfigMessage(
                             )
                         )
                     ),
+                    state.filtersOpen
+                        ? h(
+                              "div",
+                              { className: "filter-panel" },
+                              h(
+                                  "div",
+                                  { className: "filter-grid" },
+                                  h(
+                                      "label",
+                                      { className: "filter-field" },
+                                      h(
+                                          "span",
+                                          { className: "filter-label" },
+                                          i18n.t("historyFilterAuthorLabel")
+                                      ),
+                                      h("input", {
+                                          className: "filter-input",
+                                          type: "text",
+                                          placeholder: i18n.t(
+                                              "historyFilterAuthorPlaceholder"
+                                          ),
+                                          value: state.draftFilters.author,
+                                          onChange: function (
+                                              event: React.ChangeEvent<HTMLInputElement>
+                                          ) {
+                                              updateDraftFilter(
+                                                  "author",
+                                                  event.currentTarget.value
+                                              );
+                                          },
+                                      })
+                                  ),
+                                  h(
+                                      "label",
+                                      { className: "filter-field" },
+                                      h(
+                                          "span",
+                                          { className: "filter-label" },
+                                          i18n.t("historyFilterMessageLabel")
+                                      ),
+                                      h("input", {
+                                          className: "filter-input",
+                                          type: "text",
+                                          placeholder: i18n.t(
+                                              "historyFilterMessagePlaceholder"
+                                          ),
+                                          value: state.draftFilters.message,
+                                          onChange: function (
+                                              event: React.ChangeEvent<HTMLInputElement>
+                                          ) {
+                                              updateDraftFilter(
+                                                  "message",
+                                                  event.currentTarget.value
+                                              );
+                                          },
+                                      })
+                                  ),
+                                  h(
+                                      "label",
+                                      { className: "filter-field" },
+                                      h(
+                                          "span",
+                                          { className: "filter-label" },
+                                          i18n.t("historyFilterPathLabel")
+                                      ),
+                                      h("input", {
+                                          className: "filter-input",
+                                          type: "text",
+                                          placeholder: i18n.t(
+                                              "historyFilterPathPlaceholder"
+                                          ),
+                                          value: state.draftFilters.changedPath,
+                                          onChange: function (
+                                              event: React.ChangeEvent<HTMLInputElement>
+                                          ) {
+                                              updateDraftFilter(
+                                                  "changedPath",
+                                                  event.currentTarget.value
+                                              );
+                                          },
+                                      })
+                                  ),
+                                  renderDateFilterField(
+                                      "dateFrom",
+                                      i18n.t("historyFilterDateFromLabel"),
+                                      state.draftFilters.dateFrom,
+                                      selectedDateFrom,
+                                      dateFromFieldRef
+                                  ),
+                                  renderDateFilterField(
+                                      "dateTo",
+                                      i18n.t("historyFilterDateToLabel"),
+                                      state.draftFilters.dateTo,
+                                      selectedDateTo,
+                                      dateToFieldRef
+                                  )
+                              ),
+                              state.filterError
+                                  ? h(
+                                        "div",
+                                        { className: "filter-error" },
+                                        state.filterError
+                                    )
+                                  : null,
+                              h(
+                                  "div",
+                                  { className: "filter-actions" },
+                                  h(
+                                      "button",
+                                      {
+                                          className: "secondary",
+                                          type: "button",
+                                          onClick: clearHistoryFilters,
+                                      },
+                                      i18n.t("clearFiltersButton")
+                                  ),
+                                  h(
+                                      "button",
+                                      {
+                                          type: "button",
+                                          onClick: applyHistoryFilters,
+                                      },
+                                      i18n.t("applyFiltersButton")
+                                  )
+                              )
+                          )
+                        : null,
                     h(
                         "div",
                         { className: "table-header" },

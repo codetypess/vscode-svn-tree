@@ -3,6 +3,12 @@ import * as nodePath from "node:path";
 import { promisify } from "node:util";
 import * as vscode from "vscode";
 import {
+    hasActiveHistoryFilters,
+    hasInvalidHistoryDateRange,
+    matchesHistoryFilters,
+    normalizeHistoryFilters,
+} from "../history/history-utils";
+import {
     parseInfoXml,
     parseListXml,
     parseLogXml,
@@ -11,6 +17,7 @@ import {
     parseStatusXml,
 } from "./svn-xml-parser";
 import type {
+    SvnHistoryFilters,
     SvnLogEntry,
     SvnNodeInfo,
     SvnPropertyEntry,
@@ -25,6 +32,9 @@ const historyLogRetryDelayMs = 1500;
 const historyLogInitialTimeoutMs = 3000;
 const historyLogTimeoutBackoffFactor = 2;
 const maxHistoryLogTimeoutMs = 20000;
+const filteredHistoryLogScanMultiplier = 3;
+const filteredHistoryLogMinScanLimit = 100;
+const filteredHistoryLogMaxScanLimit = 600;
 
 interface RunSvnOptions {
     cwd?: string;
@@ -43,6 +53,12 @@ type SvnResolveAcceptOption =
     | "mine-full"
     | "theirs-full"
     | "postpone";
+
+interface SvnLogQueryResult {
+    entries: SvnLogEntry[];
+    hasMore: boolean;
+    nextBeforeRevision?: number;
+}
 
 export class SvnService {
     public constructor(private readonly outputChannel: vscode.OutputChannel) {}
@@ -92,15 +108,125 @@ export class SvnService {
         rootPath: string,
         limit: number,
         beforeRevision?: number,
-        targetPath?: string
-    ): Promise<SvnLogEntry[]> {
+        targetPath?: string,
+        filters?: SvnHistoryFilters
+    ): Promise<SvnLogQueryResult> {
         if (beforeRevision !== undefined && beforeRevision < 1) {
-            return [];
+            return {
+                entries: [],
+                hasMore: false,
+            };
         }
 
+        const normalizedFilters = normalizeHistoryFilters(filters);
+        if (hasInvalidHistoryDateRange(normalizedFilters)) {
+            return {
+                entries: [],
+                hasMore: false,
+            };
+        }
+
+        if (hasActiveHistoryFilters(normalizedFilters)) {
+            return this.getFilteredLog(
+                rootPath,
+                limit,
+                beforeRevision,
+                targetPath,
+                normalizedFilters
+            );
+        }
+
+        const entries = await this.runHistoryLog(
+            rootPath,
+            limit,
+            beforeRevision !== undefined ? String(Math.floor(beforeRevision)) : "HEAD",
+            "1",
+            targetPath
+        );
+        const oldestRevision = entries.at(-1)?.revision;
+
+        return {
+            entries,
+            hasMore: entries.length === limit && oldestRevision !== undefined && oldestRevision > 1,
+            nextBeforeRevision:
+                oldestRevision !== undefined && oldestRevision > 1
+                    ? oldestRevision - 1
+                    : undefined,
+        };
+    }
+
+    private async getFilteredLog(
+        rootPath: string,
+        limit: number,
+        beforeRevision: number | undefined,
+        targetPath: string | undefined,
+        filters: SvnHistoryFilters
+    ): Promise<SvnLogQueryResult> {
+        const matches: SvnLogEntry[] = [];
+        const scanLimit = this.getFilteredHistoryLogScanLimit(limit);
+        const lowerBound = this.getHistoryLogLowerBound(filters);
+        let upperBound =
+            beforeRevision !== undefined
+                ? String(Math.floor(beforeRevision))
+                : this.getHistoryLogUpperBound(filters);
+
+        while (true) {
+            const entries = await this.runHistoryLog(
+                rootPath,
+                scanLimit,
+                upperBound,
+                lowerBound,
+                targetPath
+            );
+
+            if (entries.length === 0) {
+                return {
+                    entries: matches,
+                    hasMore: false,
+                };
+            }
+
+            for (const entry of entries) {
+                if (matchesHistoryFilters(entry, filters)) {
+                    matches.push(entry);
+                }
+
+                if (matches.length >= limit) {
+                    const oldestRevision = entries.at(-1)?.revision;
+                    const nextBeforeRevision =
+                        oldestRevision !== undefined && oldestRevision > 1
+                            ? oldestRevision - 1
+                            : undefined;
+
+                    return {
+                        entries: matches.slice(0, limit),
+                        hasMore: nextBeforeRevision !== undefined,
+                        nextBeforeRevision,
+                    };
+                }
+            }
+
+            const oldestRevision = entries.at(-1)?.revision;
+            if (entries.length < scanLimit || oldestRevision === undefined || oldestRevision <= 1) {
+                return {
+                    entries: matches,
+                    hasMore: false,
+                };
+            }
+
+            upperBound = String(oldestRevision - 1);
+        }
+    }
+
+    private async runHistoryLog(
+        rootPath: string,
+        limit: number,
+        upperBound: string,
+        lowerBound: string,
+        targetPath?: string
+    ): Promise<SvnLogEntry[]> {
         const args = ["log", "--xml", "-v", "-l", String(limit)];
-        const upperBound = beforeRevision !== undefined ? String(Math.floor(beforeRevision)) : "HEAD";
-        args.push("-r", `${upperBound}:1`);
+        args.push("-r", `${upperBound}:${lowerBound}`);
 
         args.push(this.toLogTarget(rootPath, targetPath));
 
@@ -112,6 +238,39 @@ export class SvnService {
                 this.getHistoryLogTimeoutMs(attempt, totalAttempts, limit),
         });
         return parseLogXml(stdout);
+    }
+
+    private getFilteredHistoryLogScanLimit(limit: number): number {
+        return Math.min(
+            filteredHistoryLogMaxScanLimit,
+            Math.max(
+                filteredHistoryLogMinScanLimit,
+                Math.floor(limit * filteredHistoryLogScanMultiplier)
+            )
+        );
+    }
+
+    private getHistoryLogUpperBound(filters: SvnHistoryFilters): string {
+        if (!filters.dateTo) {
+            return "HEAD";
+        }
+
+        const nextDate = this.addCalendarDays(filters.dateTo, 1);
+        return nextDate ? `{${nextDate}}` : "HEAD";
+    }
+
+    private getHistoryLogLowerBound(filters: SvnHistoryFilters): string {
+        return filters.dateFrom ? `{${filters.dateFrom}}` : "1";
+    }
+
+    private addCalendarDays(value: string, days: number): string | undefined {
+        const date = new Date(`${value}T00:00:00Z`);
+        if (Number.isNaN(date.getTime())) {
+            return undefined;
+        }
+
+        date.setUTCDate(date.getUTCDate() + days);
+        return date.toISOString().slice(0, 10);
     }
 
     public async commit(rootPath: string, message: string, paths?: string[]): Promise<void> {

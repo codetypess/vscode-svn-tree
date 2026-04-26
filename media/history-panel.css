@@ -131,11 +131,11 @@ button {
   background: var(--accent);
 }
 
-button:not(.context-menu-item):hover {
+button:not(.context-menu-item):not(.rdp-day_button):not(.rdp-button_next):not(.rdp-button_previous):hover {
   background: var(--accent-hover);
 }
 
-button:not(.context-menu-item):focus-visible {
+button:not(.context-menu-item):not(.rdp-day_button):not(.rdp-button_next):not(.rdp-button_previous):focus-visible {
   outline: 1px solid var(--focus-border);
   outline-offset: 1px;
 }
@@ -196,8 +196,299 @@ button.secondary:hover {
   color: var(--muted);
 }
 
+.toolbar-button.is-active {
+  border-color: color-mix(in srgb, var(--focus-border) 55%, var(--border));
+  background: color-mix(in srgb, var(--accent) 12%, var(--secondary-button-bg));
+}
+
+.toolbar-button.is-active .codicon,
+.toolbar-button.is-active .toolbar-button-label {
+  color: var(--vscode-editor-foreground);
+}
+
 .toolbar-button-label {
   line-height: 1;
+}
+
+.filter-panel {
+  display: grid;
+  gap: 12px;
+  padding: 12px 16px 14px;
+  border-bottom: 1px solid var(--border);
+  background: color-mix(in srgb, var(--details-bg) 76%, var(--surface-bg));
+}
+
+.filter-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.filter-field {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.filter-date-field {
+  position: relative;
+}
+
+.filter-label {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.filter-input {
+  width: 100%;
+  min-height: 28px;
+  padding: 4px 8px;
+  color: var(--input-fg);
+  border: 1px solid var(--input-border);
+  border-radius: 2px;
+  background: var(--input-bg);
+  outline: none;
+  font: inherit;
+}
+
+.filter-input::placeholder {
+  color: var(--muted);
+}
+
+.filter-input:hover {
+  border-color: color-mix(in srgb, var(--input-border) 70%, var(--focus-border));
+}
+
+.filter-input:focus {
+  border-color: var(--focus-border);
+  box-shadow: inset 0 0 0 1px var(--focus-border);
+}
+
+.filter-date-input {
+  position: relative;
+}
+
+.filter-date-input .filter-input {
+  padding-right: 38px;
+}
+
+.filter-date-button {
+  position: absolute;
+  top: 50%;
+  right: 6px;
+  transform: translateY(-50%);
+  min-height: 22px;
+  min-width: 22px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid color-mix(in srgb, var(--border) 86%, transparent);
+  border-radius: 4px;
+  color: var(--secondary-button-fg);
+  background: color-mix(in srgb, var(--secondary-button-bg) 78%, transparent);
+}
+
+.filter-date-button:hover {
+  background: color-mix(in srgb, var(--focus-border) 16%, var(--secondary-button-bg));
+}
+
+.filter-date-button:focus-visible {
+  outline: 1px solid var(--focus-border);
+  outline-offset: 1px;
+}
+
+.filter-date-button .codicon {
+  font-size: 14px;
+  color: var(--muted);
+}
+
+.filter-date-popover {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 8;
+  width: 286px;
+  padding: 12px;
+  border: 1px solid var(--details-border);
+  border-radius: 10px;
+  background: var(--vscode-menu-background, var(--details-bg));
+  box-shadow: 0 14px 28px rgba(0, 0, 0, 0.28);
+}
+
+.filter-date-popover .rdp-root {
+  --rdp-accent-color: var(--graph-node);
+  --rdp-accent-background-color: color-mix(in srgb, var(--graph-node) 18%, transparent);
+  --rdp-day-width: 34px;
+  --rdp-day-height: 34px;
+  --rdp-day_button-width: 32px;
+  --rdp-day_button-height: 32px;
+  --rdp-day_button-border: 1px solid transparent;
+  --rdp-day_button-border-radius: 8px;
+  --rdp-selected-border: 1px solid color-mix(in srgb, var(--graph-node) 58%, transparent);
+  --rdp-nav_button-width: 28px;
+  --rdp-nav_button-height: 28px;
+  --rdp-nav-height: 32px;
+  --rdp-weekday-opacity: 1;
+  --rdp-weekday-padding: 0 0 8px;
+  position: relative;
+  box-sizing: border-box;
+  color: var(--vscode-editor-foreground);
+}
+
+.filter-date-popover .rdp-root * {
+  box-sizing: border-box;
+}
+
+.filter-date-popover .rdp-months {
+  display: block;
+  max-width: none;
+}
+
+.filter-date-popover .rdp-month {
+  position: relative;
+  width: 100%;
+}
+
+.filter-date-popover .rdp-month_caption {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: var(--rdp-nav-height);
+  margin-inline-start: var(--rdp-nav_button-width);
+  margin-inline-end: var(--rdp-nav_button-width);
+  margin-bottom: 8px;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.filter-date-popover .rdp-caption_label {
+  display: inline-flex;
+  align-items: center;
+  white-space: nowrap;
+}
+
+.filter-date-popover .rdp-nav {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: var(--rdp-nav-height);
+}
+
+.filter-date-popover .rdp-button_previous,
+.filter-date-popover .rdp-button_next,
+.filter-date-popover .rdp-day_button {
+  min-height: 0;
+  padding: 0;
+  border-radius: 8px;
+  color: inherit;
+  background: transparent;
+}
+
+.filter-date-popover .rdp-button_previous,
+.filter-date-popover .rdp-button_next {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--rdp-nav_button-width);
+  height: var(--rdp-nav_button-height);
+  border: 1px solid transparent;
+}
+
+.filter-date-popover .rdp-root[data-nav-layout="around"] .rdp-button_previous {
+  position: absolute;
+  left: 0;
+  top: 0;
+}
+
+.filter-date-popover .rdp-root[data-nav-layout="around"] .rdp-button_next {
+  position: absolute;
+  right: 0;
+  top: 0;
+}
+
+.filter-date-popover .rdp-button_previous:hover,
+.filter-date-popover .rdp-button_next:hover {
+  background: var(--row-hover);
+}
+
+.filter-date-popover .rdp-button_previous:focus-visible,
+.filter-date-popover .rdp-button_next:focus-visible,
+.filter-date-popover .rdp-day_button:focus-visible {
+  outline: 1px solid var(--focus-border);
+  outline-offset: 1px;
+}
+
+.filter-date-popover .rdp-chevron {
+  fill: var(--muted);
+}
+
+.filter-date-popover .rdp-month_grid {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.filter-date-popover .rdp-weekday {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 600;
+  text-align: center;
+}
+
+.filter-date-popover .rdp-day {
+  width: var(--rdp-day-width);
+  height: var(--rdp-day-height);
+  text-align: center;
+}
+
+.filter-date-popover .rdp-day_button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--rdp-day_button-width);
+  height: var(--rdp-day_button-height);
+  border: var(--rdp-day_button-border);
+}
+
+.filter-date-popover .rdp-day_button:hover {
+  background: var(--row-hover);
+}
+
+.filter-date-popover .rdp-today:not(.rdp-selected):not(.rdp-outside) .rdp-day_button {
+  border-color: color-mix(in srgb, var(--graph-node) 48%, transparent);
+}
+
+.filter-date-popover .rdp-selected .rdp-day_button {
+  color: var(--accent-contrast);
+  background: var(--graph-node);
+  border-color: color-mix(in srgb, var(--graph-node) 62%, black 10%);
+}
+
+.filter-date-popover .rdp-outside .rdp-day_button {
+  color: var(--muted);
+}
+
+.filter-date-popover .rdp-disabled .rdp-day_button {
+  cursor: default;
+}
+
+.filter-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.filter-error {
+  color: var(--vscode-errorForeground, #f48771);
+  font-size: 12px;
 }
 
 .table-header,
@@ -706,6 +997,10 @@ button.secondary:hover {
   .details-panel {
     grid-template-columns: minmax(260px, 0.9fr) minmax(360px, 1.1fr);
   }
+
+  .filter-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
 }
 
 @media (max-width: 900px) {
@@ -761,9 +1056,29 @@ button.secondary:hover {
     width: 100%;
     margin-left: 0;
     justify-content: space-between;
+    flex-wrap: wrap;
   }
 
   .search {
+    flex: 1;
+  }
+
+  .filter-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .filter-date-popover {
+    left: 0;
+    right: 0;
+    width: auto;
+  }
+
+  .filter-actions {
+    justify-content: stretch;
+    flex-wrap: wrap;
+  }
+
+  .filter-actions button {
     flex: 1;
   }
 }

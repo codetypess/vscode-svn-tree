@@ -4,8 +4,9 @@ import {
     normalizeFileManagerPlatform,
     type SupportedLocale,
 } from "../i18n";
+import { normalizeHistoryFilters } from "../history/history-utils";
 import type { SvnRepository } from "../scm/svn-repository";
-import type { SvnLogPathChange } from "../svn/svn-types";
+import type { SvnHistoryFilters, SvnLogPathChange } from "../svn/svn-types";
 import { getDisplayLocale, getI18n } from "../vscode-i18n";
 
 function escapeHtml(value: string): string {
@@ -40,6 +41,7 @@ interface HistoryPanelState {
     panel: vscode.WebviewPanel;
     repositoryRootPath: string;
     scope: HistoryPanelScope;
+    filters: SvnHistoryFilters;
 }
 
 export class HistoryPanel implements vscode.Disposable {
@@ -73,6 +75,7 @@ export class HistoryPanel implements vscode.Disposable {
             existingPanel.reveal(vscode.ViewColumn.Active);
             await this.pushEntries(existingPanel, repository, {
                 scope: resolvedScope,
+                filters: existingState?.filters,
             });
             return;
         }
@@ -102,6 +105,7 @@ export class HistoryPanel implements vscode.Disposable {
             panel,
             repositoryRootPath: repository.rootPath,
             scope: resolvedScope,
+            filters: normalizeHistoryFilters(),
         });
         this.updatePanelLocalization(panel, resolvedScope);
 
@@ -124,18 +128,25 @@ export class HistoryPanel implements vscode.Disposable {
                     message?: string;
                     changedPaths?: string[];
                     changes?: SvnLogPathChange[];
+                    filters?: SvnHistoryFilters;
                 };
 
                 if (payload.type === "refresh") {
+                    const normalizedFilters = normalizeHistoryFilters(payload.filters);
+                    this.updatePanelFilters(panel, normalizedFilters);
                     await this.pushEntries(panel, repository, {
                         scope: resolvedScope,
+                        filters: normalizedFilters,
                     });
                     return;
                 }
 
                 if (payload.type === "ready") {
+                    const normalizedFilters = normalizeHistoryFilters(payload.filters);
+                    this.updatePanelFilters(panel, normalizedFilters);
                     await this.pushEntries(panel, repository, {
                         scope: resolvedScope,
+                        filters: normalizedFilters,
                     });
                     return;
                 }
@@ -144,10 +155,13 @@ export class HistoryPanel implements vscode.Disposable {
                     payload.type === "load-more" &&
                     typeof payload.beforeRevision === "number"
                 ) {
+                    const normalizedFilters = normalizeHistoryFilters(payload.filters);
+                    this.updatePanelFilters(panel, normalizedFilters);
                     await this.pushEntries(panel, repository, {
                         scope: resolvedScope,
                         append: true,
                         beforeRevision: payload.beforeRevision,
+                        filters: normalizedFilters,
                     });
                     return;
                 }
@@ -383,6 +397,7 @@ export class HistoryPanel implements vscode.Disposable {
             panels.map((state) =>
                 this.pushEntries(state.panel, repository, {
                     scope: state.scope,
+                    filters: state.filters,
                 })
             )
         );
@@ -395,17 +410,23 @@ export class HistoryPanel implements vscode.Disposable {
             scope?: HistoryPanelScope;
             append?: boolean;
             beforeRevision?: number;
+            filters?: SvnHistoryFilters;
         } = {}
     ): Promise<void> {
         try {
             const scope = options.scope ?? this.getScopeForPanel(panel, repository);
-            const page = await repository.loadHistoryPage(options.beforeRevision, scope.targetPath);
+            const page = await repository.loadHistoryPage(
+                options.beforeRevision,
+                scope.targetPath,
+                options.filters
+            );
             panel.webview.postMessage({
                 type: "history-data",
                 payload: {
                     append: options.append === true,
                     hasMore: page.hasMore,
                     currentRevision: page.currentRevision,
+                    nextBeforeRevision: page.nextBeforeRevision,
                     repositoryLabel: scope.label,
                     rootPath: repository.rootPath,
                     entries: page.entries,
@@ -510,5 +531,14 @@ export class HistoryPanel implements vscode.Disposable {
         }
 
         return this.resolveScope(repository, {});
+    }
+
+    private updatePanelFilters(panel: vscode.WebviewPanel, filters: SvnHistoryFilters): void {
+        for (const state of this.panels.values()) {
+            if (state.panel === panel) {
+                state.filters = filters;
+                return;
+            }
+        }
     }
 }

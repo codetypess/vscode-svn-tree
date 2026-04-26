@@ -89,8 +89,17 @@ export interface SvnLogEntry {
     incoming?: boolean;
 }
 
+export interface SvnHistoryFilters {
+    author?: string;
+    message?: string;
+    changedPath?: string;
+    dateFrom?: string;
+    dateTo?: string;
+}
+
 export interface SvnLogPage {
     entries: SvnLogEntry[];
     hasMore: boolean;
     currentRevision?: number;
+    nextBeforeRevision?: number;
 }
