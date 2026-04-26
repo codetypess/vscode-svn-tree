@@ -24,6 +24,7 @@ type ContextActionType =
 
 type FileContextActionType =
     | "open-file-diff"
+    | "export-file"
     | "compare-file-with-working-copy"
     | "compare-file-with-previous-revision"
     | "show-file-history"
@@ -116,7 +117,11 @@ type HistoryRequestMessage =
           revision: number;
       }
     | {
-          type: "open-diff" | "compare-file-with-working-copy" | "compare-file-with-previous-revision";
+          type:
+              | "open-diff"
+              | "export-file"
+              | "compare-file-with-working-copy"
+              | "compare-file-with-previous-revision";
           revision: number;
           path: string;
           action: string;
@@ -924,6 +929,25 @@ function isHistoryConfigMessage(
                                 className: "context-menu-item",
                                 type: "button",
                                 onClick: function () {
+                                    props.onFileAction("export-file", entry.revision, change);
+                                },
+                            },
+                            h("span", {
+                                className: "codicon codicon-save",
+                                "aria-hidden": "true",
+                            }),
+                            h(
+                                "span",
+                                { className: "context-menu-label" },
+                                props.i18n.t("exportThisFile")
+                            )
+                        ),
+                        h(
+                            "button",
+                            {
+                                className: "context-menu-item",
+                                type: "button",
+                                onClick: function () {
                                     props.onFileAction(
                                         "reveal-in-file-manager",
                                         entry.revision,
@@ -1600,6 +1624,16 @@ function isHistoryConfigMessage(
             if (type === "compare-file-with-previous-revision") {
                 vscode.postMessage({
                     type: "compare-file-with-previous-revision",
+                    revision: revision,
+                    path: change.path,
+                    action: change.action,
+                });
+                return;
+            }
+
+            if (type === "export-file") {
+                vscode.postMessage({
+                    type: "export-file",
                     revision: revision,
                     path: change.path,
                     action: change.action,

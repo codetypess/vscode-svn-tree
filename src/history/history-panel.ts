@@ -191,6 +191,20 @@ export class HistoryPanel implements vscode.Disposable {
                 }
 
                 if (
+                    payload.type === "export-file" &&
+                    typeof payload.revision === "number" &&
+                    typeof payload.path === "string" &&
+                    isSvnLogPathAction(payload.action)
+                ) {
+                    await repository.exportFileRevision(
+                        payload.revision,
+                        payload.path,
+                        payload.action
+                    );
+                    return;
+                }
+
+                if (
                     payload.type === "compare-with-working-copy" &&
                     typeof payload.revision === "number" &&
                     Array.isArray(payload.changes)

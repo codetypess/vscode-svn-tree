@@ -926,6 +926,57 @@ export class SvnRepository implements vscode.Disposable {
         );
     }
 
+    public async exportFileRevision(
+        revision: number,
+        repositoryPath: string,
+        action: SvnLogPathChange["action"]
+    ): Promise<void> {
+        const exportRevision = action === "D" ? revision - 1 : revision;
+        if (exportRevision < 1) {
+            void vscode.window.showWarningMessage(
+                this.i18n.t("historyFileExportUnavailable", {
+                    path: repositoryPath,
+                    revision,
+                })
+            );
+            return;
+        }
+
+        const destinationPath = await this.promptHistoryFileExportDestination(
+            repositoryPath,
+            exportRevision
+        );
+        if (!destinationPath) {
+            return;
+        }
+
+        await vscode.window.withProgress(
+            {
+                location: vscode.ProgressLocation.Notification,
+                title: this.i18n.t("exportFileProgress", {
+                    path: repositoryPath,
+                    revision: exportRevision,
+                }),
+            },
+            async () => {
+                await this.svnService.export(
+                    buildRepositoryUrl(this.info.repositoryRoot, repositoryPath),
+                    String(exportRevision),
+                    destinationPath
+                );
+            }
+        );
+
+        await this.revealCreatedPath(
+            destinationPath,
+            this.i18n.t("exportedFileMessage", {
+                path: repositoryPath,
+                revision: exportRevision,
+                destination: destinationPath,
+            })
+        );
+    }
+
     public async compareRevisionWithWorkingCopy(
         revision: number,
         changes: SvnLogPathChange[]
@@ -2484,6 +2535,13 @@ export class SvnRepository implements vscode.Disposable {
         return relativePath.length > 0 ? relativePath : undefined;
     }
 
+    private buildHistoryFileExportName(repositoryPath: string, revision: number): string {
+        const baseName = nodePath.posix.basename(repositoryPath) || "export";
+        const extension = nodePath.posix.extname(baseName);
+        const stem = extension ? baseName.slice(0, -extension.length) : baseName;
+        return `${stem}-r${revision}${extension}`;
+    }
+
     private async pathExists(targetPath: string): Promise<boolean> {
         try {
             await vscode.workspace.fs.stat(vscode.Uri.file(targetPath));
@@ -2570,6 +2628,46 @@ export class SvnRepository implements vscode.Disposable {
         } catch {
             return destinationPath;
         }
+    }
+
+    private async promptHistoryFileExportDestination(
+        repositoryPath: string,
+        revision: number
+    ): Promise<string | undefined> {
+        const workingCopyPath = this.getWorkingCopyPathForRepositoryPath(repositoryPath);
+        const candidateParentPath = workingCopyPath
+            ? nodePath.dirname(workingCopyPath)
+            : this.rootPath;
+        const defaultParentPath =
+            (await this.getNearestExistingPath(candidateParentPath)) ?? this.rootPath;
+        const destinationUri = await vscode.window.showSaveDialog({
+            defaultUri: vscode.Uri.file(
+                nodePath.join(
+                    defaultParentPath,
+                    this.buildHistoryFileExportName(repositoryPath, revision)
+                )
+            ),
+            saveLabel: this.i18n.t("exportFileSaveLabel"),
+            title: this.i18n.t("selectFileExportTitle", {
+                path: repositoryPath,
+                revision,
+            }),
+        });
+        if (!destinationUri) {
+            return undefined;
+        }
+
+        const destinationPath = destinationUri.fsPath;
+        if (await this.pathExists(destinationPath)) {
+            void vscode.window.showWarningMessage(
+                this.i18n.t("destinationExistsWarning", {
+                    destination: destinationPath,
+                })
+            );
+            return undefined;
+        }
+
+        return destinationPath;
     }
 
     private async revealCreatedPath(destinationPath: string, successMessage: string): Promise<void> {

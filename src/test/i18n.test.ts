@@ -130,6 +130,11 @@ test("createI18n returns repository action prompts", () => {
         "Postponing conflict resolution for 2 items..."
     );
     assert.equal(english.t("openFile"), "Open File");
+    assert.equal(english.t("exportThisFile"), "Export This File");
+    assert.equal(
+        english.t("selectFileExportTitle", { path: "/src/app.ts", revision: 42 }),
+        "Choose where to export /src/app.ts from r42"
+    );
 
     assert.equal(chinese.t("addAllUnversionedActionLabel"), "添加全部未纳管项");
     assert.equal(chinese.t("noLocalChangesInfo"), "当前没有可还原的本地更改。");
@@ -160,4 +165,9 @@ test("createI18n returns repository action prompts", () => {
         "要对 1 项 接受远端冲突块吗？"
     );
     assert.equal(chinese.t("openFile"), "打开文件");
+    assert.equal(chinese.t("exportThisFile"), "导出此文件");
+    assert.equal(
+        chinese.t("selectFileExportTitle", { path: "/src/app.ts", revision: 42 }),
+        "选择将 r42 的 /src/app.ts 导出到哪里"
+    );
 });
