@@ -10,6 +10,7 @@
   "command.updateSelected.title": "Update Selected Paths",
   "command.updateSelectedToRevision.title": "Update Selected Paths To Revision",
   "command.switchReference.title": "Switch Branch Or Tag",
+  "command.mergeIntoWorkingCopy.title": "Merge Into Working Copy",
   "command.showBlame.title": "Blame / Annotate",
   "command.showProperties.title": "Show Properties",
   "command.editProperty.title": "Edit Properties",

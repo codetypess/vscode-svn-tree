@@ -80,6 +80,9 @@ const englishMessages = {
     updateSelectedToRevisionInputPlaceholder: "Enter a positive SVN revision number",
     switchWorkingCopyActionLabel: "Switch Branch Or Tag",
     switchWorkingCopyActionDescription: "Switch this working copy to another branch, tag, or repository path",
+    mergeWorkingCopyActionLabel: "Merge Into Working Copy",
+    mergeWorkingCopyActionDescription:
+        "Merge a revision, revision range, or source path into the current working copy",
     showBlameActionLabel: "Blame / Annotate",
     showBlameActionDescription: "Show line-by-line revision and author details",
     showBlameOutputActionLabel: "Show Blame In Output",
@@ -104,6 +107,46 @@ const englishMessages = {
     switchTargetPlaceholder: "trunk, branches/feature-x, tags/v1, or https://...",
     switchTargetRequired: "Enter a target branch, tag, repository path, or URL.",
     switchTargetInvalid: "Use a valid repository path or URL.",
+    mergeModePlaceholder: "Choose what to merge into working copy {label}",
+    mergeRevisionModeLabel: "Merge A Revision",
+    mergeRevisionModeDescription:
+        "Merge one revision from a branch, tag, repository path, or URL",
+    mergeRangeModeLabel: "Merge A Revision Range",
+    mergeRangeModeDescription:
+        "Merge a revision range from a branch, tag, repository path, or URL",
+    reverseMergeRevisionModeLabel: "Reverse-Merge A Revision",
+    reverseMergeRevisionModeDescription:
+        "Undo the effect of one revision in this working copy",
+    reverseMergeToRevisionModeLabel: "Reverse-Merge Back To A Revision",
+    reverseMergeToRevisionModeDescription:
+        "Undo all revisions newer than a chosen revision in this working copy",
+    mergeSourcePrompt:
+        "Source path under {layoutRoot}, absolute repository path, or full URL to merge from",
+    mergeSourcePlaceholder: "trunk, branches/feature-x, /project/trunk, or https://...",
+    mergeSourceRequired: "Enter a source branch, tag, repository path, or URL.",
+    mergeSourceInvalid: "Use a valid source repository path or URL.",
+    mergeRevisionPrompt: "Revision number to merge from {source}",
+    reverseMergeRevisionPrompt: "Revision number to reverse-merge from {source}",
+    reverseMergeToRevisionPrompt:
+        "Keep revisions up to and including this revision from {source}",
+    mergeRangeStartPrompt: "Start revision of the range to merge from {source}",
+    mergeRangeEndPrompt: "End revision of the range to merge from {source}",
+    mergeRangeOrderInvalid: "Enter an end revision newer than r{revision}.",
+    mergeExecutionModePlaceholder: "Choose whether to preview or apply this merge",
+    mergeDryRunLabel: "Preview With Dry-Run",
+    mergeDryRunDescription:
+        "Recommended first: check mergeability without changing the working copy",
+    mergeApplyLabel: "Apply Merge",
+    mergeApplyDescription: "Perform the merge and update the working copy state",
+    mergeRevisionSummary: "revision r{revision} from {source}",
+    mergeRangeSummary: "revision range r{fromRevision}:r{toRevision} from {source}",
+    reverseMergeRevisionSummary: "reverse-merge revision r{revision} from {source}",
+    reverseMergeToRevisionSummary:
+        "reverse-merge all revisions newer than r{revision} from {source}",
+    mergeWorkingCopyQuestion: "Merge {summary} into working copy {label}?",
+    mergeWorkingCopyDetail: "This will apply {summary} to the current working copy.",
+    mergeDryRunDetail:
+        "Dry-run previews the merge and reports issues without changing the working copy.",
     updateWorkingCopyProgress: "Updating working copy {label}...",
     updateWorkingCopyCompleted: "Working copy update completed for {label}",
     updateWorkingCopyRunningTooltip: "Updating working copy...",
@@ -123,6 +166,14 @@ const englishMessages = {
     cleanupWorkingCopyCompleted: "Working copy cleanup completed for {label}",
     cleanupWorkingCopyRunningTooltip: "Cleaning up working copy...",
     switchWorkingCopyRunningTooltip: "Switching working copy...",
+    mergeWorkingCopyProgress: "Merging {summary} into working copy {label}...",
+    mergeWorkingCopyDryRunProgress:
+        "Previewing merge of {summary} into working copy {label}...",
+    mergedWorkingCopyInfo:
+        "Merged {summary} into working copy {label}. Review the result and commit when ready.",
+    mergeWorkingCopyDryRunInfo:
+        "Dry-run completed for {summary}. Review SVN output for details.",
+    mergeWorkingCopyRunningTooltip: "Merging into working copy...",
     addAllUnversionedActionLabel: "Add All Unversioned",
     addAllUnversionedActionDescription: "Add all unversioned files in this working copy",
     deleteAllUnversionedActionLabel: "Delete All Unversioned",
@@ -595,6 +646,9 @@ const messages: Record<SupportedLocale, MessageCatalog> = {
         updateSelectedToRevisionInputPlaceholder: "请输入正整数 SVN 版本号",
         switchWorkingCopyActionLabel: "切换分支或标签",
         switchWorkingCopyActionDescription: "将当前工作副本切换到其他分支、标签或仓库路径",
+        mergeWorkingCopyActionLabel: "合并到工作副本",
+        mergeWorkingCopyActionDescription:
+            "将某个版本、版本区间或来源路径合并到当前工作副本",
         showBlameActionLabel: "Blame / Annotate",
         showBlameActionDescription: "按行查看版本和作者信息",
         showBlameOutputActionLabel: "在输出中显示 blame",
@@ -618,6 +672,44 @@ const messages: Record<SupportedLocale, MessageCatalog> = {
         switchTargetPlaceholder: "trunk、branches/feature-x、tags/v1，或 https://...",
         switchTargetRequired: "请输入目标分支、标签、仓库路径或 URL。",
         switchTargetInvalid: "请输入有效的仓库路径或 URL。",
+        mergeModePlaceholder: "选择要合并到工作副本 {label} 的内容",
+        mergeRevisionModeLabel: "合并单个版本",
+        mergeRevisionModeDescription:
+            "从分支、标签、仓库路径或 URL 合并一个版本",
+        mergeRangeModeLabel: "合并版本区间",
+        mergeRangeModeDescription:
+            "从分支、标签、仓库路径或 URL 合并一个版本区间",
+        reverseMergeRevisionModeLabel: "反向合并单个版本",
+        reverseMergeRevisionModeDescription:
+            "在当前工作副本中撤销某一个版本的影响",
+        reverseMergeToRevisionModeLabel: "反向合并回指定版本",
+        reverseMergeToRevisionModeDescription:
+            "在当前工作副本中撤销比指定版本更新的全部版本",
+        mergeSourcePrompt:
+            "输入 {layoutRoot} 下的来源路径、仓库绝对路径，或完整 URL 作为合并来源",
+        mergeSourcePlaceholder:
+            "trunk、branches/feature-x、/project/trunk，或 https://...",
+        mergeSourceRequired: "请输入合并来源分支、标签、仓库路径或 URL。",
+        mergeSourceInvalid: "请输入有效的合并来源仓库路径或 URL。",
+        mergeRevisionPrompt: "输入要从 {source} 合并的版本号",
+        reverseMergeRevisionPrompt: "输入要从 {source} 反向合并的版本号",
+        reverseMergeToRevisionPrompt: "输入要保留到 {source} 的版本号（含该版本）",
+        mergeRangeStartPrompt: "输入要从 {source} 合并的起始版本号",
+        mergeRangeEndPrompt: "输入要从 {source} 合并的结束版本号",
+        mergeRangeOrderInvalid: "请输入比 r{revision} 更新的结束版本号。",
+        mergeExecutionModePlaceholder: "选择先预览还是直接执行这次合并",
+        mergeDryRunLabel: "先用 Dry-Run 预览",
+        mergeDryRunDescription: "推荐先检查是否可合并，不修改工作副本",
+        mergeApplyLabel: "直接执行合并",
+        mergeApplyDescription: "执行合并并更新工作副本状态",
+        mergeRevisionSummary: "来自 {source} 的版本 r{revision}",
+        mergeRangeSummary: "来自 {source} 的版本区间 r{fromRevision}:r{toRevision}",
+        reverseMergeRevisionSummary: "来自 {source} 的反向合并版本 r{revision}",
+        reverseMergeToRevisionSummary:
+            "来自 {source} 的反向合并，将比 r{revision} 更新的版本全部撤销",
+        mergeWorkingCopyQuestion: "要将 {summary} 合并到工作副本 {label} 吗？",
+        mergeWorkingCopyDetail: "这会把 {summary} 应用到当前工作副本。",
+        mergeDryRunDetail: "Dry-run 只会预览合并并报告问题，不会修改工作副本。",
         updateWorkingCopyProgress: "正在更新工作副本 {label}...",
         updateWorkingCopyCompleted: "已完成 {label} 的工作副本更新",
         updateWorkingCopyRunningTooltip: "正在更新工作副本...",
@@ -636,6 +728,14 @@ const messages: Record<SupportedLocale, MessageCatalog> = {
         cleanupWorkingCopyCompleted: "已完成 {label} 的工作副本清理",
         cleanupWorkingCopyRunningTooltip: "正在清理工作副本...",
         switchWorkingCopyRunningTooltip: "正在切换工作副本...",
+        mergeWorkingCopyProgress: "正在将 {summary} 合并到工作副本 {label}...",
+        mergeWorkingCopyDryRunProgress:
+            "正在预览将 {summary} 合并到工作副本 {label}...",
+        mergedWorkingCopyInfo:
+            "已将 {summary} 合并到工作副本 {label}。请检查结果并在准备好后提交。",
+        mergeWorkingCopyDryRunInfo:
+            "已完成 {summary} 的 Dry-run 预览。详情请查看 SVN 输出。",
+        mergeWorkingCopyRunningTooltip: "正在合并到工作副本...",
         addAllUnversionedActionLabel: "添加全部未纳管项",
         addAllUnversionedActionDescription: "将当前工作副本中的全部未纳管文件加入版本控制",
         deleteAllUnversionedActionLabel: "删除全部未纳管项",

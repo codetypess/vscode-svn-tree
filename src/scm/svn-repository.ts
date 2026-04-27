@@ -124,6 +124,30 @@ interface PropertyActionQuickPickItem extends vscode.QuickPickItem {
     readonly action: "set" | "delete";
 }
 
+type MergeWizardMode =
+    | "merge-revision"
+    | "merge-range"
+    | "reverse-merge-revision"
+    | "reverse-merge-to-revision";
+
+interface MergeModeQuickPickItem extends vscode.QuickPickItem {
+    readonly mode: MergeWizardMode;
+}
+
+interface MergeExecutionQuickPickItem extends vscode.QuickPickItem {
+    readonly dryRun: boolean;
+}
+
+interface MergeWizardRequest {
+    readonly mode: MergeWizardMode;
+    readonly sourceDisplay: string;
+    readonly sourceUrl: string;
+    readonly dryRun: boolean;
+    readonly revision?: number;
+    readonly fromRevision?: number;
+    readonly toRevision?: number;
+}
+
 type BlameDisplayMode = "text" | "output";
 type ConflictResolutionMode =
     | "working"
@@ -137,6 +161,7 @@ type SelectableConflictResolutionMode = Exclude<ConflictResolutionMode, "working
 type RepositoryUiOperation =
     | "refresh"
     | "update"
+    | "merge"
     | "cleanup"
     | "resolve"
     | "switch"
@@ -219,6 +244,10 @@ const repositoryUiOperationMessages: Record<
     update: {
         progressTooltipKey: "updateWorkingCopyRunningTooltip",
         actionLabelKey: "updateWorkingCopyActionLabel",
+    },
+    merge: {
+        progressTooltipKey: "mergeWorkingCopyRunningTooltip",
+        actionLabelKey: "mergeWorkingCopyActionLabel",
     },
     cleanup: {
         progressTooltipKey: "cleanupWorkingCopyRunningTooltip",
@@ -944,6 +973,77 @@ export class SvnRepository implements vscode.Disposable {
                 });
             }
         );
+    }
+
+    public async mergeIntoWorkingCopy(): Promise<void> {
+        const request = await this.promptMergeRequest();
+        if (!request) {
+            return;
+        }
+
+        const summary = this.describeMergeRequest(request);
+        const confirmed = await this.confirmMergeRequest(request, summary);
+        if (!confirmed) {
+            return;
+        }
+
+        const progressTitle = request.dryRun
+            ? this.i18n.t("mergeWorkingCopyDryRunProgress", {
+                  summary,
+                  label: this.label,
+              })
+            : this.i18n.t("mergeWorkingCopyProgress", {
+                  summary,
+                  label: this.label,
+              });
+        const completedMessage = request.dryRun
+            ? this.i18n.t("mergeWorkingCopyDryRunInfo", { summary })
+            : this.i18n.t("mergedWorkingCopyInfo", {
+                  summary,
+                  label: this.label,
+              });
+
+        await this.runRepositoryOperation("merge", progressTitle, completedMessage, async () => {
+            switch (request.mode) {
+                case "merge-revision":
+                    await this.svnService.mergeRevision(
+                        this.rootPath,
+                        request.sourceUrl,
+                        request.revision ?? 0,
+                        { dryRun: request.dryRun }
+                    );
+                    break;
+                case "merge-range":
+                    await this.svnService.mergeRevisionRange(
+                        this.rootPath,
+                        request.sourceUrl,
+                        request.fromRevision ?? 0,
+                        request.toRevision ?? 0,
+                        { dryRun: request.dryRun }
+                    );
+                    break;
+                case "reverse-merge-revision":
+                    await this.svnService.reverseMergeRevision(
+                        this.rootPath,
+                        request.sourceUrl,
+                        request.revision ?? 0,
+                        { dryRun: request.dryRun }
+                    );
+                    break;
+                case "reverse-merge-to-revision":
+                    await this.svnService.reverseMergeToRevision(
+                        this.rootPath,
+                        request.sourceUrl,
+                        request.revision ?? 0,
+                        { dryRun: request.dryRun }
+                    );
+                    break;
+            }
+
+            if (!request.dryRun) {
+                await this.finalizeRepositoryMutation({ refresh: true });
+            }
+        });
     }
 
     public async checkoutRevision(revision: number): Promise<void> {
@@ -3430,6 +3530,300 @@ export class SvnRepository implements vscode.Disposable {
         });
 
         return targetUrl?.trim() || undefined;
+    }
+
+    private async promptMergeRequest(): Promise<MergeWizardRequest | undefined> {
+        const mode = await this.promptMergeMode();
+        if (!mode) {
+            return undefined;
+        }
+
+        const source = this.isForwardMergeMode(mode)
+            ? await this.promptMergeSourceTarget()
+            : this.getCurrentWorkingCopyMergeSource();
+        if (!source) {
+            return undefined;
+        }
+
+        let revision: number | undefined;
+        let fromRevision: number | undefined;
+        let toRevision: number | undefined;
+
+        switch (mode) {
+            case "merge-revision":
+                revision = await this.promptPositiveRevisionInput(
+                    this.i18n.t("mergeRevisionPrompt", { source: source.display })
+                );
+                break;
+            case "merge-range": {
+                const range = await this.promptMergeRange(source.display);
+                fromRevision = range?.fromRevision;
+                toRevision = range?.toRevision;
+                break;
+            }
+            case "reverse-merge-revision":
+                revision = await this.promptPositiveRevisionInput(
+                    this.i18n.t("reverseMergeRevisionPrompt", { source: source.display })
+                );
+                break;
+            case "reverse-merge-to-revision":
+                revision = await this.promptPositiveRevisionInput(
+                    this.i18n.t("reverseMergeToRevisionPrompt", { source: source.display })
+                );
+                break;
+        }
+
+        if (
+            (mode === "merge-revision" ||
+                mode === "reverse-merge-revision" ||
+                mode === "reverse-merge-to-revision") &&
+            revision === undefined
+        ) {
+            return undefined;
+        }
+
+        if (mode === "merge-range" && (fromRevision === undefined || toRevision === undefined)) {
+            return undefined;
+        }
+
+        const dryRun = await this.promptMergeExecutionMode();
+        if (dryRun === undefined) {
+            return undefined;
+        }
+
+        return {
+            mode,
+            sourceDisplay: source.display,
+            sourceUrl: source.url,
+            dryRun,
+            revision,
+            fromRevision,
+            toRevision,
+        };
+    }
+
+    private async promptMergeMode(): Promise<MergeWizardMode | undefined> {
+        const selection = await vscode.window.showQuickPick<MergeModeQuickPickItem>(
+            [
+                {
+                    label: this.i18n.t("mergeRevisionModeLabel"),
+                    description: this.i18n.t("mergeRevisionModeDescription"),
+                    mode: "merge-revision",
+                },
+                {
+                    label: this.i18n.t("mergeRangeModeLabel"),
+                    description: this.i18n.t("mergeRangeModeDescription"),
+                    mode: "merge-range",
+                },
+                {
+                    label: this.i18n.t("reverseMergeRevisionModeLabel"),
+                    description: this.i18n.t("reverseMergeRevisionModeDescription"),
+                    mode: "reverse-merge-revision",
+                },
+                {
+                    label: this.i18n.t("reverseMergeToRevisionModeLabel"),
+                    description: this.i18n.t("reverseMergeToRevisionModeDescription"),
+                    mode: "reverse-merge-to-revision",
+                },
+            ],
+            {
+                title: this.i18n.t("mergeWorkingCopyActionLabel"),
+                placeHolder: this.i18n.t("mergeModePlaceholder", {
+                    label: this.label,
+                }),
+            }
+        );
+
+        return selection?.mode;
+    }
+
+    private async promptMergeSourceTarget(): Promise<
+        | {
+              display: string;
+              url: string;
+          }
+        | undefined
+    > {
+        const layoutRoot = getReferenceLayoutRoot(this.info.repositoryRelativePath);
+        const value = await vscode.window.showInputBox({
+            title: this.i18n.t("mergeWorkingCopyActionLabel"),
+            prompt: this.i18n.t("mergeSourcePrompt", {
+                layoutRoot,
+            }),
+            placeHolder: this.i18n.t("mergeSourcePlaceholder"),
+            validateInput: (input) => this.validateMergeSourceTarget(input),
+        });
+        const trimmedValue = value?.trim();
+        if (!trimmedValue) {
+            return undefined;
+        }
+
+        return resolveSwitchTarget({
+            target: trimmedValue,
+            repositoryRoot: this.info.repositoryRoot,
+            repositoryRelativePath: this.info.repositoryRelativePath,
+        });
+    }
+
+    private getCurrentWorkingCopyMergeSource(): { display: string; url: string } {
+        const repositoryPath = normalizeRepositoryPath(this.info.repositoryRelativePath);
+        return {
+            display: repositoryPath,
+            url: buildRepositoryUrl(this.info.repositoryRoot, repositoryPath),
+        };
+    }
+
+    private async promptPositiveRevisionInput(prompt: string): Promise<number | undefined> {
+        const value = await vscode.window.showInputBox({
+            title: this.i18n.t("mergeWorkingCopyActionLabel"),
+            prompt,
+            placeHolder: this.i18n.t("updateToRevisionInputPlaceholder"),
+            validateInput: (input) => {
+                return toRevisionNumber(input.trim()) === undefined
+                    ? this.i18n.t("invalidRevisionError")
+                    : undefined;
+            },
+        });
+        return toRevisionNumber(value?.trim());
+    }
+
+    private async promptMergeRange(
+        sourceDisplay: string
+    ): Promise<{ fromRevision: number; toRevision: number } | undefined> {
+        const fromRevision = await this.promptPositiveRevisionInput(
+            this.i18n.t("mergeRangeStartPrompt", { source: sourceDisplay })
+        );
+        if (fromRevision === undefined) {
+            return undefined;
+        }
+
+        const toValue = await vscode.window.showInputBox({
+            title: this.i18n.t("mergeWorkingCopyActionLabel"),
+            prompt: this.i18n.t("mergeRangeEndPrompt", { source: sourceDisplay }),
+            placeHolder: this.i18n.t("updateToRevisionInputPlaceholder"),
+            validateInput: (input) => {
+                const parsed = toRevisionNumber(input.trim());
+                if (parsed === undefined) {
+                    return this.i18n.t("invalidRevisionError");
+                }
+
+                return parsed > fromRevision
+                    ? undefined
+                    : this.i18n.t("mergeRangeOrderInvalid", {
+                          revision: fromRevision,
+                      });
+            },
+        });
+        const toRevision = toRevisionNumber(toValue?.trim());
+        if (toRevision === undefined || toRevision <= fromRevision) {
+            return undefined;
+        }
+
+        return {
+            fromRevision,
+            toRevision,
+        };
+    }
+
+    private async promptMergeExecutionMode(): Promise<boolean | undefined> {
+        const selection = await vscode.window.showQuickPick<MergeExecutionQuickPickItem>(
+            [
+                {
+                    label: this.i18n.t("mergeDryRunLabel"),
+                    description: this.i18n.t("mergeDryRunDescription"),
+                    dryRun: true,
+                },
+                {
+                    label: this.i18n.t("mergeApplyLabel"),
+                    description: this.i18n.t("mergeApplyDescription"),
+                    dryRun: false,
+                },
+            ],
+            {
+                title: this.i18n.t("mergeWorkingCopyActionLabel"),
+                placeHolder: this.i18n.t("mergeExecutionModePlaceholder"),
+            }
+        );
+
+        return selection?.dryRun;
+    }
+
+    private validateMergeSourceTarget(value: string): string | undefined {
+        const validationError = getSwitchTargetValidationError(value);
+        switch (validationError) {
+            case "required":
+                return this.i18n.t("mergeSourceRequired");
+            case "invalid-path":
+                return this.i18n.t("mergeSourceInvalid");
+            default:
+                return undefined;
+        }
+    }
+
+    private isForwardMergeMode(mode: MergeWizardMode): boolean {
+        return mode === "merge-revision" || mode === "merge-range";
+    }
+
+    private describeMergeRequest(request: MergeWizardRequest): string {
+        switch (request.mode) {
+            case "merge-revision":
+                return this.i18n.t("mergeRevisionSummary", {
+                    revision: request.revision ?? 0,
+                    source: request.sourceDisplay,
+                });
+            case "merge-range":
+                return this.i18n.t("mergeRangeSummary", {
+                    fromRevision: request.fromRevision ?? 0,
+                    toRevision: request.toRevision ?? 0,
+                    source: request.sourceDisplay,
+                });
+            case "reverse-merge-revision":
+                return this.i18n.t("reverseMergeRevisionSummary", {
+                    revision: request.revision ?? 0,
+                    source: request.sourceDisplay,
+                });
+            case "reverse-merge-to-revision":
+                return this.i18n.t("reverseMergeToRevisionSummary", {
+                    revision: request.revision ?? 0,
+                    source: request.sourceDisplay,
+                });
+        }
+    }
+
+    private async confirmMergeRequest(
+        request: MergeWizardRequest,
+        summary: string
+    ): Promise<boolean> {
+        const detailLines = [
+            this.i18n.t("mergeWorkingCopyDetail", {
+                summary,
+            }),
+            this.i18n.t("cleanWorkingCopyRecommended"),
+        ];
+
+        if (request.dryRun) {
+            detailLines.push(this.i18n.t("mergeDryRunDetail"));
+        } else {
+            detailLines.push(this.i18n.t("workingCopyOnlyDetail"));
+        }
+
+        if (this.hasLocalChanges()) {
+            detailLines.push(this.i18n.t("localChangesConflictWarning"));
+        }
+
+        const selection = await vscode.window.showWarningMessage(
+            this.i18n.t("mergeWorkingCopyQuestion", {
+                summary,
+                label: this.label,
+            }),
+            {
+                modal: true,
+                detail: detailLines.join("\n"),
+            },
+            this.i18n.t("continueButton")
+        );
+
+        return selection === this.i18n.t("continueButton");
     }
 
     private validateSwitchTarget(value: string): string | undefined {

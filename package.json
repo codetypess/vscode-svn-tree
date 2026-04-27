@@ -2,7 +2,7 @@
   "name": "svn-tree",
   "displayName": "%displayName%",
   "description": "%description%",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "publisher": "codetypess",
   "license": "MIT",
   "icon": "media/icon.png",
@@ -81,6 +81,11 @@
         "title": "%command.switchReference.title%",
         "category": "%command.category%",
         "icon": "$(git-branch)"
+      },
+      {
+        "command": "svn-tree.merge-into-working-copy",
+        "title": "%command.mergeIntoWorkingCopy.title%",
+        "category": "%command.category%"
       },
       {
         "command": "svn-tree.show-blame",
@@ -244,7 +249,8 @@
       {
         "command": "svn-tree.delete-group",
         "title": "%command.deleteGroup.title%",
-        "category": "%command.category%"
+        "category": "%command.category%",
+        "icon": "$(trash)"
       },
       {
         "command": "svn-tree.open-history-diff",
@@ -547,20 +553,24 @@
           "group": "1_working_copy@2"
         },
         {
-          "command": "svn-tree.create-branch-from-working-copy",
+          "command": "svn-tree.merge-into-working-copy",
           "group": "1_working_copy@3"
         },
         {
-          "command": "svn-tree.create-tag-from-working-copy",
+          "command": "svn-tree.create-branch-from-working-copy",
           "group": "1_working_copy@4"
         },
         {
-          "command": "svn-tree.delete-reference",
+          "command": "svn-tree.create-tag-from-working-copy",
           "group": "1_working_copy@5"
         },
         {
-          "command": "svn-tree.relocate-working-copy",
+          "command": "svn-tree.delete-reference",
           "group": "1_working_copy@6"
+        },
+        {
+          "command": "svn-tree.relocate-working-copy",
+          "group": "1_working_copy@7"
         }
       ],
       "svn-tree.repository-actions.changes": [

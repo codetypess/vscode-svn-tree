@@ -54,6 +54,11 @@ type SvnResolveAcceptOption =
     | "theirs-full"
     | "postpone";
 
+interface SvnMergeRunOptions {
+    readonly dryRun?: boolean;
+    readonly accept?: SvnResolveAcceptOption;
+}
+
 interface SvnLogQueryResult {
     entries: SvnLogEntry[];
     hasMore: boolean;
@@ -358,13 +363,54 @@ export class SvnService {
         await this.run(args);
     }
 
+    public async mergeRevision(
+        rootPath: string,
+        source: string,
+        revision: number,
+        options: SvnMergeRunOptions = {}
+    ): Promise<void> {
+        await this.run(
+            this.buildMergeArgs([
+                "-c",
+                String(Math.floor(revision)),
+                source,
+                ".",
+            ], options),
+            { cwd: rootPath }
+        );
+    }
+
+    public async mergeRevisionRange(
+        rootPath: string,
+        source: string,
+        fromRevision: number,
+        toRevision: number,
+        options: SvnMergeRunOptions = {}
+    ): Promise<void> {
+        await this.run(
+            this.buildMergeArgs([
+                "-r",
+                `${Math.floor(fromRevision)}:${Math.floor(toRevision)}`,
+                source,
+                ".",
+            ], options),
+            { cwd: rootPath }
+        );
+    }
+
     public async reverseMergeRevision(
         rootPath: string,
         source: string,
-        revision: number
+        revision: number,
+        options: SvnMergeRunOptions = {}
     ): Promise<void> {
         await this.run(
-            ["merge", "--accept", "postpone", "-c", `-${revision}`, source, "."],
+            this.buildMergeArgs([
+                "-c",
+                `-${Math.floor(revision)}`,
+                source,
+                ".",
+            ], options),
             { cwd: rootPath }
         );
     }
@@ -372,10 +418,16 @@ export class SvnService {
     public async reverseMergeToRevision(
         rootPath: string,
         source: string,
-        revision: number
+        revision: number,
+        options: SvnMergeRunOptions = {}
     ): Promise<void> {
         await this.run(
-            ["merge", "--accept", "postpone", "-r", `HEAD:${revision}`, source, "."],
+            this.buildMergeArgs([
+                "-r",
+                `HEAD:${Math.floor(revision)}`,
+                source,
+                ".",
+            ], options),
             { cwd: rootPath }
         );
     }
@@ -416,6 +468,19 @@ export class SvnService {
             destinationPath,
         ]);
         await this.run(["move", sourceTarget, destinationTarget], { cwd: rootPath });
+    }
+
+    private buildMergeArgs(
+        mergeArgs: string[],
+        options: SvnMergeRunOptions = {}
+    ): string[] {
+        const args = ["merge"];
+        if (options.dryRun) {
+            args.push("--dry-run");
+        }
+
+        args.push("--accept", options.accept ?? "postpone", ...mergeArgs);
+        return args;
     }
 
     public async lock(rootPath: string, paths: string[]): Promise<void> {

@@ -209,6 +209,10 @@ export class SvnRepositoryManager implements vscode.Disposable {
                 run: (repository) => repository.switchRepositoryReference(),
             },
             {
+                command: "svn-tree.merge-into-working-copy",
+                run: (repository) => repository.mergeIntoWorkingCopy(),
+            },
+            {
                 command: "svn-tree.create-branch-from-working-copy",
                 run: (repository) => repository.createBranchFromWorkingCopy(),
             },
@@ -771,6 +775,11 @@ export class SvnRepositoryManager implements vscode.Disposable {
                         labelKey: "switchWorkingCopyActionLabel",
                         descriptionKey: "switchWorkingCopyActionDescription",
                         run: (repository) => repository.switchRepositoryReference(),
+                    },
+                    {
+                        labelKey: "mergeWorkingCopyActionLabel",
+                        descriptionKey: "mergeWorkingCopyActionDescription",
+                        run: (repository) => repository.mergeIntoWorkingCopy(),
                     },
                     {
                         labelKey: "createBranchFromWorkingCopyActionLabel",

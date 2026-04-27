@@ -10,6 +10,7 @@
   "command.updateSelected.title": "更新选中的路径",
   "command.updateSelectedToRevision.title": "将选中的路径更新到指定版本",
   "command.switchReference.title": "切换分支或标签",
+  "command.mergeIntoWorkingCopy.title": "合并到工作副本",
   "command.showBlame.title": "Blame / Annotate",
   "command.showProperties.title": "显示属性",
   "command.editProperty.title": "编辑属性",
