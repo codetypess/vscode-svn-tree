@@ -1344,33 +1344,24 @@ export class SvnRepositoryManager implements vscode.Disposable {
 
     private async revertGroup(arg: unknown): Promise<void> {
         const i18n = getI18n();
-        const resolved = await this.resolveGroupPaths(arg, {
-            contextValue: "svn-changes-group",
-            getFallbackPaths: (repository) => repository.getChangedPaths(),
-            emptyMessageKey: "noLocalChangesInfo",
-        });
-        if (!resolved) {
-            return;
-        }
-        const { repository, paths } = resolved;
-
-        const confirmation = await vscode.window.showWarningMessage(
-            i18n.t("revertGroupWarning", {
-                label: i18n.formatItemCount(paths.length),
-            }),
-            { modal: true },
-            i18n.t("revertAllButton")
+        await this.runGroupPathsAction(
+            arg,
+            {
+                contextValue: "svn-changes-group",
+                getFallbackPaths: (repository) => repository.getChangedPaths(),
+                emptyMessageKey: "noLocalChangesInfo",
+                confirm: (paths) =>
+                    this.confirmModalAction({
+                        message: i18n.t("revertGroupWarning", {
+                            label: i18n.formatItemCount(paths.length),
+                        }),
+                        buttonLabel: i18n.t("revertAllButton"),
+                    }),
+            },
+            async ({ repository, paths }) => {
+                await repository.revert(paths);
+            }
         );
-
-        if (confirmation !== i18n.t("revertAllButton")) {
-            return;
-        }
-
-        try {
-            await repository.revert(paths);
-        } catch (error) {
-            this.showError(error);
-        }
     }
 
     private async addResource(arg: unknown): Promise<void> {
@@ -1398,21 +1389,17 @@ export class SvnRepositoryManager implements vscode.Disposable {
     }
 
     private async addGroup(arg: unknown): Promise<void> {
-        const resolved = await this.resolveGroupPaths(arg, {
-            contextValue: "svn-unversioned-group",
-            getFallbackPaths: (repository) => repository.getUnversionedPaths(),
-            emptyMessageKey: "noUnversionedChangesInfo",
-        });
-        if (!resolved) {
-            return;
-        }
-        const { repository, paths } = resolved;
-
-        try {
-            await repository.add(paths);
-        } catch (error) {
-            this.showError(error);
-        }
+        await this.runGroupPathsAction(
+            arg,
+            {
+                contextValue: "svn-unversioned-group",
+                getFallbackPaths: (repository) => repository.getUnversionedPaths(),
+                emptyMessageKey: "noUnversionedChangesInfo",
+            },
+            async ({ repository, paths }) => {
+                await repository.add(paths);
+            }
+        );
     }
 
     private async addToChangelist(arg: unknown): Promise<void> {
@@ -1441,37 +1428,30 @@ export class SvnRepositoryManager implements vscode.Disposable {
 
     private async deleteGroup(arg: unknown): Promise<void> {
         const i18n = getI18n();
-        const resolved = await this.resolveGroupPaths(arg, {
-            contextValue: "svn-unversioned-group",
-            getFallbackPaths: (repository) => repository.getUnversionedPaths(),
-            emptyMessageKey: "noUnversionedChangesInfo",
-        });
-        if (!resolved) {
-            return;
-        }
-        const { repository, paths } = resolved;
-
-        const confirmed = await this.confirmModalAction({
-            message: i18n.t("deleteGroupWarning", {
-                label: i18n.formatItemCount(paths.length),
-            }),
-            buttonLabel: i18n.t("deleteAllButton"),
-        });
-        if (!confirmed) {
-            return;
-        }
-
-        try {
-            for (const targetPath of this.getUniqueDescendingPaths(paths)) {
-                await vscode.workspace.fs.delete(vscode.Uri.file(targetPath), {
-                    recursive: true,
-                    useTrash: true,
-                });
+        await this.runGroupPathsAction(
+            arg,
+            {
+                contextValue: "svn-unversioned-group",
+                getFallbackPaths: (repository) => repository.getUnversionedPaths(),
+                emptyMessageKey: "noUnversionedChangesInfo",
+                confirm: (paths) =>
+                    this.confirmModalAction({
+                        message: i18n.t("deleteGroupWarning", {
+                            label: i18n.formatItemCount(paths.length),
+                        }),
+                        buttonLabel: i18n.t("deleteAllButton"),
+                    }),
+            },
+            async ({ repository, paths }) => {
+                for (const targetPath of this.getUniqueDescendingPaths(paths)) {
+                    await vscode.workspace.fs.delete(vscode.Uri.file(targetPath), {
+                        recursive: true,
+                        useTrash: true,
+                    });
+                }
+                await repository.refresh();
             }
-            await repository.refresh();
-        } catch (error) {
-            this.showError(error);
-        }
+        );
     }
 
     private async revealInFileManager(arg: unknown): Promise<void> {
@@ -1941,6 +1921,32 @@ export class SvnRepositoryManager implements vscode.Disposable {
         }
 
         return { repository, paths };
+    }
+
+    private async runGroupPathsAction(
+        arg: unknown,
+        options: {
+            readonly contextValue: string;
+            readonly getFallbackPaths: (repository: SvnRepository) => string[];
+            readonly emptyMessageKey: MessageKey;
+            readonly confirm?: (paths: string[], repository: SvnRepository) => Promise<boolean>;
+        },
+        action: (resolved: ResolvedRepositoryPaths) => Promise<void>
+    ): Promise<void> {
+        const resolved = await this.resolveGroupPaths(arg, options);
+        if (!resolved) {
+            return;
+        }
+
+        if (options.confirm && !(await options.confirm(resolved.paths, resolved.repository))) {
+            return;
+        }
+
+        try {
+            await action(resolved);
+        } catch (error) {
+            this.showError(error);
+        }
     }
 
     private async resolveNodeInfo(target: ResolvedPathTarget): Promise<SvnNodeInfo | undefined> {
