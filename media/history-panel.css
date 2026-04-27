@@ -651,13 +651,14 @@ button.secondary:hover {
   align-items: center;
   gap: 4px;
   min-width: 0;
+  overflow: hidden;
   white-space: nowrap;
   min-height: 24px;
 }
 
 .summary-message {
   min-width: 0;
-  flex: none;
+  flex: 0 1 auto;
   font-weight: 400;
   font-size: 13px;
   white-space: nowrap;
@@ -692,7 +693,7 @@ button.secondary:hover {
 .summary-meta {
   color: var(--muted);
   font-size: 11px;
-  flex: 1;
+  flex: none;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
