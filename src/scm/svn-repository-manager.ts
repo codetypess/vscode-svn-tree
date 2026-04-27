@@ -1270,25 +1270,17 @@ export class SvnRepositoryManager implements vscode.Disposable {
 
     private async revertResource(arg: unknown): Promise<void> {
         const i18n = getI18n();
-        if (!(arg instanceof ScmResource)) {
-            return;
-        }
+        await this.runForSingleResource(arg, async (resource) => {
+            const confirmed = await this.confirmModalAction({
+                message: i18n.t("revertResourceWarning", { path: resource.status.relativePath }),
+                buttonLabel: i18n.t("revertButton"),
+            });
+            if (!confirmed) {
+                return;
+            }
 
-        const confirmation = await vscode.window.showWarningMessage(
-            i18n.t("revertResourceWarning", { path: arg.status.relativePath }),
-            { modal: true },
-            i18n.t("revertButton")
-        );
-
-        if (confirmation !== i18n.t("revertButton")) {
-            return;
-        }
-
-        try {
-            await arg.repository.revert([arg.status.absolutePath]);
-        } catch (error) {
-            this.showError(error);
-        }
+            await resource.repository.revert([resource.status.absolutePath]);
+        });
     }
 
     private async commitSelected(arg: unknown): Promise<void> {
@@ -1303,10 +1295,9 @@ export class SvnRepositoryManager implements vscode.Disposable {
             return;
         }
 
-        const changelistName = await this.promptChangelistName(
-            this.getCommonChangelistName(
-                this.getSelectedResources(arg, ["svn-change", "svn-conflict"])
-            )
+        const changelistName = await this.promptSelectedChangelistName(
+            arg,
+            ["svn-change", "svn-conflict"]
         );
         if (!changelistName) {
             return;
@@ -1381,30 +1372,15 @@ export class SvnRepositoryManager implements vscode.Disposable {
     }
 
     private async addResource(arg: unknown): Promise<void> {
-        if (!(arg instanceof ScmResource)) {
-            return;
-        }
-
-        try {
-            await arg.repository.add([arg.status.absolutePath]);
-        } catch (error) {
-            this.showError(error);
-        }
+        await this.runForSingleResource(arg, async (resource) => {
+            await resource.repository.add([resource.status.absolutePath]);
+        });
     }
 
     private async ignoreResource(arg: unknown): Promise<void> {
-        const resources = this.getSelectedResources(arg, ["svn-unversioned"]);
-        if (resources.length === 0) {
-            return;
-        }
-
-        try {
-            for (const resource of resources) {
-                await resource.repository.ignoreWorkingCopyPath(resource.status.absolutePath);
-            }
-        } catch (error) {
-            this.showError(error);
-        }
+        await this.runForEachSelectedResource(arg, ["svn-unversioned"], async (resource) => {
+            await resource.repository.ignoreWorkingCopyPath(resource.status.absolutePath);
+        });
     }
 
     private async ignorePath(arg: unknown): Promise<void> {
@@ -1438,20 +1414,16 @@ export class SvnRepositoryManager implements vscode.Disposable {
     }
 
     private async addToChangelist(arg: unknown): Promise<void> {
-        const resources = this.getSelectedResources(arg, ["svn-change", "svn-conflict"]);
-        if (resources.length === 0) {
-            return;
-        }
-
-        const changelistName = await this.promptChangelistName(
-            this.getCommonChangelistName(resources)
+        const changelistName = await this.promptSelectedChangelistName(
+            arg,
+            ["svn-change", "svn-conflict"]
         );
         if (!changelistName) {
             return;
         }
 
         await this.runSelectedResourceAction(
-            resources,
+            arg,
             ["svn-change", "svn-conflict"],
             (repository, paths) => repository.addToChangelist(paths, changelistName)
         );
@@ -1477,22 +1449,18 @@ export class SvnRepositoryManager implements vscode.Disposable {
         }
         const { repository, paths } = resolved;
 
-        const confirmation = await vscode.window.showWarningMessage(
-            i18n.t("deleteGroupWarning", {
+        const confirmed = await this.confirmModalAction({
+            message: i18n.t("deleteGroupWarning", {
                 label: i18n.formatItemCount(paths.length),
             }),
-            { modal: true },
-            i18n.t("deleteAllButton")
-        );
-
-        if (confirmation !== i18n.t("deleteAllButton")) {
+            buttonLabel: i18n.t("deleteAllButton"),
+        });
+        if (!confirmed) {
             return;
         }
 
         try {
-            for (const targetPath of [...new Set(paths)].sort(
-                (left, right) => right.length - left.length
-            )) {
+            for (const targetPath of this.getUniqueDescendingPaths(paths)) {
                 await vscode.workspace.fs.delete(vscode.Uri.file(targetPath), {
                     recursive: true,
                     useTrash: true,
@@ -1512,29 +1480,21 @@ export class SvnRepositoryManager implements vscode.Disposable {
 
     private async deleteResource(arg: unknown): Promise<void> {
         const i18n = getI18n();
-        if (!(arg instanceof ScmResource)) {
-            return;
-        }
+        await this.runForSingleResource(arg, async (resource) => {
+            const confirmed = await this.confirmModalAction({
+                message: i18n.t("deleteResourceWarning", { path: resource.status.relativePath }),
+                buttonLabel: i18n.t("deleteButton"),
+            });
+            if (!confirmed) {
+                return;
+            }
 
-        const confirmation = await vscode.window.showWarningMessage(
-            i18n.t("deleteResourceWarning", { path: arg.status.relativePath }),
-            { modal: true },
-            i18n.t("deleteButton")
-        );
-
-        if (confirmation !== i18n.t("deleteButton")) {
-            return;
-        }
-
-        try {
-            await vscode.workspace.fs.delete(arg.resourceUri, {
-                recursive: arg.status.kind === "dir",
+            await vscode.workspace.fs.delete(resource.resourceUri, {
+                recursive: resource.status.kind === "dir",
                 useTrash: true,
             });
-            await arg.repository.refresh();
-        } catch (error) {
-            this.showError(error);
-        }
+            await resource.repository.refresh();
+        });
     }
 
     private showError(error: unknown): void {
@@ -1599,6 +1559,18 @@ export class SvnRepositoryManager implements vscode.Disposable {
     private getCommonChangelistName(resources: readonly ScmResource[]): string | undefined {
         const names = [...new Set(resources.map((resource) => resource.status.changelist).filter(Boolean))];
         return names.length === 1 ? names[0] : undefined;
+    }
+
+    private async promptSelectedChangelistName(
+        arg: unknown,
+        contextValues: readonly string[]
+    ): Promise<string | undefined> {
+        const resources = this.getSelectedResources(arg, contextValues);
+        if (Array.isArray(arg) && resources.length === 0) {
+            return undefined;
+        }
+
+        return this.promptChangelistName(this.getCommonChangelistName(resources));
     }
 
     private async promptChangelistName(
@@ -1836,6 +1808,40 @@ export class SvnRepositoryManager implements vscode.Disposable {
         }
     }
 
+    private async runForSingleResource(
+        arg: unknown,
+        action: (resource: ScmResource) => Promise<void>
+    ): Promise<void> {
+        if (!(arg instanceof ScmResource)) {
+            return;
+        }
+
+        try {
+            await action(arg);
+        } catch (error) {
+            this.showError(error);
+        }
+    }
+
+    private async runForEachSelectedResource(
+        arg: unknown,
+        contextValues: readonly string[],
+        action: (resource: ScmResource) => Promise<void>
+    ): Promise<void> {
+        const resources = this.getSelectedResources(arg, contextValues);
+        if (resources.length === 0) {
+            return;
+        }
+
+        try {
+            for (const resource of resources) {
+                await action(resource);
+            }
+        } catch (error) {
+            this.showError(error);
+        }
+    }
+
     private async runLockablePathAction(
         arg: unknown,
         action: (repository: SvnRepository, paths: string[]) => Promise<void>
@@ -1873,6 +1879,27 @@ export class SvnRepositoryManager implements vscode.Disposable {
             target.resource?.status.wcStatus === "deleted" ||
             target.resource?.status.wcStatus === "missing"
         );
+    }
+
+    private async confirmModalAction(options: {
+        readonly message: string;
+        readonly buttonLabel: string;
+        readonly detail?: string;
+    }): Promise<boolean> {
+        const selection = await vscode.window.showWarningMessage(
+            options.message,
+            {
+                modal: true,
+                detail: options.detail,
+            },
+            options.buttonLabel
+        );
+
+        return selection === options.buttonLabel;
+    }
+
+    private getUniqueDescendingPaths(paths: readonly string[]): string[] {
+        return [...new Set(paths)].sort((left, right) => right.length - left.length);
     }
 
     private async resolveGroupPaths(
