@@ -2,19 +2,32 @@ import * as nodePath from "node:path";
 import * as vscode from "vscode";
 import { HistoryPanel } from "../history/history-panel";
 import { RevisionGraphPanel } from "../revision-graph/revision-graph-panel";
+import type { MessageKey } from "../i18n";
 import type { SvnNodeInfo } from "../svn/svn-types";
 import { getI18n } from "../vscode-i18n";
+import { appendOutputSection } from "./output-channel-utils";
+import {
+    buildQuickPickActionCategories,
+    type QuickPickActionCategoryDefinition,
+    type QuickPickActionCategoryItem,
+    type QuickPickActionItem,
+} from "./quick-pick-action-utils";
 import { SvnContentProvider } from "../svn/svn-content-provider";
 import { SvnService } from "../svn/svn-service";
 import { ScmResource } from "./scm-resource";
+import { buildPathInfoOutputLines } from "./svn-output-formatters";
 import { SvnRepository } from "./svn-repository";
 
-interface RepositoryActionItem extends vscode.QuickPickItem {
+interface RepositoryActionDefinition {
+    readonly labelKey: MessageKey;
+    readonly descriptionKey: MessageKey;
     readonly run: (repository: SvnRepository) => Promise<void>;
 }
 
-interface RepositoryActionCategoryItem extends vscode.QuickPickItem {
-    readonly actions: RepositoryActionItem[];
+interface RepositoryActionCategoryDefinition {
+    readonly labelKey: MessageKey;
+    readonly descriptionKey: MessageKey;
+    readonly actions: readonly RepositoryActionDefinition[];
 }
 
 type RepositoryCommandHandler = (repository: SvnRepository) => Promise<void>;
@@ -22,6 +35,78 @@ type ConflictCommandHandler = (
     repository: SvnRepository,
     paths: string[]
 ) => Promise<void>;
+type RepositoryActionItem = QuickPickActionItem<SvnRepository>;
+type RepositoryActionCategoryItem = QuickPickActionCategoryItem<SvnRepository>;
+
+interface RepositoryCommandRegistration {
+    readonly command: string;
+    readonly run: RepositoryCommandHandler;
+}
+
+interface CommandRegistration {
+    readonly command: string;
+    readonly run: (arg?: unknown) => Promise<void>;
+}
+
+interface ConflictActionDefinition {
+    readonly selectedCommand: string;
+    readonly allCommand: string;
+    readonly labelKey: MessageKey;
+    readonly descriptionKey: MessageKey;
+    readonly run: ConflictCommandHandler;
+}
+
+const conflictActionDefinitions: readonly ConflictActionDefinition[] = [
+    {
+        selectedCommand: "svn-tree.resolve-conflict",
+        allCommand: "svn-tree.resolve-all-conflicts",
+        labelKey: "resolveAllConflictsActionLabel",
+        descriptionKey: "resolveAllConflictsActionDescription",
+        run: (repository, paths) => repository.markResolved(paths),
+    },
+    {
+        selectedCommand: "svn-tree.accept-mine",
+        allCommand: "svn-tree.accept-mine-all",
+        labelKey: "acceptMineAllActionLabel",
+        descriptionKey: "acceptMineAllActionDescription",
+        run: (repository, paths) => repository.acceptMine(paths),
+    },
+    {
+        selectedCommand: "svn-tree.accept-base",
+        allCommand: "svn-tree.accept-base-all",
+        labelKey: "acceptBaseAllActionLabel",
+        descriptionKey: "acceptBaseAllActionDescription",
+        run: (repository, paths) => repository.acceptBase(paths),
+    },
+    {
+        selectedCommand: "svn-tree.accept-mine-conflict",
+        allCommand: "svn-tree.accept-mine-conflict-all",
+        labelKey: "acceptMineConflictAllActionLabel",
+        descriptionKey: "acceptMineConflictAllActionDescription",
+        run: (repository, paths) => repository.acceptMineConflict(paths),
+    },
+    {
+        selectedCommand: "svn-tree.accept-theirs-conflict",
+        allCommand: "svn-tree.accept-theirs-conflict-all",
+        labelKey: "acceptTheirsConflictAllActionLabel",
+        descriptionKey: "acceptTheirsConflictAllActionDescription",
+        run: (repository, paths) => repository.acceptTheirsConflict(paths),
+    },
+    {
+        selectedCommand: "svn-tree.accept-theirs",
+        allCommand: "svn-tree.accept-theirs-all",
+        labelKey: "acceptTheirsAllActionLabel",
+        descriptionKey: "acceptTheirsAllActionDescription",
+        run: (repository, paths) => repository.acceptTheirs(paths),
+    },
+    {
+        selectedCommand: "svn-tree.postpone-conflict",
+        allCommand: "svn-tree.postpone-all-conflicts",
+        labelKey: "postponeAllConflictsActionLabel",
+        descriptionKey: "postponeAllConflictsActionDescription",
+        run: (repository, paths) => repository.postponeConflicts(paths),
+    },
+] as const;
 
 export class SvnRepositoryManager implements vscode.Disposable {
     private readonly disposables: vscode.Disposable[] = [];
@@ -66,136 +151,214 @@ export class SvnRepositoryManager implements vscode.Disposable {
 
     private registerCommands(): vscode.Disposable[] {
         return [
-            this.registerRepositoryCommand("svn-tree.refresh", (repository) =>
-                repository.refreshWithProgress({ forceRemote: true })
+            ...this.createRepositoryCommandRegistrations().map(({ command, run }) =>
+                this.registerRepositoryCommand(command, run)
             ),
-            this.registerRepositoryCommand("svn-tree.commit", (repository) =>
-                repository.commit()
+            ...this.createCommandRegistrations().map(({ command, run }) =>
+                this.registerCommand(command, run)
             ),
-            this.registerCommand("svn-tree.commit-selected", (arg) => this.commitSelected(arg)),
-            this.registerCommand("svn-tree.commit-changelist", (arg) =>
-                this.commitChangelist(arg)
-            ),
-            this.registerRepositoryCommand("svn-tree.update", (repository) =>
-                repository.update()
-            ),
-            this.registerCommand("svn-tree.update-selected", (arg) => this.updateSelected(arg)),
-            this.registerCommand("svn-tree.update-selected-to-revision", (arg) =>
-                this.updateSelectedToRevision(arg)
-            ),
-            this.registerCommand("svn-tree.switch-reference", (arg) => this.switchReference(arg)),
-            this.registerCommand("svn-tree.show-blame", (arg) => this.showBlame(arg)),
-            this.registerCommand("svn-tree.show-properties", (arg) => this.showProperties(arg)),
-            this.registerCommand("svn-tree.edit-property", (arg) => this.editProperty(arg)),
-            this.registerCommand("svn-tree.open-repository-browser", (arg) =>
-                this.openRepositoryBrowser(arg)
-            ),
-            this.registerCommand("svn-tree.open-revision-graph", (arg) =>
-                this.openRevisionGraph(arg)
-            ),
-            this.registerCommand("svn-tree.create-branch-from-working-copy", (arg) =>
-                this.createBranchFromWorkingCopy(arg)
-            ),
-            this.registerCommand("svn-tree.create-tag-from-working-copy", (arg) =>
-                this.createTagFromWorkingCopy(arg)
-            ),
-            this.registerCommand("svn-tree.delete-reference", (arg) =>
-                this.deleteReference(arg)
-            ),
-            this.registerCommand("svn-tree.relocate-working-copy", (arg) =>
-                this.relocateWorkingCopy(arg)
-            ),
-            this.registerCommand("svn-tree.update-to-revision", (arg) =>
-                this.updateToRevision(arg)
-            ),
-            this.registerRepositoryCommand("svn-tree.cleanup", (repository) =>
-                repository.cleanup()
-            ),
-            this.registerRepositoryCommand("svn-tree.open-history", (repository) =>
-                repository.showHistory()
-            ),
-            this.registerCommand("svn-tree.open-repository-actions", (arg) =>
-                this.openRepositoryActions(arg)
-            ),
-            this.registerCommand("svn-tree.show-output", async () => {
-                this.outputChannel.show(true);
-            }),
-            this.registerCommand("svn-tree.open-diff", (arg) => this.openDiff(arg)),
-            this.registerCommand("svn-tree.open-file", (arg) => this.openFile(arg)),
-            this.registerCommand("svn-tree.revert-resource", (arg) =>
-                this.revertResource(arg)
-            ),
-            this.registerCommand("svn-tree.resolve-conflict", (arg) =>
-                this.resolveConflict(arg)
-            ),
-            this.registerCommand("svn-tree.accept-mine", (arg) => this.acceptMine(arg)),
-            this.registerCommand("svn-tree.accept-base", (arg) => this.acceptBase(arg)),
-            this.registerCommand("svn-tree.accept-mine-conflict", (arg) =>
-                this.acceptMineConflict(arg)
-            ),
-            this.registerCommand("svn-tree.accept-theirs-conflict", (arg) =>
-                this.acceptTheirsConflict(arg)
-            ),
-            this.registerCommand("svn-tree.accept-theirs", (arg) => this.acceptTheirs(arg)),
-            this.registerCommand("svn-tree.postpone-conflict", (arg) =>
-                this.postponeConflict(arg)
-            ),
-            this.registerCommand("svn-tree.revert-group", (arg) => this.revertGroup(arg)),
-            this.registerCommand("svn-tree.add-resource", (arg) => this.addResource(arg)),
-            this.registerCommand("svn-tree.ignore-resource", (arg) =>
-                this.ignoreResource(arg)
-            ),
-            this.registerCommand("svn-tree.add-group", (arg) => this.addGroup(arg)),
-            this.registerCommand("svn-tree.delete-resource", (arg) =>
-                this.deleteResource(arg)
-            ),
-            this.registerCommand("svn-tree.rename-path", (arg) => this.renamePath(arg)),
-            this.registerCommand("svn-tree.lock-path", (arg) => this.lockPath(arg)),
-            this.registerCommand("svn-tree.unlock-path", (arg) => this.unlockPath(arg)),
-            this.registerCommand("svn-tree.ignore-path", (arg) => this.ignorePath(arg)),
-            this.registerCommand("svn-tree.unignore-path", (arg) => this.unignorePath(arg)),
-            this.registerCommand("svn-tree.show-path-info", (arg) => this.showPathInfo(arg)),
-            this.registerCommand("svn-tree.copy-repository-url", (arg) =>
-                this.copyRepositoryUrl(arg)
-            ),
-            this.registerCommand("svn-tree.copy-repository-path", (arg) =>
-                this.copyRepositoryPath(arg)
-            ),
-            this.registerCommand("svn-tree.delete-group", (arg) => this.deleteGroup(arg)),
-            this.registerCommand("svn-tree.open-history-diff", (arg) => this.openDiff(arg)),
-            this.registerCommand("svn-tree.open-file-history", (arg) =>
-                this.openFileHistory(arg)
-            ),
-            this.registerCommand("svn-tree.resolve-all-conflicts", (arg) =>
-                this.resolveAllConflicts(arg)
-            ),
-            this.registerCommand("svn-tree.accept-mine-all", (arg) =>
-                this.acceptMineAll(arg)
-            ),
-            this.registerCommand("svn-tree.accept-base-all", (arg) =>
-                this.acceptBaseAll(arg)
-            ),
-            this.registerCommand("svn-tree.accept-mine-conflict-all", (arg) =>
-                this.acceptMineConflictAll(arg)
-            ),
-            this.registerCommand("svn-tree.accept-theirs-conflict-all", (arg) =>
-                this.acceptTheirsConflictAll(arg)
-            ),
-            this.registerCommand("svn-tree.accept-theirs-all", (arg) =>
-                this.acceptTheirsAll(arg)
-            ),
-            this.registerCommand("svn-tree.postpone-all-conflicts", (arg) =>
-                this.postponeAllConflicts(arg)
-            ),
-            this.registerCommand("svn-tree.add-to-changelist", (arg) =>
-                this.addToChangelist(arg)
-            ),
-            this.registerCommand("svn-tree.remove-from-changelist", (arg) =>
-                this.removeFromChangelist(arg)
-            ),
-            this.registerCommand("svn-tree.reveal-in-file-manager", (arg) =>
-                this.revealInFileManager(arg)
-            ),
+        ];
+    }
+
+    private createRepositoryCommandRegistrations(): RepositoryCommandRegistration[] {
+        return [
+            {
+                command: "svn-tree.refresh",
+                run: (repository) => repository.refreshWithProgress({ forceRemote: true }),
+            },
+            {
+                command: "svn-tree.commit",
+                run: (repository) => repository.commit(),
+            },
+            {
+                command: "svn-tree.update",
+                run: (repository) => repository.update(),
+            },
+            {
+                command: "svn-tree.update-to-revision",
+                run: (repository) => this.promptUpdateToRevision(repository),
+            },
+            {
+                command: "svn-tree.cleanup",
+                run: (repository) => repository.cleanup(),
+            },
+            {
+                command: "svn-tree.open-history",
+                run: (repository) => repository.showHistory(),
+            },
+            {
+                command: "svn-tree.switch-reference",
+                run: (repository) => repository.switchRepositoryReference(),
+            },
+            {
+                command: "svn-tree.create-branch-from-working-copy",
+                run: (repository) => repository.createBranchFromWorkingCopy(),
+            },
+            {
+                command: "svn-tree.create-tag-from-working-copy",
+                run: (repository) => repository.createTagFromWorkingCopy(),
+            },
+            {
+                command: "svn-tree.delete-reference",
+                run: (repository) => repository.deleteRepositoryReference(),
+            },
+            {
+                command: "svn-tree.relocate-working-copy",
+                run: (repository) => repository.relocateWorkingCopy(),
+            },
+        ];
+    }
+
+    private createCommandRegistrations(): CommandRegistration[] {
+        return [
+            {
+                command: "svn-tree.commit-selected",
+                run: (arg) => this.commitSelected(arg),
+            },
+            {
+                command: "svn-tree.commit-changelist",
+                run: (arg) => this.commitChangelist(arg),
+            },
+            {
+                command: "svn-tree.update-selected",
+                run: (arg) => this.updateSelected(arg),
+            },
+            {
+                command: "svn-tree.update-selected-to-revision",
+                run: (arg) => this.updateSelectedToRevision(arg),
+            },
+            {
+                command: "svn-tree.show-blame",
+                run: (arg) => this.showBlame(arg),
+            },
+            {
+                command: "svn-tree.show-properties",
+                run: (arg) => this.showProperties(arg),
+            },
+            {
+                command: "svn-tree.edit-property",
+                run: (arg) => this.editProperty(arg),
+            },
+            {
+                command: "svn-tree.open-repository-browser",
+                run: (arg) => this.openRepositoryBrowser(arg),
+            },
+            {
+                command: "svn-tree.open-revision-graph",
+                run: (arg) => this.openRevisionGraph(arg),
+            },
+            {
+                command: "svn-tree.open-repository-actions",
+                run: (arg) => this.openRepositoryActions(arg),
+            },
+            {
+                command: "svn-tree.show-output",
+                run: async () => {
+                    this.outputChannel.show(true);
+                },
+            },
+            {
+                command: "svn-tree.open-diff",
+                run: (arg) => this.openDiff(arg),
+            },
+            {
+                command: "svn-tree.open-file",
+                run: (arg) => this.openFile(arg),
+            },
+            {
+                command: "svn-tree.revert-resource",
+                run: (arg) => this.revertResource(arg),
+            },
+            {
+                command: "svn-tree.revert-group",
+                run: (arg) => this.revertGroup(arg),
+            },
+            {
+                command: "svn-tree.add-resource",
+                run: (arg) => this.addResource(arg),
+            },
+            {
+                command: "svn-tree.ignore-resource",
+                run: (arg) => this.ignoreResource(arg),
+            },
+            {
+                command: "svn-tree.add-group",
+                run: (arg) => this.addGroup(arg),
+            },
+            {
+                command: "svn-tree.delete-resource",
+                run: (arg) => this.deleteResource(arg),
+            },
+            {
+                command: "svn-tree.rename-path",
+                run: (arg) => this.renamePath(arg),
+            },
+            {
+                command: "svn-tree.lock-path",
+                run: (arg) => this.lockPath(arg),
+            },
+            {
+                command: "svn-tree.unlock-path",
+                run: (arg) => this.unlockPath(arg),
+            },
+            {
+                command: "svn-tree.ignore-path",
+                run: (arg) => this.ignorePath(arg),
+            },
+            {
+                command: "svn-tree.unignore-path",
+                run: (arg) => this.unignorePath(arg),
+            },
+            {
+                command: "svn-tree.show-path-info",
+                run: (arg) => this.showPathInfo(arg),
+            },
+            {
+                command: "svn-tree.copy-repository-url",
+                run: (arg) => this.copyRepositoryUrl(arg),
+            },
+            {
+                command: "svn-tree.copy-repository-path",
+                run: (arg) => this.copyRepositoryPath(arg),
+            },
+            {
+                command: "svn-tree.delete-group",
+                run: (arg) => this.deleteGroup(arg),
+            },
+            {
+                command: "svn-tree.open-history-diff",
+                run: (arg) => this.openDiff(arg),
+            },
+            {
+                command: "svn-tree.open-file-history",
+                run: (arg) => this.openFileHistory(arg),
+            },
+            ...this.createConflictCommandRegistrations(),
+            {
+                command: "svn-tree.add-to-changelist",
+                run: (arg) => this.addToChangelist(arg),
+            },
+            {
+                command: "svn-tree.remove-from-changelist",
+                run: (arg) => this.removeFromChangelist(arg),
+            },
+            {
+                command: "svn-tree.reveal-in-file-manager",
+                run: (arg) => this.revealInFileManager(arg),
+            },
+        ];
+    }
+
+    private createConflictCommandRegistrations(): CommandRegistration[] {
+        return [
+            ...conflictActionDefinitions.map(({ selectedCommand, run }) => ({
+                command: selectedCommand,
+                run: (arg?: unknown) => this.runSelectedConflictAction(arg, run),
+            })),
+            ...conflictActionDefinitions.map(({ allCommand, run }) => ({
+                command: allCommand,
+                run: (arg?: unknown) => this.runAllConflictAction(arg, run),
+            })),
         ];
     }
 
@@ -538,200 +701,173 @@ export class SvnRepositoryManager implements vscode.Disposable {
         this.historyStatusBarItem.hide();
     }
 
-    private async openRepositoryActions(arg: unknown): Promise<void> {
+    private getRepositoryActionCategoryDefinitions(): RepositoryActionCategoryDefinition[] {
+        return [
+            {
+                labelKey: "browseActionsCategoryLabel",
+                descriptionKey: "browseActionsCategoryDescription",
+                actions: [
+                    {
+                        labelKey: "refreshStatusActionLabel",
+                        descriptionKey: "refreshStatusActionDescription",
+                        run: (repository) =>
+                            repository.refreshWithProgress({ forceRemote: true }),
+                    },
+                    {
+                        labelKey: "openHistoryActionLabel",
+                        descriptionKey: "openHistoryActionDescription",
+                        run: (repository) => repository.showHistory(),
+                    },
+                    {
+                        labelKey: "revisionGraphActionLabel",
+                        descriptionKey: "revisionGraphActionDescription",
+                        run: (repository) => repository.showHistory(),
+                    },
+                    {
+                        labelKey: "repositoryBrowserActionLabel",
+                        descriptionKey: "repositoryBrowserActionDescription",
+                        run: (repository) => repository.openRepositoryBrowser(),
+                    },
+                    {
+                        labelKey: "showPropertiesActionLabel",
+                        descriptionKey: "showPropertiesActionDescription",
+                        run: (repository) => repository.showPathProperties(repository.rootPath),
+                    },
+                ],
+            },
+            {
+                labelKey: "workingCopyActionsCategoryLabel",
+                descriptionKey: "workingCopyActionsCategoryDescription",
+                actions: [
+                    {
+                        labelKey: "updateWorkingCopyActionLabel",
+                        descriptionKey: "updateWorkingCopyActionDescription",
+                        run: (repository) => repository.update(),
+                    },
+                    {
+                        labelKey: "updateToRevisionActionLabel",
+                        descriptionKey: "updateToRevisionActionDescription",
+                        run: (repository) => this.promptUpdateToRevision(repository),
+                    },
+                    {
+                        labelKey: "switchWorkingCopyActionLabel",
+                        descriptionKey: "switchWorkingCopyActionDescription",
+                        run: (repository) => repository.switchRepositoryReference(),
+                    },
+                    {
+                        labelKey: "createBranchFromWorkingCopyActionLabel",
+                        descriptionKey: "createBranchFromWorkingCopyActionDescription",
+                        run: (repository) => repository.createBranchFromWorkingCopy(),
+                    },
+                    {
+                        labelKey: "createTagFromWorkingCopyActionLabel",
+                        descriptionKey: "createTagFromWorkingCopyActionDescription",
+                        run: (repository) => repository.createTagFromWorkingCopy(),
+                    },
+                    {
+                        labelKey: "deleteReferenceActionLabel",
+                        descriptionKey: "deleteReferenceActionDescription",
+                        run: (repository) => repository.deleteRepositoryReference(),
+                    },
+                    {
+                        labelKey: "relocateWorkingCopyActionLabel",
+                        descriptionKey: "relocateWorkingCopyActionDescription",
+                        run: (repository) => repository.relocateWorkingCopy(),
+                    },
+                ],
+            },
+            {
+                labelKey: "changeActionsCategoryLabel",
+                descriptionKey: "changeActionsCategoryDescription",
+                actions: [
+                    {
+                        labelKey: "commitActionLabel",
+                        descriptionKey: "commitActionDescription",
+                        run: (repository) => repository.commit(),
+                    },
+                    {
+                        labelKey: "commitChangelistActionLabel",
+                        descriptionKey: "commitChangelistActionDescription",
+                        run: async (repository) => {
+                            const changelistName = await this.promptChangelistName();
+                            if (!changelistName) {
+                                return;
+                            }
+
+                            await repository.commitChangelist(changelistName);
+                        },
+                    },
+                    {
+                        labelKey: "addAllUnversionedActionLabel",
+                        descriptionKey: "addAllUnversionedActionDescription",
+                        run: (repository) => this.addGroup(repository),
+                    },
+                    {
+                        labelKey: "deleteAllUnversionedActionLabel",
+                        descriptionKey: "deleteAllUnversionedActionDescription",
+                        run: (repository) => this.deleteGroup(repository),
+                    },
+                    {
+                        labelKey: "revertAllChangesActionLabel",
+                        descriptionKey: "revertAllChangesActionDescription",
+                        run: (repository) => this.revertGroup(repository),
+                    },
+                ],
+            },
+            {
+                labelKey: "conflictActionsCategoryLabel",
+                descriptionKey: "conflictActionsCategoryDescription",
+                actions: conflictActionDefinitions.map((definition) => ({
+                    labelKey: definition.labelKey,
+                    descriptionKey: definition.descriptionKey,
+                    run: (repository) =>
+                        this.runAllConflictAction(repository, definition.run),
+                })),
+            },
+            {
+                labelKey: "toolActionsCategoryLabel",
+                descriptionKey: "toolActionsCategoryDescription",
+                actions: [
+                    {
+                        labelKey: "cleanupWorkingCopyActionLabel",
+                        descriptionKey: "cleanupWorkingCopyActionDescription",
+                        run: (repository) => repository.cleanup(),
+                    },
+                    {
+                        labelKey: "showOutputActionLabel",
+                        descriptionKey: "showOutputActionDescription",
+                        run: async () => {
+                            this.outputChannel.show(true);
+                        },
+                    },
+                ],
+            },
+        ];
+    }
+
+    private localizeRepositoryActionCategories(): RepositoryActionCategoryItem[] {
         const i18n = getI18n();
+        const definitions: QuickPickActionCategoryDefinition<SvnRepository>[] =
+            this.getRepositoryActionCategoryDefinitions().map((category) => ({
+                label: i18n.t(category.labelKey),
+                description: i18n.t(category.descriptionKey),
+                actions: category.actions.map((action) => ({
+                    label: i18n.t(action.labelKey),
+                    description: i18n.t(action.descriptionKey),
+                    run: action.run,
+                })),
+            }));
+
+        return buildQuickPickActionCategories(definitions);
+    }
+
+    private async openRepositoryActions(arg: unknown): Promise<void> {
         const repository = await this.resolveRepository(arg);
         if (!repository) {
             return;
         }
-
-        const browseActions: RepositoryActionItem[] = [
-            {
-                label: i18n.t("refreshStatusActionLabel"),
-                description: i18n.t("refreshStatusActionDescription"),
-                run: async (targetRepository) =>
-                    targetRepository.refreshWithProgress({ forceRemote: true }),
-            },
-            {
-                label: i18n.t("openHistoryActionLabel"),
-                description: i18n.t("openHistoryActionDescription"),
-                run: async (targetRepository) => targetRepository.showHistory(),
-            },
-            {
-                label: i18n.t("revisionGraphActionLabel"),
-                description: i18n.t("revisionGraphActionDescription"),
-                run: async (targetRepository) => targetRepository.showHistory(),
-            },
-            {
-                label: i18n.t("repositoryBrowserActionLabel"),
-                description: i18n.t("repositoryBrowserActionDescription"),
-                run: async (targetRepository) => targetRepository.openRepositoryBrowser(),
-            },
-            {
-                label: i18n.t("showPropertiesActionLabel"),
-                description: i18n.t("showPropertiesActionDescription"),
-                run: async (targetRepository) =>
-                    targetRepository.showPathProperties(targetRepository.rootPath),
-            },
-        ];
-        const workingCopyActions: RepositoryActionItem[] = [
-            {
-                label: i18n.t("updateWorkingCopyActionLabel"),
-                description: i18n.t("updateWorkingCopyActionDescription"),
-                run: async (targetRepository) => targetRepository.update(),
-            },
-            {
-                label: i18n.t("updateToRevisionActionLabel"),
-                description: i18n.t("updateToRevisionActionDescription"),
-                run: async (targetRepository) =>
-                    this.promptUpdateToRevision(targetRepository),
-            },
-            {
-                label: i18n.t("switchWorkingCopyActionLabel"),
-                description: i18n.t("switchWorkingCopyActionDescription"),
-                run: async (targetRepository) =>
-                    targetRepository.switchRepositoryReference(),
-            },
-            {
-                label: i18n.t("createBranchFromWorkingCopyActionLabel"),
-                description: i18n.t("createBranchFromWorkingCopyActionDescription"),
-                run: async (targetRepository) =>
-                    targetRepository.createBranchFromWorkingCopy(),
-            },
-            {
-                label: i18n.t("createTagFromWorkingCopyActionLabel"),
-                description: i18n.t("createTagFromWorkingCopyActionDescription"),
-                run: async (targetRepository) =>
-                    targetRepository.createTagFromWorkingCopy(),
-            },
-            {
-                label: i18n.t("deleteReferenceActionLabel"),
-                description: i18n.t("deleteReferenceActionDescription"),
-                run: async (targetRepository) =>
-                    targetRepository.deleteRepositoryReference(),
-            },
-            {
-                label: i18n.t("relocateWorkingCopyActionLabel"),
-                description: i18n.t("relocateWorkingCopyActionDescription"),
-                run: async (targetRepository) =>
-                    targetRepository.relocateWorkingCopy(),
-            },
-        ];
-        const changeActions: RepositoryActionItem[] = [
-            {
-                label: i18n.t("commitActionLabel"),
-                description: i18n.t("commitActionDescription"),
-                run: async (targetRepository) => targetRepository.commit(),
-            },
-            {
-                label: i18n.t("commitChangelistActionLabel"),
-                description: i18n.t("commitChangelistActionDescription"),
-                run: async (targetRepository) => {
-                    const changelistName = await this.promptChangelistName();
-                    if (!changelistName) {
-                        return;
-                    }
-
-                    await targetRepository.commitChangelist(changelistName);
-                },
-            },
-            {
-                label: i18n.t("addAllUnversionedActionLabel"),
-                description: i18n.t("addAllUnversionedActionDescription"),
-                run: async (targetRepository) => this.addGroup(targetRepository),
-            },
-            {
-                label: i18n.t("deleteAllUnversionedActionLabel"),
-                description: i18n.t("deleteAllUnversionedActionDescription"),
-                run: async (targetRepository) => this.deleteGroup(targetRepository),
-            },
-            {
-                label: i18n.t("revertAllChangesActionLabel"),
-                description: i18n.t("revertAllChangesActionDescription"),
-                run: async (targetRepository) => this.revertGroup(targetRepository),
-            },
-        ];
-        const conflictActions: RepositoryActionItem[] = [
-            {
-                label: i18n.t("resolveAllConflictsActionLabel"),
-                description: i18n.t("resolveAllConflictsActionDescription"),
-                run: async (targetRepository) => this.resolveAllConflicts(targetRepository),
-            },
-            {
-                label: i18n.t("acceptMineAllActionLabel"),
-                description: i18n.t("acceptMineAllActionDescription"),
-                run: async (targetRepository) => this.acceptMineAll(targetRepository),
-            },
-            {
-                label: i18n.t("acceptBaseAllActionLabel"),
-                description: i18n.t("acceptBaseAllActionDescription"),
-                run: async (targetRepository) => this.acceptBaseAll(targetRepository),
-            },
-            {
-                label: i18n.t("acceptMineConflictAllActionLabel"),
-                description: i18n.t("acceptMineConflictAllActionDescription"),
-                run: async (targetRepository) =>
-                    this.acceptMineConflictAll(targetRepository),
-            },
-            {
-                label: i18n.t("acceptTheirsConflictAllActionLabel"),
-                description: i18n.t("acceptTheirsConflictAllActionDescription"),
-                run: async (targetRepository) =>
-                    this.acceptTheirsConflictAll(targetRepository),
-            },
-            {
-                label: i18n.t("acceptTheirsAllActionLabel"),
-                description: i18n.t("acceptTheirsAllActionDescription"),
-                run: async (targetRepository) => this.acceptTheirsAll(targetRepository),
-            },
-            {
-                label: i18n.t("postponeAllConflictsActionLabel"),
-                description: i18n.t("postponeAllConflictsActionDescription"),
-                run: async (targetRepository) => this.postponeAllConflicts(targetRepository),
-            },
-        ];
-        const toolActions: RepositoryActionItem[] = [
-            {
-                label: i18n.t("cleanupWorkingCopyActionLabel"),
-                description: i18n.t("cleanupWorkingCopyActionDescription"),
-                run: async (targetRepository) => targetRepository.cleanup(),
-            },
-            {
-                label: i18n.t("showOutputActionLabel"),
-                description: i18n.t("showOutputActionDescription"),
-                run: async () => {
-                    this.outputChannel.show(true);
-                },
-            },
-        ];
-
-        const categories: RepositoryActionCategoryItem[] = [
-            {
-                label: i18n.t("browseActionsCategoryLabel"),
-                description: i18n.t("browseActionsCategoryDescription"),
-                actions: browseActions,
-            },
-            {
-                label: i18n.t("workingCopyActionsCategoryLabel"),
-                description: i18n.t("workingCopyActionsCategoryDescription"),
-                actions: workingCopyActions,
-            },
-            {
-                label: i18n.t("changeActionsCategoryLabel"),
-                description: i18n.t("changeActionsCategoryDescription"),
-                actions: changeActions,
-            },
-            {
-                label: i18n.t("conflictActionsCategoryLabel"),
-                description: i18n.t("conflictActionsCategoryDescription"),
-                actions: conflictActions,
-            },
-            {
-                label: i18n.t("toolActionsCategoryLabel"),
-                description: i18n.t("toolActionsCategoryDescription"),
-                actions: toolActions,
-            },
-        ];
+        const i18n = getI18n();
+        const categories = this.localizeRepositoryActionCategories();
 
         while (true) {
             const category = await vscode.window.showQuickPick<RepositoryActionCategoryItem>(
@@ -840,19 +976,6 @@ export class SvnRepositoryManager implements vscode.Disposable {
             } catch (error) {
                 this.showError(error);
             }
-        }
-    }
-
-    private async updateToRevision(arg: unknown): Promise<void> {
-        try {
-            const repository = await this.resolveRepository(arg);
-            if (!repository) {
-                return;
-            }
-
-            await this.promptUpdateToRevision(repository);
-        } catch (error) {
-            this.showError(error);
         }
     }
 
@@ -999,57 +1122,30 @@ export class SvnRepositoryManager implements vscode.Disposable {
             }
 
             const i18n = getI18n();
-            const lines = [
-                `${i18n.t("infoPathLabel")}: ${nodeInfo.absolutePath}`,
-                `${i18n.t("infoKindLabel")}: ${i18n.formatNodeKind(nodeInfo.kind)}`,
-                `${i18n.t("infoRepositoryPathLabel")}: ${nodeInfo.repositoryRelativePath}`,
-                `${i18n.t("infoUrlLabel")}: ${nodeInfo.url}`,
-                `${i18n.t("infoRepositoryRootLabel")}: ${nodeInfo.repositoryRoot}`,
-            ];
+            const lines = buildPathInfoOutputLines(nodeInfo, {
+                labels: {
+                    infoPathLabel: i18n.t("infoPathLabel"),
+                    infoKindLabel: i18n.t("infoKindLabel"),
+                    infoRepositoryPathLabel: i18n.t("infoRepositoryPathLabel"),
+                    infoUrlLabel: i18n.t("infoUrlLabel"),
+                    infoRepositoryRootLabel: i18n.t("infoRepositoryRootLabel"),
+                    infoWorkingCopyRootLabel: i18n.t("infoWorkingCopyRootLabel"),
+                    infoRevisionLabel: i18n.t("infoRevisionLabel"),
+                    infoLastChangedRevisionLabel: i18n.t("infoLastChangedRevisionLabel"),
+                    infoLastChangedAuthorLabel: i18n.t("infoLastChangedAuthorLabel"),
+                    infoLastChangedDateLabel: i18n.t("infoLastChangedDateLabel"),
+                    infoLockOwnerLabel: i18n.t("infoLockOwnerLabel"),
+                    infoLockCreatedLabel: i18n.t("infoLockCreatedLabel"),
+                    infoLockCommentLabel: i18n.t("infoLockCommentLabel"),
+                },
+                formatNodeKind: (kind) => i18n.formatNodeKind(kind),
+            });
 
-            if (nodeInfo.workingCopyRoot) {
-                lines.push(
-                    `${i18n.t("infoWorkingCopyRootLabel")}: ${nodeInfo.workingCopyRoot}`
-                );
-            }
-
-            if (nodeInfo.revision) {
-                lines.push(`${i18n.t("infoRevisionLabel")}: r${nodeInfo.revision}`);
-            }
-
-            if (nodeInfo.committedRevision) {
-                lines.push(
-                    `${i18n.t("infoLastChangedRevisionLabel")}: r${nodeInfo.committedRevision}`
-                );
-            }
-
-            if (nodeInfo.author) {
-                lines.push(`${i18n.t("infoLastChangedAuthorLabel")}: ${nodeInfo.author}`);
-            }
-
-            if (nodeInfo.date) {
-                lines.push(`${i18n.t("infoLastChangedDateLabel")}: ${nodeInfo.date}`);
-            }
-
-            if (nodeInfo.lockOwner) {
-                lines.push(`${i18n.t("infoLockOwnerLabel")}: ${nodeInfo.lockOwner}`);
-            }
-
-            if (nodeInfo.lockCreated) {
-                lines.push(`${i18n.t("infoLockCreatedLabel")}: ${nodeInfo.lockCreated}`);
-            }
-
-            if (nodeInfo.lockComment) {
-                lines.push(`${i18n.t("infoLockCommentLabel")}: ${nodeInfo.lockComment}`);
-            }
-
-            this.outputChannel.appendLine("");
-            const headerLine = `=== ${i18n.t("showPathInfoOutputHeader", { path: displayPath })} ===`;
-            this.outputChannel.appendLine(headerLine);
-            for (const line of lines) {
-                this.outputChannel.appendLine(line);
-            }
-            this.outputChannel.appendLine("=".repeat(headerLine.length));
+            appendOutputSection(
+                this.outputChannel,
+                i18n.t("showPathInfoOutputHeader", { path: displayPath }),
+                lines
+            );
             this.outputChannel.show(true);
             void vscode.window.setStatusBarMessage(i18n.t("openedPathInfoStatus"), 2000);
         } catch (error) {
@@ -1388,28 +1484,6 @@ export class SvnRepositoryManager implements vscode.Disposable {
         }
     }
 
-    private async switchReference(arg: unknown): Promise<void> {
-        await this.runForRepository(arg, (repository) => repository.switchRepositoryReference());
-    }
-
-    private async createBranchFromWorkingCopy(arg: unknown): Promise<void> {
-        await this.runForRepository(arg, (repository) =>
-            repository.createBranchFromWorkingCopy()
-        );
-    }
-
-    private async createTagFromWorkingCopy(arg: unknown): Promise<void> {
-        await this.runForRepository(arg, (repository) => repository.createTagFromWorkingCopy());
-    }
-
-    private async deleteReference(arg: unknown): Promise<void> {
-        await this.runForRepository(arg, (repository) => repository.deleteRepositoryReference());
-    }
-
-    private async relocateWorkingCopy(arg: unknown): Promise<void> {
-        await this.runForRepository(arg, (repository) => repository.relocateWorkingCopy());
-    }
-
     private async runAllConflictAction(
         arg: unknown,
         action: ConflictCommandHandler
@@ -1442,90 +1516,6 @@ export class SvnRepositoryManager implements vscode.Disposable {
         } catch (error) {
             this.showError(error);
         }
-    }
-
-    private async resolveAllConflicts(arg: unknown): Promise<void> {
-        await this.runAllConflictAction(arg, (repository, paths) =>
-            repository.markResolved(paths)
-        );
-    }
-
-    private async acceptMineAll(arg: unknown): Promise<void> {
-        await this.runAllConflictAction(arg, (repository, paths) =>
-            repository.acceptMine(paths)
-        );
-    }
-
-    private async acceptBaseAll(arg: unknown): Promise<void> {
-        await this.runAllConflictAction(arg, (repository, paths) =>
-            repository.acceptBase(paths)
-        );
-    }
-
-    private async acceptMineConflictAll(arg: unknown): Promise<void> {
-        await this.runAllConflictAction(arg, (repository, paths) =>
-            repository.acceptMineConflict(paths)
-        );
-    }
-
-    private async acceptTheirsConflictAll(arg: unknown): Promise<void> {
-        await this.runAllConflictAction(arg, (repository, paths) =>
-            repository.acceptTheirsConflict(paths)
-        );
-    }
-
-    private async acceptTheirsAll(arg: unknown): Promise<void> {
-        await this.runAllConflictAction(arg, (repository, paths) =>
-            repository.acceptTheirs(paths)
-        );
-    }
-
-    private async postponeAllConflicts(arg: unknown): Promise<void> {
-        await this.runAllConflictAction(arg, (repository, paths) =>
-            repository.postponeConflicts(paths)
-        );
-    }
-
-    private async resolveConflict(arg: unknown): Promise<void> {
-        await this.runSelectedConflictAction(arg, (repository, paths) =>
-            repository.markResolved(paths)
-        );
-    }
-
-    private async acceptMine(arg: unknown): Promise<void> {
-        await this.runSelectedConflictAction(arg, (repository, paths) =>
-            repository.acceptMine(paths)
-        );
-    }
-
-    private async acceptBase(arg: unknown): Promise<void> {
-        await this.runSelectedConflictAction(arg, (repository, paths) =>
-            repository.acceptBase(paths)
-        );
-    }
-
-    private async acceptMineConflict(arg: unknown): Promise<void> {
-        await this.runSelectedConflictAction(arg, (repository, paths) =>
-            repository.acceptMineConflict(paths)
-        );
-    }
-
-    private async acceptTheirs(arg: unknown): Promise<void> {
-        await this.runSelectedConflictAction(arg, (repository, paths) =>
-            repository.acceptTheirs(paths)
-        );
-    }
-
-    private async acceptTheirsConflict(arg: unknown): Promise<void> {
-        await this.runSelectedConflictAction(arg, (repository, paths) =>
-            repository.acceptTheirsConflict(paths)
-        );
-    }
-
-    private async postponeConflict(arg: unknown): Promise<void> {
-        await this.runSelectedConflictAction(arg, (repository, paths) =>
-            repository.postponeConflicts(paths)
-        );
     }
 
     private async revertGroup(arg: unknown): Promise<void> {

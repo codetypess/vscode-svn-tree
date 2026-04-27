@@ -37,8 +37,8 @@ import type {
 } from "../svn/svn-types";
 import type { MessageKey } from "../i18n";
 import { getI18n } from "../vscode-i18n";
+import { appendOutputSection } from "./output-channel-utils";
 import { parseBlameLines } from "./svn-blame-utils";
-import { isConflictArtifactStatus } from "./conflict-artifact";
 import { isCommittableStatus } from "./commit-utils";
 import {
     getCurrentReferenceSuggestion,
@@ -56,11 +56,22 @@ import {
     RepositoryBrowserQuickPickItem,
 } from "./svn-repository-browser";
 import {
+    buildRevisionGraphStatusMetadata,
+    enrichRevisionGraphHoverState,
+    formatRevisionGraphChangedPaths,
+    mapRevisionGraphTargetPath,
+} from "./svn-repository-revision-graph-state";
+import {
     builtinPropertyNameDefinitions,
     decodePropertyValue,
     encodePropertyValue,
-    formatPropertyEntries,
 } from "./svn-property-utils";
+import {
+    buildBlameOutputLines,
+    buildBlamePreviewContent,
+    buildPropertyOutputLines,
+} from "./svn-output-formatters";
+import { partitionStatusEntries } from "./svn-repository-status-utils";
 import { ScmResource } from "./scm-resource";
 import {
     buildHistoryFileExportName,
@@ -235,26 +246,6 @@ const repositoryRevisionTransferMessages: Record<
     },
 };
 
-function isLocalChange(status: SvnStatusEntry): boolean {
-    return (
-        status.wcStatus !== "normal" &&
-        status.wcStatus !== "none" &&
-        status.wcStatus !== "unversioned"
-    );
-}
-
-function isUnversionedChange(status: SvnStatusEntry): boolean {
-    return status.wcStatus === "unversioned";
-}
-
-function isConflictedChange(status: SvnStatusEntry): boolean {
-    return status.wcStatus === "conflicted";
-}
-
-function isRemoteChange(status: SvnStatusEntry): boolean {
-    return !!status.reposStatus && status.reposStatus !== "none";
-}
-
 function getCommitInputPlaceholder(repositoryRelativePath: string): string {
     const submitShortcut = process.platform === "darwin" ? "⌘Enter" : "Ctrl+Enter";
     const targetLabel = getCommitTargetLabel(repositoryRelativePath);
@@ -397,19 +388,12 @@ export class SvnRepository implements vscode.Disposable {
             }
 
             const statuses = await this.svnService.getStatus(this.rootPath, includeRemote);
-            const conflictedPaths = new Set(
-                statuses
-                    .filter(isConflictedChange)
-                    .map((status) => status.absolutePath)
+            const partitionedStatuses = partitionStatusEntries(statuses, includeRemote);
+            const changeResources = partitionedStatuses.changeStatuses.map(
+                (status) => new ScmResource(this, status, "change")
             );
-            const changeResources = statuses
-                .filter(isLocalChange)
-                .sort((left, right) => left.relativePath.localeCompare(right.relativePath))
-                .map((status) => new ScmResource(this, status, "change"));
-            const conflictArtifactResources = statuses
-                .filter((status) => isConflictArtifactStatus(status, conflictedPaths))
-                .sort((left, right) => left.relativePath.localeCompare(right.relativePath))
-                .map(
+            const conflictArtifactResources =
+                partitionedStatuses.conflictArtifactStatuses.map(
                     (status) =>
                         new ScmResource(
                             this,
@@ -420,19 +404,13 @@ export class SvnRepository implements vscode.Disposable {
                             "change"
                         )
                 );
-            const unversionedResources = statuses
-                .filter(
-                    (status) =>
-                        isUnversionedChange(status) &&
-                        !isConflictArtifactStatus(status, conflictedPaths)
-                )
-                .sort((left, right) => left.relativePath.localeCompare(right.relativePath))
-                .map((status) => new ScmResource(this, status, "change"));
+            const unversionedResources = partitionedStatuses.unversionedStatuses.map(
+                (status) => new ScmResource(this, status, "change")
+            );
             const remoteResources = includeRemote
-                ? statuses
-                      .filter(isRemoteChange)
-                      .sort((left, right) => left.relativePath.localeCompare(right.relativePath))
-                      .map((status) => new ScmResource(this, status, "remote-change"))
+                ? partitionedStatuses.remoteStatuses.map(
+                      (status) => new ScmResource(this, status, "remote-change")
+                  )
                 : this.remoteChangesGroup.resourceStates;
 
             this.changesGroup.resourceStates = changeResources;
@@ -1399,7 +1377,7 @@ export class SvnRepository implements vscode.Disposable {
             truncated,
         });
 
-        return this.enrichRevisionGraphHoverState(graph);
+        return enrichRevisionGraphHoverState(graph);
     }
 
     public getRepositoryUrlForPath(repositoryPath: string): string {
@@ -1411,7 +1389,7 @@ export class SvnRepository implements vscode.Disposable {
         selectedRepositoryPath: string,
         selectedReferencePath: string
     ): Promise<void> {
-        const targetRepositoryPath = this.mapRevisionGraphTargetPath(
+        const targetRepositoryPath = mapRevisionGraphTargetPath(
             referenceRepositoryPath,
             selectedRepositoryPath,
             selectedReferencePath
@@ -1464,7 +1442,11 @@ export class SvnRepository implements vscode.Disposable {
                 entry.message || this.i18n.t("noCommitMessage"),
                 "",
                 `${this.i18n.t("changedFilesLabel")}:`,
-                ...this.formatRevisionGraphChangedPaths(entry),
+                ...formatRevisionGraphChangedPaths(entry, {
+                    noChangedPathsReportedLabel: this.i18n.t("noChangedPathsReported"),
+                    formatCopiedFrom: (path) =>
+                        this.i18n.t("historyCopiedFrom", { path }),
+                }),
             ].join("\n")
         );
     }
@@ -2184,13 +2166,14 @@ export class SvnRepository implements vscode.Disposable {
     }): Promise<void> {
         const document = await vscode.workspace.openTextDocument({
             language: "plaintext",
-            content: [
-                `${this.i18n.t("infoPathLabel")}: ${options.displayPath}`,
-                `${this.i18n.t("infoRepositoryPathLabel")}: ${options.repositoryPath}`,
-                `${this.i18n.t("infoUrlLabel")}: ${options.url}`,
-                "",
-                options.blameOutput,
-            ].join("\n"),
+            content: buildBlamePreviewContent(
+                {
+                    infoPathLabel: this.i18n.t("infoPathLabel"),
+                    infoRepositoryPathLabel: this.i18n.t("infoRepositoryPathLabel"),
+                    infoUrlLabel: this.i18n.t("infoUrlLabel"),
+                },
+                options
+            ),
         });
         await vscode.window.showTextDocument(document, {
             preview: true,
@@ -2207,13 +2190,14 @@ export class SvnRepository implements vscode.Disposable {
     }): void {
         this.writeOutputSection(
             this.i18n.t("showBlameOutputHeader", { path: options.displayPath }),
-            [
-                `${this.i18n.t("infoPathLabel")}: ${options.displayPath}`,
-                `${this.i18n.t("infoRepositoryPathLabel")}: ${options.repositoryPath}`,
-                `${this.i18n.t("infoUrlLabel")}: ${options.url}`,
-                "",
-                options.blameOutput,
-            ],
+            buildBlameOutputLines(
+                {
+                    infoPathLabel: this.i18n.t("infoPathLabel"),
+                    infoRepositoryPathLabel: this.i18n.t("infoRepositoryPathLabel"),
+                    infoUrlLabel: this.i18n.t("infoUrlLabel"),
+                },
+                options
+            ),
             this.i18n.t("openedBlameStatus")
         );
     }
@@ -2228,29 +2212,22 @@ export class SvnRepository implements vscode.Disposable {
             this.i18n.t("showPropertiesOutputHeader", {
                 path: options.displayPath,
             }),
-            [
-                `${this.i18n.t("infoPathLabel")}: ${options.displayPath}`,
-                `${this.i18n.t("infoRepositoryPathLabel")}: ${options.repositoryPath}`,
-                `${this.i18n.t("infoUrlLabel")}: ${options.url}`,
-                "",
-                `${this.i18n.t("propertiesHeaderLabel")}:`,
-                ...formatPropertyEntries(
-                    options.properties,
-                    this.i18n.t("noPropertiesFoundLabel")
-                ),
-            ],
+            buildPropertyOutputLines(
+                {
+                    infoPathLabel: this.i18n.t("infoPathLabel"),
+                    infoRepositoryPathLabel: this.i18n.t("infoRepositoryPathLabel"),
+                    infoUrlLabel: this.i18n.t("infoUrlLabel"),
+                    propertiesHeaderLabel: this.i18n.t("propertiesHeaderLabel"),
+                    noPropertiesFoundLabel: this.i18n.t("noPropertiesFoundLabel"),
+                },
+                options
+            ),
             this.i18n.t("openedPropertiesStatus")
         );
     }
 
     private writeOutputSection(header: string, lines: string[], statusMessage: string): void {
-        this.outputChannel.appendLine("");
-        const headerLine = `=== ${header} ===`;
-        this.outputChannel.appendLine(headerLine);
-        for (const line of lines) {
-            this.outputChannel.appendLine(line);
-        }
-        this.outputChannel.appendLine("=".repeat(headerLine.length));
+        appendOutputSection(this.outputChannel, header, lines);
         this.outputChannel.show(true);
         void vscode.window.setStatusBarMessage(statusMessage, 2000);
     }
@@ -2746,8 +2723,24 @@ export class SvnRepository implements vscode.Disposable {
         repositoryPaths: readonly string[],
         layout: RevisionGraphLayoutConfig
     ): Promise<Record<string, RevisionGraphNodeMetadata>> {
-        const uniquePaths = [...new Set(repositoryPaths.map((value) => normalizeRepositoryPath(value)))];
-        const statusMetadata = this.getRevisionGraphStatusMetadata(uniquePaths);
+        const uniquePaths = [
+            ...new Set(repositoryPaths.map((value) => normalizeRepositoryPath(value))),
+        ];
+        const statusMetadata = buildRevisionGraphStatusMetadata({
+            repositoryPaths: uniquePaths,
+            localStatuses: [
+                ...this.getResources(this.changesGroup.resourceStates).map(
+                    (resource) => resource.status
+                ),
+                ...this.getResources(this.unversionedGroup.resourceStates).map(
+                    (resource) => resource.status
+                ),
+            ],
+            remoteStatuses: this.getResources(this.remoteChangesGroup.resourceStates).map(
+                (resource) => resource.status
+            ),
+            resolveRepositoryPath: (absolutePath) => this.resolveRepositoryPath(absolutePath),
+        });
         const metadataEntries = await Promise.all(
             uniquePaths.map(async (repositoryPath) => {
                 const cachedMetadata = this.revisionGraphNodeMetadataCache.get(repositoryPath);
@@ -2785,95 +2778,6 @@ export class SvnRepository implements vscode.Disposable {
         return Object.fromEntries(metadataEntries);
     }
 
-    private getRevisionGraphStatusMetadata(
-        repositoryPaths: readonly string[]
-    ): Record<string, Pick<RevisionGraphNodeMetadata, "incomingChangeCount" | "localChangeCount">> {
-        const metadata = Object.fromEntries(
-            repositoryPaths.map((repositoryPath) => [
-                repositoryPath,
-                {
-                    localChangeCount: 0,
-                    incomingChangeCount: 0,
-                },
-            ])
-        ) as Record<
-            string,
-            Pick<RevisionGraphNodeMetadata, "incomingChangeCount" | "localChangeCount">
-        >;
-
-        const localStatuses = [
-            ...this.getResources(this.changesGroup.resourceStates).map((resource) => resource.status),
-            ...this.getResources(this.unversionedGroup.resourceStates).map((resource) => resource.status),
-        ];
-        for (const status of localStatuses) {
-            const repositoryPath = this.resolveRepositoryPath(status.absolutePath);
-            for (const candidatePath of repositoryPaths) {
-                if (this.isRepositoryPathWithinScope(repositoryPath, candidatePath)) {
-                    const candidateMetadata = metadata[candidatePath];
-                    if (candidateMetadata) {
-                        candidateMetadata.localChangeCount =
-                            (candidateMetadata.localChangeCount ?? 0) + 1;
-                    }
-                }
-            }
-        }
-
-        const remoteStatuses = this.getResources(this.remoteChangesGroup.resourceStates).map(
-            (resource) => resource.status
-        );
-        for (const status of remoteStatuses) {
-            const repositoryPath = this.resolveRepositoryPath(status.absolutePath);
-            for (const candidatePath of repositoryPaths) {
-                if (this.isRepositoryPathWithinScope(repositoryPath, candidatePath)) {
-                    const candidateMetadata = metadata[candidatePath];
-                    if (candidateMetadata) {
-                        candidateMetadata.incomingChangeCount =
-                            (candidateMetadata.incomingChangeCount ?? 0) + 1;
-                    }
-                }
-            }
-        }
-
-        return metadata;
-    }
-
-    private isRepositoryPathWithinScope(
-        repositoryPath: string,
-        scopeRepositoryPath: string
-    ): boolean {
-        const normalizedRepositoryPath = normalizeRepositoryPath(repositoryPath);
-        const normalizedScopeRepositoryPath = normalizeRepositoryPath(scopeRepositoryPath);
-        return (
-            normalizedRepositoryPath === normalizedScopeRepositoryPath ||
-            normalizedRepositoryPath.startsWith(`${normalizedScopeRepositoryPath}/`)
-        );
-    }
-
-    private mapRevisionGraphTargetPath(
-        referenceRepositoryPath: string,
-        selectedRepositoryPath: string,
-        selectedReferencePath: string
-    ): string {
-        const normalizedReferenceRepositoryPath = normalizeRepositoryPath(referenceRepositoryPath);
-        const normalizedSelectedRepositoryPath = normalizeRepositoryPath(selectedRepositoryPath);
-        const normalizedSelectedReferencePath = normalizeRepositoryPath(selectedReferencePath);
-        if (
-            normalizedSelectedRepositoryPath === normalizedSelectedReferencePath ||
-            !normalizedSelectedRepositoryPath.startsWith(
-                `${normalizedSelectedReferencePath}/`
-            )
-        ) {
-            return normalizedReferenceRepositoryPath;
-        }
-
-        const relativePath = normalizedSelectedRepositoryPath.slice(
-            normalizedSelectedReferencePath.length + 1
-        );
-        return normalizeRepositoryPath(
-            `${normalizedReferenceRepositoryPath}/${relativePath}`
-        );
-    }
-
     private async openRevisionGraphReferenceDiff(
         sourceRepositoryPath: string,
         targetRepositoryPath: string,
@@ -2881,12 +2785,12 @@ export class SvnRepository implements vscode.Disposable {
         selectedReferencePath: string,
         summarize: boolean
     ): Promise<void> {
-        const sourceTargetPath = this.mapRevisionGraphTargetPath(
+        const sourceTargetPath = mapRevisionGraphTargetPath(
             sourceRepositoryPath,
             selectedRepositoryPath,
             selectedReferencePath
         );
-        const targetTargetPath = this.mapRevisionGraphTargetPath(
+        const targetTargetPath = mapRevisionGraphTargetPath(
             targetRepositoryPath,
             selectedRepositoryPath,
             selectedReferencePath
@@ -2918,44 +2822,6 @@ export class SvnRepository implements vscode.Disposable {
             preview: true,
             viewColumn: vscode.ViewColumn.Active,
         });
-    }
-
-    private formatRevisionGraphChangedPaths(entry: SvnLogEntry): string[] {
-        if (entry.changes.length === 0) {
-            return [this.i18n.t("noChangedPathsReported")];
-        }
-
-        return entry.changes.map((change) => {
-            const copiedFrom = change.copyfromPath
-                ? ` (${this.i18n.t("historyCopiedFrom", {
-                      path: change.copyfromPath,
-                  })})`
-                : "";
-            return `${change.action} ${change.path}${copiedFrom}`;
-        });
-    }
-
-    private enrichRevisionGraphHoverState(graph: RevisionGraphData): RevisionGraphData {
-        return {
-            ...graph,
-            nodes: graph.nodes.map((node) => ({
-                ...node,
-                hoverSummary: [
-                    ...(node.hoverSummary ?? []),
-                    `URL: ${node.url}`,
-                    ...(node.localChangeCount
-                        ? [`Local changes: ${node.localChangeCount}`]
-                        : []),
-                    ...(node.incomingChangeCount
-                        ? [`Incoming changes: ${node.incomingChangeCount}`]
-                        : []),
-                    ...(node.lockOwner ? [`Locked by ${node.lockOwner}`] : []),
-                    ...(node.lastSeenRevision
-                        ? [`Last seen in r${node.lastSeenRevision}`]
-                        : []),
-                ],
-            })),
-        };
     }
 
     private invalidateRevisionGraphCaches(): void {
