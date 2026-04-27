@@ -64,6 +64,7 @@
   "submenu.repositoryWorkingCopy.label": "工作副本",
   "submenu.repositoryChanges.label": "变更处理",
   "submenu.repositoryConflicts.label": "冲突处理",
+  "submenu.resourcePath.label": "路径与属性",
   "config.title": "SVN Tree",
   "config.displayLanguage.description": "SVN Tree 的首选显示语言。设为“自动”时，会跟随当前 VS Code 界面语言。",
   "config.displayLanguage.auto": "根据当前 VS Code 界面语言自动检测。",

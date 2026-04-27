@@ -368,6 +368,22 @@
       {
         "id": "svn-tree.repository-actions.conflicts",
         "label": "%submenu.repositoryConflicts.label%"
+      },
+      {
+        "id": "svn-tree.resource-actions.browse",
+        "label": "%submenu.repositoryBrowse.label%"
+      },
+      {
+        "id": "svn-tree.resource-actions.changes",
+        "label": "%submenu.repositoryChanges.label%"
+      },
+      {
+        "id": "svn-tree.resource-actions.path",
+        "label": "%submenu.resourcePath.label%"
+      },
+      {
+        "id": "svn-tree.resource-actions.conflicts",
+        "label": "%submenu.repositoryConflicts.label%"
       }
     ],
     "menus": {
@@ -612,64 +628,9 @@
           "group": "navigation@2"
         },
         {
-          "command": "svn-tree.open-repository-browser",
-          "when": "scmProvider == svn-tree && (scmResourceState == svn-change || scmResourceState == svn-conflict || scmResourceState == svn-remote-change)",
-          "group": "navigation@3"
-        },
-        {
-          "command": "svn-tree.open-revision-graph",
-          "when": "scmProvider == svn-tree && (scmResourceState == svn-change || scmResourceState == svn-conflict || scmResourceState == svn-remote-change)",
-          "group": "navigation@4"
-        },
-        {
-          "command": "svn-tree.show-blame",
-          "when": "scmProvider == svn-tree && (scmResourceState == svn-change || scmResourceState == svn-conflict || scmResourceState == svn-remote-change)",
-          "group": "navigation@5"
-        },
-        {
-          "command": "svn-tree.reveal-in-file-manager",
-          "when": "scmProvider == svn-tree",
-          "group": "navigation@6"
-        },
-        {
-          "command": "svn-tree.rename-path",
-          "when": "scmProvider == svn-tree && (scmResourceState == svn-change || scmResourceState == svn-conflict || scmResourceState == svn-unversioned)",
-          "group": "navigation@7"
-        },
-        {
-          "command": "svn-tree.show-properties",
-          "when": "scmProvider == svn-tree && (scmResourceState == svn-change || scmResourceState == svn-conflict || scmResourceState == svn-remote-change)",
-          "group": "navigation@8"
-        },
-        {
-          "command": "svn-tree.edit-property",
-          "when": "scmProvider == svn-tree && (scmResourceState == svn-change || scmResourceState == svn-conflict || scmResourceState == svn-remote-change)",
-          "group": "navigation@9"
-        },
-        {
-          "command": "svn-tree.copy-repository-url",
-          "when": "scmProvider == svn-tree && (scmResourceState == svn-change || scmResourceState == svn-conflict || scmResourceState == svn-remote-change)",
-          "group": "navigation@10"
-        },
-        {
-          "command": "svn-tree.copy-repository-path",
-          "when": "scmProvider == svn-tree && (scmResourceState == svn-change || scmResourceState == svn-conflict || scmResourceState == svn-remote-change)",
-          "group": "navigation@11"
-        },
-        {
-          "command": "svn-tree.show-path-info",
-          "when": "scmProvider == svn-tree && (scmResourceState == svn-change || scmResourceState == svn-conflict || scmResourceState == svn-remote-change)",
-          "group": "navigation@12"
-        },
-        {
           "command": "svn-tree.add-resource",
           "when": "scmProvider == svn-tree && scmResourceState == svn-unversioned",
           "group": "inline@2"
-        },
-        {
-          "command": "svn-tree.ignore-resource",
-          "when": "scmProvider == svn-tree && scmResourceState == svn-unversioned",
-          "group": "3_svn@1"
         },
         {
           "command": "svn-tree.revert-resource",
@@ -677,79 +638,148 @@
           "group": "inline@2"
         },
         {
-          "command": "svn-tree.commit-selected",
-          "when": "scmProvider == svn-tree && scmResourceState == svn-change",
-          "group": "3_svn@1"
-        },
-        {
-          "command": "svn-tree.update-selected",
-          "when": "scmProvider == svn-tree && scmResourceState == svn-change",
-          "group": "3_svn@2"
-        },
-        {
-          "command": "svn-tree.update-selected-to-revision",
-          "when": "scmProvider == svn-tree && scmResourceState == svn-change",
-          "group": "3_svn@3"
-        },
-        {
-          "command": "svn-tree.add-to-changelist",
-          "when": "scmProvider == svn-tree && (scmResourceState == svn-change || scmResourceState == svn-conflict)",
-          "group": "3_svn@4"
-        },
-        {
-          "command": "svn-tree.remove-from-changelist",
-          "when": "scmProvider == svn-tree && (scmResourceState == svn-change || scmResourceState == svn-conflict)",
-          "group": "3_svn@5"
-        },
-        {
-          "command": "svn-tree.lock-path",
-          "when": "scmProvider == svn-tree && (scmResourceState == svn-change || scmResourceState == svn-conflict)",
-          "group": "3_svn@6"
-        },
-        {
-          "command": "svn-tree.unlock-path",
-          "when": "scmProvider == svn-tree && (scmResourceState == svn-change || scmResourceState == svn-conflict)",
-          "group": "3_svn@7"
-        },
-        {
           "command": "svn-tree.resolve-conflict",
           "when": "scmProvider == svn-tree && scmResourceState == svn-conflict",
-          "group": "5_conflict@1"
+          "group": "navigation@3"
         },
         {
-          "command": "svn-tree.accept-mine",
-          "when": "scmProvider == svn-tree && scmResourceState == svn-conflict",
-          "group": "5_conflict@2"
-        },
-        {
-          "command": "svn-tree.accept-base",
-          "when": "scmProvider == svn-tree && scmResourceState == svn-conflict",
-          "group": "5_conflict@3"
-        },
-        {
-          "command": "svn-tree.accept-mine-conflict",
-          "when": "scmProvider == svn-tree && scmResourceState == svn-conflict",
-          "group": "5_conflict@4"
-        },
-        {
-          "command": "svn-tree.accept-theirs-conflict",
-          "when": "scmProvider == svn-tree && scmResourceState == svn-conflict",
-          "group": "5_conflict@5"
-        },
-        {
-          "command": "svn-tree.accept-theirs",
-          "when": "scmProvider == svn-tree && scmResourceState == svn-conflict",
-          "group": "5_conflict@6"
-        },
-        {
-          "command": "svn-tree.postpone-conflict",
-          "when": "scmProvider == svn-tree && scmResourceState == svn-conflict",
-          "group": "5_conflict@7"
+          "command": "svn-tree.commit-selected",
+          "when": "scmProvider == svn-tree && scmResourceState == svn-change",
+          "group": "1_primary@1"
         },
         {
           "command": "svn-tree.delete-resource",
           "when": "scmProvider == svn-tree && scmResourceState == svn-unversioned",
-          "group": "navigation@13"
+          "group": "1_primary@5"
+        },
+        {
+          "command": "svn-tree.rename-path",
+          "when": "scmProvider == svn-tree && (scmResourceState == svn-change || scmResourceState == svn-conflict || scmResourceState == svn-unversioned)",
+          "group": "1_primary@2"
+        },
+        {
+          "command": "svn-tree.reveal-in-file-manager",
+          "when": "scmProvider == svn-tree",
+          "group": "1_primary@3"
+        },
+        {
+          "command": "svn-tree.ignore-resource",
+          "when": "scmProvider == svn-tree && scmResourceState == svn-unversioned",
+          "group": "1_primary@4"
+        },
+        {
+          "submenu": "svn-tree.resource-actions.browse",
+          "when": "scmProvider == svn-tree && (scmResourceState == svn-change || scmResourceState == svn-conflict || scmResourceState == svn-remote-change)",
+          "group": "2_browse@1"
+        },
+        {
+          "submenu": "svn-tree.resource-actions.changes",
+          "when": "scmProvider == svn-tree && (scmResourceState == svn-change || scmResourceState == svn-conflict)",
+          "group": "3_changes@1"
+        },
+        {
+          "submenu": "svn-tree.resource-actions.path",
+          "when": "scmProvider == svn-tree && (scmResourceState == svn-change || scmResourceState == svn-conflict || scmResourceState == svn-remote-change)",
+          "group": "4_path@1"
+        },
+        {
+          "submenu": "svn-tree.resource-actions.conflicts",
+          "when": "scmProvider == svn-tree && scmResourceState == svn-conflict",
+          "group": "5_conflict@1"
+        }
+      ],
+      "svn-tree.resource-actions.browse": [
+        {
+          "command": "svn-tree.open-repository-browser",
+          "group": "1_browse@1"
+        },
+        {
+          "command": "svn-tree.open-revision-graph",
+          "group": "1_browse@2"
+        },
+        {
+          "command": "svn-tree.show-blame",
+          "group": "1_browse@3"
+        }
+      ],
+      "svn-tree.resource-actions.changes": [
+        {
+          "command": "svn-tree.update-selected",
+          "when": "scmProvider == svn-tree && scmResourceState == svn-change",
+          "group": "1_changes@1"
+        },
+        {
+          "command": "svn-tree.update-selected-to-revision",
+          "when": "scmProvider == svn-tree && scmResourceState == svn-change",
+          "group": "1_changes@2"
+        },
+        {
+          "command": "svn-tree.add-to-changelist",
+          "when": "scmProvider == svn-tree && (scmResourceState == svn-change || scmResourceState == svn-conflict)",
+          "group": "1_changes@3"
+        },
+        {
+          "command": "svn-tree.remove-from-changelist",
+          "when": "scmProvider == svn-tree && (scmResourceState == svn-change || scmResourceState == svn-conflict)",
+          "group": "1_changes@4"
+        },
+        {
+          "command": "svn-tree.lock-path",
+          "when": "scmProvider == svn-tree && (scmResourceState == svn-change || scmResourceState == svn-conflict)",
+          "group": "1_changes@5"
+        },
+        {
+          "command": "svn-tree.unlock-path",
+          "when": "scmProvider == svn-tree && (scmResourceState == svn-change || scmResourceState == svn-conflict)",
+          "group": "1_changes@6"
+        }
+      ],
+      "svn-tree.resource-actions.path": [
+        {
+          "command": "svn-tree.show-properties",
+          "group": "1_path@1"
+        },
+        {
+          "command": "svn-tree.edit-property",
+          "group": "1_path@2"
+        },
+        {
+          "command": "svn-tree.copy-repository-url",
+          "group": "1_path@3"
+        },
+        {
+          "command": "svn-tree.copy-repository-path",
+          "group": "1_path@4"
+        },
+        {
+          "command": "svn-tree.show-path-info",
+          "group": "1_path@5"
+        }
+      ],
+      "svn-tree.resource-actions.conflicts": [
+        {
+          "command": "svn-tree.accept-mine",
+          "group": "1_conflict@1"
+        },
+        {
+          "command": "svn-tree.accept-base",
+          "group": "1_conflict@2"
+        },
+        {
+          "command": "svn-tree.accept-mine-conflict",
+          "group": "1_conflict@3"
+        },
+        {
+          "command": "svn-tree.accept-theirs-conflict",
+          "group": "1_conflict@4"
+        },
+        {
+          "command": "svn-tree.accept-theirs",
+          "group": "1_conflict@5"
+        },
+        {
+          "command": "svn-tree.postpone-conflict",
+          "group": "1_conflict@6"
         }
       ],
       "scm/resourceGroup/context": [

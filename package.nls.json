@@ -64,6 +64,7 @@
   "submenu.repositoryWorkingCopy.label": "Working Copy",
   "submenu.repositoryChanges.label": "Changes",
   "submenu.repositoryConflicts.label": "Conflicts",
+  "submenu.resourcePath.label": "Path And Properties",
   "config.title": "SVN Tree",
   "config.displayLanguage.description": "Preferred display language for SVN Tree. When set to Auto, the extension follows the current VS Code UI language.",
   "config.displayLanguage.auto": "Detect automatically from the current VS Code UI language.",
