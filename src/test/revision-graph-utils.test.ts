@@ -1,9 +1,16 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { buildRevisionGraph } from "../revision-graph/revision-graph-utils";
+import {
+    buildRevisionGraph,
+    buildRevisionGraphSummary,
+    hasInvalidRevisionGraphFilters,
+    matchesRevisionGraphFilters,
+    parseRevisionGraphMergeInfo,
+} from "../revision-graph/revision-graph-utils";
 
 test("buildRevisionGraph extracts standard svn reference nodes and copy edges", () => {
     const graph = buildRevisionGraph({
+        repositoryRoot: "https://example.test/svn",
         currentRepositoryPath: "/project/branches/release-1.0/src/app.ts",
         entries: [
             {
@@ -111,35 +118,100 @@ test("buildRevisionGraph extracts standard svn reference nodes and copy edges", 
     );
 });
 
-test("buildRevisionGraph falls back to the selected path for non-standard layouts", () => {
+test("buildRevisionGraph supports custom layouts and mergeinfo metadata", () => {
     const graph = buildRevisionGraph({
+        repositoryRoot: "https://example.test/svn",
         currentRepositoryPath: "/project/releases/current/app.ts",
-        selectedRepositoryPath: "/project/releases/current",
+        selectedRepositoryPath: "/project/releases/current/app.ts",
+        layout: {
+            trunkNames: ["mainline"],
+            branchContainerNames: ["releases"],
+            tagContainerNames: ["snapshots"],
+        },
+        nodeMetadata: {
+            "/project/releases/current": {
+                mergeSources: [
+                    {
+                        sourceRepositoryPath: "/project/mainline",
+                        revisionRange: "10-20",
+                        revision: 20,
+                    },
+                ],
+            },
+        },
         entries: [],
     });
 
-    assert.equal(graph.currentReferencePath, "/project/releases/current/app.ts");
-    assert.equal(graph.selectedReferencePath, "/project/releases/current");
-    assert.deepEqual(
-        graph.nodes.map((node) => ({
-            path: node.repositoryPath,
-            kind: node.kind,
-            current: node.current,
-            selected: node.selected,
-        })),
-        [
-            {
-                path: "/project/releases/current/app.ts",
-                kind: "path",
-                current: true,
-                selected: false,
-            },
-            {
-                path: "/project/releases/current",
-                kind: "path",
-                current: false,
-                selected: true,
-            },
-        ]
+    assert.equal(graph.currentReferencePath, "/project/releases/current");
+    assert.equal(graph.nodes[0]?.repositoryPath, "/project/releases/current");
+    assert.equal(graph.edges[0]?.kind, "mergeinfo");
+});
+
+test("revision graph filters validate and match log entries", () => {
+    const entry = {
+        revision: 150,
+        author: "alice",
+        date: "2026-04-20T10:00:00.000Z",
+        message: "message",
+        changes: [],
+    };
+
+    assert.equal(
+        hasInvalidRevisionGraphFilters({
+            revisionFrom: 20,
+            revisionTo: 10,
+        }),
+        true
     );
+    assert.equal(
+        matchesRevisionGraphFilters(entry, {
+            author: "ali",
+            revisionFrom: 100,
+            revisionTo: 200,
+            dateFrom: "2026-04-01",
+            dateTo: "2026-04-30",
+        }),
+        true
+    );
+});
+
+test("parseRevisionGraphMergeInfo normalizes sources and summary includes metadata", () => {
+    const mergeSources = parseRevisionGraphMergeInfo(
+        "/project/branches/release-1.0: 100-110\n/project/trunk: 90-95",
+        {
+            trunkNames: ["trunk"],
+            branchContainerNames: ["branches"],
+            tagContainerNames: ["tags"],
+        }
+    );
+
+    assert.deepEqual(mergeSources, [
+        {
+            sourceRepositoryPath: "/project/branches/release-1.0",
+            revisionRange: "100-110",
+            revision: 110,
+        },
+        {
+            sourceRepositoryPath: "/project/trunk",
+            revisionRange: "90-95",
+            revision: 95,
+        },
+    ]);
+
+    const summary = buildRevisionGraphSummary(
+        buildRevisionGraph({
+            repositoryRoot: "https://example.test/svn",
+            currentRepositoryPath: "/project/trunk",
+            entries: [],
+            nodeMetadata: {
+                "/project/trunk": {
+                    localChangeCount: 2,
+                    incomingChangeCount: 1,
+                },
+            },
+        })
+    );
+
+    assert.match(summary, /local:2/);
+    assert.match(summary, /incoming:1/);
 });

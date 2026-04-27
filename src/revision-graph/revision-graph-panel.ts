@@ -3,14 +3,16 @@ import { getHtmlLanguage, type SupportedLocale } from "../i18n";
 import type { SvnRepository } from "../scm/svn-repository";
 import {
     getCommitTargetLabel,
-    getRepositoryReferenceRoot,
     normalizeRepositoryPath,
 } from "../scm/svn-repository-paths";
 import { getDisplayLocale, getI18n } from "../vscode-i18n";
 import type {
+    RevisionGraphData,
+    RevisionGraphQuery,
     RevisionGraphRequestMessage,
     RevisionGraphResponseMessage,
 } from "./revision-graph-types";
+import { buildRevisionGraphSummary } from "./revision-graph-utils";
 
 function escapeHtml(value: string): string {
     return value
@@ -40,6 +42,8 @@ interface RevisionGraphPanelState {
     panel: vscode.WebviewPanel;
     repositoryRootPath: string;
     scope: RevisionGraphScope;
+    query: RevisionGraphQuery;
+    graph?: RevisionGraphData;
 }
 
 export class RevisionGraphPanel implements vscode.Disposable {
@@ -68,10 +72,11 @@ export class RevisionGraphPanel implements vscode.Disposable {
         const existingState = this.panels.get(resolvedScope.key);
         const existingPanel = existingState?.panel;
 
-        if (existingPanel) {
-            this.updatePanelLocalization(existingPanel, resolvedScope);
+        if (existingPanel && existingState) {
+            existingState.scope = resolvedScope;
+            this.updatePanelLocalization(existingPanel, existingState.scope);
             existingPanel.reveal(vscode.ViewColumn.Active);
-            await this.pushGraph(existingPanel, repository, resolvedScope);
+            await this.pushGraph(existingState, repository);
             return;
         }
 
@@ -95,11 +100,13 @@ export class RevisionGraphPanel implements vscode.Disposable {
             }
         );
 
-        this.panels.set(resolvedScope.key, {
+        const panelState: RevisionGraphPanelState = {
             panel,
             repositoryRootPath: repository.rootPath,
             scope: resolvedScope,
-        });
+            query: {},
+        };
+        this.panels.set(resolvedScope.key, panelState);
         this.updatePanelLocalization(panel, resolvedScope);
 
         panel.onDidDispose(
@@ -113,7 +120,7 @@ export class RevisionGraphPanel implements vscode.Disposable {
         panel.webview.onDidReceiveMessage(
             async (message: RevisionGraphRequestMessage) => {
                 try {
-                    await this.handleMessage(repository, panel, resolvedScope, message);
+                    await this.handleMessage(repository, panelState, message);
                 } catch (error) {
                     const response: RevisionGraphResponseMessage = {
                         type: "graph-error",
@@ -152,23 +159,21 @@ export class RevisionGraphPanel implements vscode.Disposable {
             (state) => state.repositoryRootPath === repository.rootPath
         );
 
-        await Promise.all(
-            panels.map((state) => this.pushGraph(state.panel, repository, state.scope))
-        );
+        await Promise.all(panels.map((state) => this.pushGraph(state, repository)));
     }
 
     private async handleMessage(
         repository: SvnRepository,
-        panel: vscode.WebviewPanel,
-        scope: RevisionGraphScope,
+        state: RevisionGraphPanelState,
         message: RevisionGraphRequestMessage
     ): Promise<void> {
-        if (message.type === "ready" || message.type === "refresh") {
-            await this.pushGraph(panel, repository, scope);
-            return;
-        }
-
-        if (!("repositoryPath" in message)) {
+        if (
+            message.type === "ready" ||
+            message.type === "refresh" ||
+            message.type === "load-more"
+        ) {
+            state.query = message.query ?? state.query;
+            await this.pushGraph(state, repository);
             return;
         }
 
@@ -179,9 +184,19 @@ export class RevisionGraphPanel implements vscode.Disposable {
             case "open-browser":
                 await repository.openRepositoryBrowser(message.repositoryPath);
                 return;
+            case "open-at-head":
+                if (!state.graph) {
+                    return;
+                }
+                await repository.openRepositoryPathAtHead(
+                    message.repositoryPath,
+                    state.graph.selectedRepositoryPath,
+                    state.graph.selectedReferencePath
+                );
+                return;
             case "switch-reference":
                 await repository.switchToRepositoryPath(message.repositoryPath);
-                await this.pushGraph(panel, repository, scope);
+                await this.pushGraph(state, repository);
                 return;
             case "copy-path":
                 await vscode.env.clipboard.writeText(message.repositoryPath);
@@ -199,22 +214,107 @@ export class RevisionGraphPanel implements vscode.Disposable {
                     2000
                 );
                 return;
+            case "create-branch":
+                await repository.createBranchFromWorkingCopyAt(message.repositoryPath);
+                await this.pushGraph(state, repository);
+                return;
+            case "create-tag":
+                await repository.createTagFromWorkingCopyAt(message.repositoryPath);
+                await this.pushGraph(state, repository);
+                return;
+            case "delete-reference":
+                await repository.deleteRepositoryReferenceAt(message.repositoryPath);
+                await this.pushGraph(state, repository);
+                return;
+            case "compare-references":
+                if (!state.graph) {
+                    return;
+                }
+                await repository.compareRepositoryReferences(
+                    message.sourceRepositoryPath,
+                    message.targetRepositoryPath,
+                    state.graph.selectedRepositoryPath,
+                    state.graph.selectedReferencePath
+                );
+                return;
+            case "diff-references":
+                if (!state.graph) {
+                    return;
+                }
+                await repository.diffRepositoryReferences(
+                    message.sourceRepositoryPath,
+                    message.targetRepositoryPath,
+                    state.graph.selectedRepositoryPath,
+                    state.graph.selectedReferencePath
+                );
+                return;
+            case "open-edge-revision":
+                await repository.openRevisionGraphRevisionDetails(
+                    message.revision,
+                    message.repositoryPath
+                );
+                return;
+            case "copy-summary": {
+                const summary = message.summary || (state.graph ? buildRevisionGraphSummary(state.graph) : "");
+                await vscode.env.clipboard.writeText(summary);
+                void vscode.window.setStatusBarMessage(
+                    getI18n().t("revisionGraphCopiedSummaryStatus"),
+                    2000
+                );
+                return;
+            }
+            case "export-summary": {
+                const summary = message.summary || (state.graph ? buildRevisionGraphSummary(state.graph) : "");
+                const baseFileName =
+                    ((message.suggestedFileName ?? state.scope.label) || "revision-graph")
+                        .replace(/[^\w.-]+/g, "-")
+                        .replace(/^-+|-+$/g, "") || "revision-graph";
+                const destinationUri = await vscode.window.showSaveDialog({
+                    defaultUri: vscode.Uri.file(
+                        `${state.repositoryRootPath}/${baseFileName}.txt`
+                    ),
+                    saveLabel: getI18n().t("exportFileSaveLabel"),
+                    title: getI18n().t("revisionGraphExportSummaryTitle"),
+                });
+                if (!destinationUri) {
+                    return;
+                }
+
+                await vscode.workspace.fs.writeFile(
+                    destinationUri,
+                    new TextEncoder().encode(summary)
+                );
+                void vscode.window.setStatusBarMessage(
+                    getI18n().t("revisionGraphExportedSummaryStatus"),
+                    2000
+                );
+                return;
+            }
         }
     }
 
     private async pushGraph(
-        panel: vscode.WebviewPanel,
-        repository: SvnRepository,
-        scope: RevisionGraphScope
+        state: RevisionGraphPanelState,
+        repository: SvnRepository
     ): Promise<void> {
         try {
-            const graph = await repository.loadRevisionGraph(scope.repositoryPath);
-            await panel.webview.postMessage({
+            const graph = await repository.loadRevisionGraph(
+                state.scope.repositoryPath,
+                state.query
+            );
+            state.graph = graph;
+            state.query = graph.query;
+            state.scope = {
+                ...state.scope,
+                label: graph.scopeLabel,
+            };
+            this.updatePanelLocalization(state.panel, state.scope);
+            await state.panel.webview.postMessage({
                 type: "graph-data",
                 payload: graph,
             } satisfies RevisionGraphResponseMessage);
         } catch (error) {
-            await panel.webview.postMessage({
+            await state.panel.webview.postMessage({
                 type: "graph-error",
                 payload: {
                     message: error instanceof Error ? error.message : String(error),
@@ -287,14 +387,11 @@ export class RevisionGraphPanel implements vscode.Disposable {
         const normalizedRepositoryPath = normalizeRepositoryPath(
             repositoryPath ?? repository.info.repositoryRelativePath
         );
-        const referencePath =
-            getRepositoryReferenceRoot(normalizedRepositoryPath) ?? normalizedRepositoryPath;
-        const label = getCommitTargetLabel(referencePath);
 
         return {
-            key: `${repository.rootPath}::revision-graph::${referencePath}`,
-            label,
-            repositoryPath: referencePath,
+            key: `${repository.rootPath}::revision-graph::${normalizedRepositoryPath}`,
+            label: getCommitTargetLabel(normalizedRepositoryPath),
+            repositoryPath: normalizedRepositoryPath,
         };
     }
 }

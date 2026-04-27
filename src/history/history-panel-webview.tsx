@@ -1173,19 +1173,36 @@ import type {
                                   h(
                                       "button",
                                       {
-                                          className: "secondary",
+                                          className: "filter-action-button secondary",
                                           type: "button",
                                           onClick: clearHistoryFilters,
                                       },
-                                      i18n.t("clearFiltersButton")
+                                      h("span", {
+                                          className: "codicon codicon-clear-all",
+                                          "aria-hidden": "true",
+                                      }),
+                                      h(
+                                          "span",
+                                          { className: "filter-action-button-label" },
+                                          i18n.t("clearFiltersButton")
+                                      )
                                   ),
                                   h(
                                       "button",
                                       {
+                                          className: "filter-action-button",
                                           type: "button",
                                           onClick: applyHistoryFilters,
                                       },
-                                      i18n.t("applyFiltersButton")
+                                      h("span", {
+                                          className: "codicon codicon-check",
+                                          "aria-hidden": "true",
+                                      }),
+                                      h(
+                                          "span",
+                                          { className: "filter-action-button-label" },
+                                          i18n.t("applyFiltersButton")
+                                      )
                                   )
                               )
                           )

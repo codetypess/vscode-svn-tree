@@ -6,9 +6,24 @@ import {
     toRevisionNumber,
 } from "../history/history-utils";
 import { HistoryPanel } from "../history/history-panel";
-import { buildRevisionGraph } from "../revision-graph/revision-graph-utils";
+import {
+    buildRevisionGraph,
+    buildRevisionGraphSummary,
+    getRevisionGraphLayoutRoot,
+    getRevisionGraphReferenceRoot,
+    getRevisionGraphTargetLabel,
+    hasInvalidRevisionGraphFilters,
+    normalizeRevisionGraphFilters,
+    normalizeRevisionGraphLayoutConfig,
+    parseRevisionGraphMergeInfo,
+    type RevisionGraphNodeMetadata,
+} from "../revision-graph/revision-graph-utils";
 import { RevisionGraphPanel } from "../revision-graph/revision-graph-panel";
-import type { RevisionGraphData } from "../revision-graph/revision-graph-types";
+import type {
+    RevisionGraphData,
+    RevisionGraphLayoutConfig,
+    RevisionGraphQuery,
+} from "../revision-graph/revision-graph-types";
 import { SvnContentProvider } from "../svn/svn-content-provider";
 import { SvnService } from "../svn/svn-service";
 import type {
@@ -54,7 +69,6 @@ import {
     getCommitTargetLabel,
     getReferenceLayoutRoot,
     getReferenceNameSuggestion,
-    getRepositoryReferenceRoot,
     getRepositoryReferenceDisplay,
     getWorkingCopyPathForRepositoryPath,
     getWorkingCopyRelativePathForRepositoryPath,
@@ -104,8 +118,17 @@ type RepositoryUiOperation =
 type RepositoryRevisionTransferOperation = "checkout" | "export";
 
 const revisionGraphMinEntryCount = 300;
-const revisionGraphMaxEntryCount = 1000;
+const revisionGraphMaxEntryCount = 5000;
 const revisionGraphEntryMultiplier = 3;
+
+interface RevisionGraphEntryCache {
+    readonly key: string;
+    readonly target: string;
+    readonly historyFilters: SvnHistoryFilters;
+    entries: SvnLogEntry[];
+    nextBeforeRevision?: number;
+    exhausted: boolean;
+}
 
 const conflictResolutionMessages: Record<
     SelectableConflictResolutionMode,
@@ -255,6 +278,11 @@ export class SvnRepository implements vscode.Disposable {
     private isRefreshingRemoteCount = false;
     private activeOperation: RepositoryUiOperation | undefined;
     private pendingRefreshOptions: RefreshOptions | undefined;
+    private readonly revisionGraphEntryCaches = new Map<string, RevisionGraphEntryCache>();
+    private readonly revisionGraphNodeMetadataCache = new Map<
+        string,
+        RevisionGraphNodeMetadata
+    >();
 
     public constructor(
         public readonly info: SvnWorkingCopyInfo,
@@ -420,6 +448,7 @@ export class SvnRepository implements vscode.Disposable {
             }
 
             this.updateStatusBarCommands(this.remoteChangeCount);
+            await this.revisionGraphPanel.refresh(this);
         } catch (error) {
             refreshError = error;
         } finally {
@@ -464,6 +493,7 @@ export class SvnRepository implements vscode.Disposable {
         }
 
         await this.svnService.commit(this.rootPath, message, commitPaths);
+        this.invalidateRevisionGraphCaches();
         this.sourceControl.inputBox.value = "";
         await this.refresh({ forceRemote: true });
         await this.historyPanel.refresh(this);
@@ -987,6 +1017,7 @@ export class SvnRepository implements vscode.Disposable {
             }
         );
 
+        this.invalidateRevisionGraphCaches();
         await this.refreshWorkingCopyInfo();
         await this.refresh({ forceRemote: true, allowWhileBusy: true });
         await this.historyPanel.refresh(this);
@@ -1023,6 +1054,7 @@ export class SvnRepository implements vscode.Disposable {
             }
         );
 
+        this.invalidateRevisionGraphCaches();
         await this.historyPanel.refresh(this);
         void vscode.window.showInformationMessage(
             this.i18n.t("deletedReferenceInfo", {
@@ -1310,35 +1342,161 @@ export class SvnRepository implements vscode.Disposable {
         await this.revisionGraphPanel.show(this, repositoryPath);
     }
 
-    public async loadRevisionGraph(repositoryPath?: string): Promise<RevisionGraphData> {
+    public async loadRevisionGraph(
+        repositoryPath?: string,
+        query?: RevisionGraphQuery
+    ): Promise<RevisionGraphData> {
+        const layout = this.getRevisionGraphLayoutConfig();
         const selectedRepositoryPath = normalizeRepositoryPath(
             repositoryPath ?? this.info.repositoryRelativePath
         );
         const selectedReferencePath =
-            getRepositoryReferenceRoot(selectedRepositoryPath) ?? selectedRepositoryPath;
-        const graphRootPath = this.getRevisionGraphRootPath(selectedReferencePath);
-        const { entries, truncated } = await this.loadRevisionGraphEntries(graphRootPath);
-        const graph = buildRevisionGraph({
-            entries,
-            currentRepositoryPath: this.info.repositoryRelativePath,
-            selectedRepositoryPath: selectedReferencePath,
-        });
+            getRevisionGraphReferenceRoot(selectedRepositoryPath, layout) ??
+            selectedRepositoryPath;
+        const normalizedFilters = normalizeRevisionGraphFilters(query?.filters);
+        if (hasInvalidRevisionGraphFilters(normalizedFilters)) {
+            throw new Error(this.i18n.t("revisionGraphInvalidFilters"));
+        }
 
-        return {
-            scopeLabel: getCommitTargetLabel(selectedReferencePath),
-            layoutRootPath: graphRootPath,
+        const graphRootPath = this.getRevisionGraphRootPath(selectedReferencePath, layout);
+        const entryBudget = this.getRevisionGraphRequestedEntryBudget(query?.entryBudget);
+        const { entries, canLoadMore, truncated } = await this.loadRevisionGraphEntries(
+            graphRootPath,
+            entryBudget
+        );
+
+        const initialGraph = buildRevisionGraph({
+            entries,
+            repositoryRoot: this.info.repositoryRoot,
+            currentRepositoryPath: this.info.repositoryRelativePath,
             selectedRepositoryPath,
-            selectedReferencePath: graph.selectedReferencePath,
-            currentReferencePath: graph.currentReferencePath,
-            nodes: graph.nodes,
-            edges: graph.edges,
+            layout,
+            query: {
+                entryBudget,
+                filters: normalizedFilters,
+            },
+            canLoadMore,
             scannedEntryCount: entries.length,
             truncated,
-        };
+        });
+        const nodeMetadata = await this.loadRevisionGraphNodeMetadata(
+            initialGraph.nodes.map((node) => node.repositoryPath),
+            layout
+        );
+        const graph = buildRevisionGraph({
+            entries,
+            repositoryRoot: this.info.repositoryRoot,
+            currentRepositoryPath: this.info.repositoryRelativePath,
+            selectedRepositoryPath,
+            layout,
+            nodeMetadata,
+            query: {
+                entryBudget,
+                filters: normalizedFilters,
+            },
+            canLoadMore,
+            scannedEntryCount: entries.length,
+            truncated,
+        });
+
+        return this.enrichRevisionGraphHoverState(graph);
     }
 
     public getRepositoryUrlForPath(repositoryPath: string): string {
         return buildRepositoryUrl(this.info.repositoryRoot, repositoryPath);
+    }
+
+    public async openRepositoryPathAtHead(
+        referenceRepositoryPath: string,
+        selectedRepositoryPath: string,
+        selectedReferencePath: string
+    ): Promise<void> {
+        const targetRepositoryPath = this.mapRevisionGraphTargetPath(
+            referenceRepositoryPath,
+            selectedRepositoryPath,
+            selectedReferencePath
+        );
+        const targetUrl = this.getRepositoryUrlForPath(targetRepositoryPath);
+        const info = await this.svnService.getNodeInfo(targetUrl);
+        if (info?.kind === "file") {
+            const document = this.contentProvider.createUri({
+                label: `${targetRepositoryPath} (HEAD)`,
+                source: "svn",
+                target: targetUrl,
+                revision: "HEAD",
+            });
+            await vscode.window.showTextDocument(document, {
+                preview: true,
+                viewColumn: vscode.ViewColumn.Active,
+            });
+            return;
+        }
+
+        await this.openRepositoryBrowser(targetRepositoryPath);
+    }
+
+    public async openRevisionGraphRevisionDetails(
+        revision: number,
+        repositoryPath: string
+    ): Promise<void> {
+        const targetUrl = this.getRepositoryUrlForPath(repositoryPath);
+        const entry = await this.svnService.getLogEntryAtRevision(
+            this.rootPath,
+            revision,
+            targetUrl
+        );
+        if (!entry) {
+            void vscode.window.showWarningMessage(
+                this.i18n.t("revisionGraphRevisionNotFound", { revision })
+            );
+            return;
+        }
+
+        await this.openTextPreview(
+            "plaintext",
+            [
+                `${this.i18n.t("revisionLabel")}: r${entry.revision}`,
+                `${this.i18n.t("authorDetailLabel")}: ${entry.author}`,
+                `${this.i18n.t("dateLabel")}: ${entry.date}`,
+                `${this.i18n.t("infoRepositoryPathLabel")}: ${repositoryPath}`,
+                "",
+                `${this.i18n.t("descriptionLabel")}:`,
+                entry.message || this.i18n.t("noCommitMessage"),
+                "",
+                `${this.i18n.t("changedFilesLabel")}:`,
+                ...this.formatRevisionGraphChangedPaths(entry),
+            ].join("\n")
+        );
+    }
+
+    public async compareRepositoryReferences(
+        sourceRepositoryPath: string,
+        targetRepositoryPath: string,
+        selectedRepositoryPath: string,
+        selectedReferencePath: string
+    ): Promise<void> {
+        await this.openRevisionGraphReferenceDiff(
+            sourceRepositoryPath,
+            targetRepositoryPath,
+            selectedRepositoryPath,
+            selectedReferencePath,
+            true
+        );
+    }
+
+    public async diffRepositoryReferences(
+        sourceRepositoryPath: string,
+        targetRepositoryPath: string,
+        selectedRepositoryPath: string,
+        selectedReferencePath: string
+    ): Promise<void> {
+        await this.openRevisionGraphReferenceDiff(
+            sourceRepositoryPath,
+            targetRepositoryPath,
+            selectedRepositoryPath,
+            selectedReferencePath,
+            false
+        );
     }
 
     public async switchToRepositoryPath(repositoryPath: string): Promise<void> {
@@ -2486,13 +2644,27 @@ export class SvnRepository implements vscode.Disposable {
         await vscode.commands.executeCommand("revealFileInOS", vscode.Uri.file(destinationPath));
     }
 
-    private getRevisionGraphRootPath(repositoryPath: string): string {
-        const referencePath = getRepositoryReferenceRoot(repositoryPath);
-        if (!referencePath) {
-            return normalizeRepositoryPath(repositoryPath);
-        }
+    private getRevisionGraphRootPath(
+        repositoryPath: string,
+        layout?: Partial<RevisionGraphLayoutConfig>
+    ): string {
+        const normalizedPath = normalizeRepositoryPath(repositoryPath);
+        const referencePath =
+            getRevisionGraphReferenceRoot(normalizedPath, layout) ?? normalizedPath;
+        return getRevisionGraphLayoutRoot(referencePath, layout);
+    }
 
-        return getReferenceLayoutRoot(referencePath);
+    private getRevisionGraphLayoutConfig(): RevisionGraphLayoutConfig {
+        const config = vscode.workspace.getConfiguration("svn-tree");
+        return normalizeRevisionGraphLayoutConfig({
+            trunkNames: config.get<string[]>("revision-graph-trunk-names", ["trunk"]),
+            branchContainerNames: config.get<string[]>("revision-graph-branch-container-names", [
+                "branches",
+            ]),
+            tagContainerNames: config.get<string[]>("revision-graph-tag-container-names", [
+                "tags",
+            ]),
+        });
     }
 
     private getRevisionGraphEntryLimit(): number {
@@ -2508,43 +2680,287 @@ export class SvnRepository implements vscode.Disposable {
         );
     }
 
+    private getRevisionGraphRequestedEntryBudget(requestedEntryBudget?: number): number {
+        const defaultEntryBudget = this.getRevisionGraphEntryLimit();
+        const normalizedRequestedEntryBudget =
+            Number.isFinite(requestedEntryBudget) && (requestedEntryBudget ?? 0) > 0
+                ? Math.floor(requestedEntryBudget ?? 0)
+                : defaultEntryBudget;
+        return Math.min(
+            revisionGraphMaxEntryCount,
+            Math.max(defaultEntryBudget, normalizedRequestedEntryBudget)
+        );
+    }
+
     private async loadRevisionGraphEntries(
-        graphRootPath: string
-    ): Promise<{ entries: SvnLogEntry[]; truncated: boolean }> {
+        graphRootPath: string,
+        requestedEntryCount: number
+    ): Promise<{ entries: SvnLogEntry[]; canLoadMore: boolean; truncated: boolean }> {
         const target = buildRepositoryUrl(this.info.repositoryRoot, graphRootPath);
-        const entries: SvnLogEntry[] = [];
-        const entryLimit = this.getRevisionGraphEntryLimit();
+        const cacheKey = graphRootPath;
+        const entryLimit = this.getRevisionGraphRequestedEntryBudget(requestedEntryCount);
         const pageSize = Math.min(
             entryLimit,
             vscode.workspace.getConfiguration("svn-tree").get<number>("max-log-entries", 200)
         );
+        const cache =
+            this.revisionGraphEntryCaches.get(cacheKey) ??
+            ({
+                key: cacheKey,
+                target,
+                historyFilters: normalizeHistoryFilters(),
+                entries: [],
+                exhausted: false,
+            } satisfies RevisionGraphEntryCache);
+        if (!this.revisionGraphEntryCaches.has(cacheKey)) {
+            this.revisionGraphEntryCaches.set(cacheKey, cache);
+        }
 
-        let beforeRevision: number | undefined;
-        let hasMore = true;
-
-        while (entries.length < entryLimit && hasMore) {
-            const remaining = entryLimit - entries.length;
+        while (cache.entries.length < entryLimit && !cache.exhausted) {
+            const remaining = entryLimit - cache.entries.length;
             const page = await this.svnService.getLog(
                 this.rootPath,
                 Math.min(pageSize, remaining),
-                beforeRevision,
+                cache.nextBeforeRevision,
                 target
             );
 
             if (page.entries.length === 0) {
-                hasMore = false;
+                cache.exhausted = true;
                 break;
             }
 
-            entries.push(...page.entries);
-            hasMore = page.hasMore;
-            beforeRevision = page.nextBeforeRevision;
+            cache.entries.push(...page.entries);
+            cache.exhausted = !page.hasMore;
+            cache.nextBeforeRevision = page.nextBeforeRevision;
         }
 
         return {
-            entries,
-            truncated: hasMore,
+            entries: cache.entries.slice(0, entryLimit),
+            canLoadMore: !cache.exhausted,
+            truncated: !cache.exhausted,
         };
+    }
+
+    private async loadRevisionGraphNodeMetadata(
+        repositoryPaths: readonly string[],
+        layout: RevisionGraphLayoutConfig
+    ): Promise<Record<string, RevisionGraphNodeMetadata>> {
+        const uniquePaths = [...new Set(repositoryPaths.map((value) => normalizeRepositoryPath(value)))];
+        const statusMetadata = this.getRevisionGraphStatusMetadata(uniquePaths);
+        const metadataEntries = await Promise.all(
+            uniquePaths.map(async (repositoryPath) => {
+                const cachedMetadata = this.revisionGraphNodeMetadataCache.get(repositoryPath);
+                if (cachedMetadata) {
+                    return [
+                        repositoryPath,
+                        {
+                            ...cachedMetadata,
+                            ...statusMetadata[repositoryPath],
+                        },
+                    ] as const;
+                }
+
+                const url = buildRepositoryUrl(this.info.repositoryRoot, repositoryPath);
+                const [nodeInfo, mergeInfo] = await Promise.all([
+                    this.svnService.getNodeInfo(url).catch(() => undefined),
+                    this.svnService.getProperty(url, "svn:mergeinfo").catch(() => undefined),
+                ]);
+                const metadata: RevisionGraphNodeMetadata = {
+                    lockOwner: nodeInfo?.lockOwner,
+                    mergeSources: parseRevisionGraphMergeInfo(mergeInfo, layout),
+                };
+                this.revisionGraphNodeMetadataCache.set(repositoryPath, metadata);
+
+                return [
+                    repositoryPath,
+                    {
+                        ...metadata,
+                        ...statusMetadata[repositoryPath],
+                    },
+                ] as const;
+            })
+        );
+
+        return Object.fromEntries(metadataEntries);
+    }
+
+    private getRevisionGraphStatusMetadata(
+        repositoryPaths: readonly string[]
+    ): Record<string, Pick<RevisionGraphNodeMetadata, "incomingChangeCount" | "localChangeCount">> {
+        const metadata = Object.fromEntries(
+            repositoryPaths.map((repositoryPath) => [
+                repositoryPath,
+                {
+                    localChangeCount: 0,
+                    incomingChangeCount: 0,
+                },
+            ])
+        ) as Record<
+            string,
+            Pick<RevisionGraphNodeMetadata, "incomingChangeCount" | "localChangeCount">
+        >;
+
+        const localStatuses = [
+            ...this.getResources(this.changesGroup.resourceStates).map((resource) => resource.status),
+            ...this.getResources(this.unversionedGroup.resourceStates).map((resource) => resource.status),
+        ];
+        for (const status of localStatuses) {
+            const repositoryPath = this.resolveRepositoryPath(status.absolutePath);
+            for (const candidatePath of repositoryPaths) {
+                if (this.isRepositoryPathWithinScope(repositoryPath, candidatePath)) {
+                    const candidateMetadata = metadata[candidatePath];
+                    if (candidateMetadata) {
+                        candidateMetadata.localChangeCount =
+                            (candidateMetadata.localChangeCount ?? 0) + 1;
+                    }
+                }
+            }
+        }
+
+        const remoteStatuses = this.getResources(this.remoteChangesGroup.resourceStates).map(
+            (resource) => resource.status
+        );
+        for (const status of remoteStatuses) {
+            const repositoryPath = this.resolveRepositoryPath(status.absolutePath);
+            for (const candidatePath of repositoryPaths) {
+                if (this.isRepositoryPathWithinScope(repositoryPath, candidatePath)) {
+                    const candidateMetadata = metadata[candidatePath];
+                    if (candidateMetadata) {
+                        candidateMetadata.incomingChangeCount =
+                            (candidateMetadata.incomingChangeCount ?? 0) + 1;
+                    }
+                }
+            }
+        }
+
+        return metadata;
+    }
+
+    private isRepositoryPathWithinScope(
+        repositoryPath: string,
+        scopeRepositoryPath: string
+    ): boolean {
+        const normalizedRepositoryPath = normalizeRepositoryPath(repositoryPath);
+        const normalizedScopeRepositoryPath = normalizeRepositoryPath(scopeRepositoryPath);
+        return (
+            normalizedRepositoryPath === normalizedScopeRepositoryPath ||
+            normalizedRepositoryPath.startsWith(`${normalizedScopeRepositoryPath}/`)
+        );
+    }
+
+    private mapRevisionGraphTargetPath(
+        referenceRepositoryPath: string,
+        selectedRepositoryPath: string,
+        selectedReferencePath: string
+    ): string {
+        const normalizedReferenceRepositoryPath = normalizeRepositoryPath(referenceRepositoryPath);
+        const normalizedSelectedRepositoryPath = normalizeRepositoryPath(selectedRepositoryPath);
+        const normalizedSelectedReferencePath = normalizeRepositoryPath(selectedReferencePath);
+        if (
+            normalizedSelectedRepositoryPath === normalizedSelectedReferencePath ||
+            !normalizedSelectedRepositoryPath.startsWith(
+                `${normalizedSelectedReferencePath}/`
+            )
+        ) {
+            return normalizedReferenceRepositoryPath;
+        }
+
+        const relativePath = normalizedSelectedRepositoryPath.slice(
+            normalizedSelectedReferencePath.length + 1
+        );
+        return normalizeRepositoryPath(
+            `${normalizedReferenceRepositoryPath}/${relativePath}`
+        );
+    }
+
+    private async openRevisionGraphReferenceDiff(
+        sourceRepositoryPath: string,
+        targetRepositoryPath: string,
+        selectedRepositoryPath: string,
+        selectedReferencePath: string,
+        summarize: boolean
+    ): Promise<void> {
+        const sourceTargetPath = this.mapRevisionGraphTargetPath(
+            sourceRepositoryPath,
+            selectedRepositoryPath,
+            selectedReferencePath
+        );
+        const targetTargetPath = this.mapRevisionGraphTargetPath(
+            targetRepositoryPath,
+            selectedRepositoryPath,
+            selectedReferencePath
+        );
+        const sourceUrl = this.getRepositoryUrlForPath(sourceTargetPath);
+        const targetUrl = this.getRepositoryUrlForPath(targetTargetPath);
+        const diffText = await this.svnService.diff(sourceUrl, targetUrl, {
+            summarize,
+            sourceRevision: "HEAD",
+            targetRevision: "HEAD",
+        });
+        const content = [
+            `${this.i18n.t("revisionGraphCompareTitle")}: ${sourceTargetPath} -> ${targetTargetPath}`,
+            `${this.i18n.t("infoUrlLabel")}: ${sourceUrl}`,
+            `${this.i18n.t("infoPathLabel")}: ${targetTargetPath}`,
+            "",
+            diffText.trim() || this.i18n.t("revisionGraphNoDifferences"),
+        ].join("\n");
+
+        await this.openTextPreview(summarize ? "plaintext" : "diff", content);
+    }
+
+    private async openTextPreview(language: string, content: string): Promise<void> {
+        const document = await vscode.workspace.openTextDocument({
+            language,
+            content,
+        });
+        await vscode.window.showTextDocument(document, {
+            preview: true,
+            viewColumn: vscode.ViewColumn.Active,
+        });
+    }
+
+    private formatRevisionGraphChangedPaths(entry: SvnLogEntry): string[] {
+        if (entry.changes.length === 0) {
+            return [this.i18n.t("noChangedPathsReported")];
+        }
+
+        return entry.changes.map((change) => {
+            const copiedFrom = change.copyfromPath
+                ? ` (${this.i18n.t("historyCopiedFrom", {
+                      path: change.copyfromPath,
+                  })})`
+                : "";
+            return `${change.action} ${change.path}${copiedFrom}`;
+        });
+    }
+
+    private enrichRevisionGraphHoverState(graph: RevisionGraphData): RevisionGraphData {
+        return {
+            ...graph,
+            nodes: graph.nodes.map((node) => ({
+                ...node,
+                hoverSummary: [
+                    ...(node.hoverSummary ?? []),
+                    `URL: ${node.url}`,
+                    ...(node.localChangeCount
+                        ? [`Local changes: ${node.localChangeCount}`]
+                        : []),
+                    ...(node.incomingChangeCount
+                        ? [`Incoming changes: ${node.incomingChangeCount}`]
+                        : []),
+                    ...(node.lockOwner ? [`Locked by ${node.lockOwner}`] : []),
+                    ...(node.lastSeenRevision
+                        ? [`Last seen in r${node.lastSeenRevision}`]
+                        : []),
+                ],
+            })),
+        };
+    }
+
+    private invalidateRevisionGraphCaches(): void {
+        this.revisionGraphEntryCaches.clear();
+        this.revisionGraphNodeMetadataCache.clear();
     }
 
     private updateStatusBarCommands(remoteCount: number): void {
@@ -2688,6 +3104,7 @@ export class SvnRepository implements vscode.Disposable {
             }
         );
 
+        this.invalidateRevisionGraphCaches();
         const selection = await vscode.window.showInformationMessage(
             this.i18n.t("createdReferenceMessage", {
                 kind: kindLabel,
@@ -2753,6 +3170,7 @@ export class SvnRepository implements vscode.Disposable {
             }
         );
 
+        this.invalidateRevisionGraphCaches();
         await this.historyPanel.refresh(this);
         const selection = await vscode.window.showInformationMessage(
             this.i18n.t("createdReferenceFromWorkingCopyMessage", {

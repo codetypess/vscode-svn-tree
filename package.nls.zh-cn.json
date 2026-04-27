@@ -71,5 +71,8 @@
   "config.displayLanguage.zhCN": "运行时视图和提示始终显示为简体中文。",
   "config.enableRemoteStatus.description": "使用 `svn status -u` 获取传入更改。",
   "config.remoteStatusIntervalSeconds.description": "自动刷新远程状态的时间间隔，单位为秒。",
-  "config.maxLogEntries.description": "历史面板每批加载的版本数量。向下滚动时会自动继续加载更早的历史。"
+  "config.maxLogEntries.description": "历史面板每批加载的版本数量。向下滚动时会自动继续加载更早的历史。",
+  "config.revisionGraphTrunkNames.description": "在版本图中应视为 trunk 根路径的仓库路径段名称。",
+  "config.revisionGraphBranchContainerNames.description": "在版本图中用于承载分支引用的仓库路径段名称。",
+  "config.revisionGraphTagContainerNames.description": "在版本图中用于承载标签引用的仓库路径段名称。"
 }

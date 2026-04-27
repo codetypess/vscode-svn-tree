@@ -805,6 +805,36 @@
           "default": 200,
           "minimum": 20,
           "description": "%config.maxLogEntries.description%"
+        },
+        "svn-tree.revision-graph-trunk-names": {
+          "type": "array",
+          "default": [
+            "trunk"
+          ],
+          "items": {
+            "type": "string"
+          },
+          "description": "%config.revisionGraphTrunkNames.description%"
+        },
+        "svn-tree.revision-graph-branch-container-names": {
+          "type": "array",
+          "default": [
+            "branches"
+          ],
+          "items": {
+            "type": "string"
+          },
+          "description": "%config.revisionGraphBranchContainerNames.description%"
+        },
+        "svn-tree.revision-graph-tag-container-names": {
+          "type": "array",
+          "default": [
+            "tags"
+          ],
+          "items": {
+            "type": "string"
+          },
+          "description": "%config.revisionGraphTagContainerNames.description%"
         }
       }
     }

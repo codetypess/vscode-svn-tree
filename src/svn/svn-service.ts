@@ -60,6 +60,14 @@ interface SvnLogQueryResult {
     nextBeforeRevision?: number;
 }
 
+function toPegTarget(target: string, revision?: string): string {
+    if (!revision) {
+        return target;
+    }
+
+    return `${target}@${revision}`;
+}
+
 export class SvnService {
     public constructor(private readonly outputChannel: vscode.OutputChannel) {}
 
@@ -153,6 +161,22 @@ export class SvnService {
                     ? oldestRevision - 1
                     : undefined,
         };
+    }
+
+    public async getLogEntryAtRevision(
+        rootPath: string,
+        revision: number,
+        targetPath?: string
+    ): Promise<SvnLogEntry | undefined> {
+        const entries = await this.runHistoryLog(
+            rootPath,
+            1,
+            String(Math.floor(revision)),
+            String(Math.floor(revision)),
+            targetPath
+        );
+
+        return entries[0];
     }
 
     private async getFilteredLog(
@@ -464,6 +488,35 @@ export class SvnService {
     public async cat(target: string, revision: string): Promise<string> {
         const { stdout } = await this.run(["cat", "-r", revision, target], {
             cwd: nodePath.isAbsolute(target) ? nodePath.dirname(target) : undefined,
+        });
+
+        return stdout;
+    }
+
+    public async diff(
+        sourceTarget: string,
+        targetTarget: string,
+        options: {
+            summarize?: boolean;
+            sourceRevision?: string;
+            targetRevision?: string;
+        } = {}
+    ): Promise<string> {
+        const args = ["diff"];
+        if (options.summarize) {
+            args.push("--summarize");
+        }
+
+        args.push(
+            toPegTarget(sourceTarget, options.sourceRevision ?? "HEAD"),
+            toPegTarget(targetTarget, options.targetRevision ?? "HEAD")
+        );
+
+        const { stdout } = await this.run(args, {
+            cwd:
+                nodePath.isAbsolute(sourceTarget) && nodePath.isAbsolute(targetTarget)
+                    ? nodePath.dirname(sourceTarget)
+                    : undefined,
         });
 
         return stdout;

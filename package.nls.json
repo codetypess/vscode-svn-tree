@@ -71,5 +71,8 @@
   "config.displayLanguage.zhCN": "Always show Simplified Chinese UI text for runtime views and prompts.",
   "config.enableRemoteStatus.description": "Fetch incoming changes with `svn status -u`.",
   "config.remoteStatusIntervalSeconds.description": "Interval in seconds between automatic remote status refreshes.",
-  "config.maxLogEntries.description": "Number of revisions loaded per batch in the history webview. Older history is fetched automatically as you scroll."
+  "config.maxLogEntries.description": "Number of revisions loaded per batch in the history webview. Older history is fetched automatically as you scroll.",
+  "config.revisionGraphTrunkNames.description": "Repository path segment names that should be treated as trunk roots in the Revision Graph.",
+  "config.revisionGraphBranchContainerNames.description": "Repository path segment names that contain branch references in the Revision Graph.",
+  "config.revisionGraphTagContainerNames.description": "Repository path segment names that contain tag references in the Revision Graph."
 }
