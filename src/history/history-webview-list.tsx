@@ -168,6 +168,7 @@ export function CommitItem(props: CommitItemProps): React.ReactElement {
                       i18n: props.i18n,
                       entry: entry,
                       rootPath: props.rootPath,
+                      focusedRepositoryPath: props.focusedRepositoryPath,
                       searchQuery: props.searchQuery,
                       collapsedDirectories: props.collapsedDirectories,
                       onToggleDirectory: props.onToggleDirectory,

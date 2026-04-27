@@ -34,6 +34,7 @@ export type FileContextActionType =
 export interface HistoryBootstrap {
     repositoryLabel: string;
     rootPath: string;
+    focusedRepositoryPath?: string;
     locale: SupportedLocale;
     platform: FileManagerPlatform;
 }
@@ -64,6 +65,7 @@ export interface HistoryDataPayload {
     nextBeforeRevision?: number;
     repositoryLabel: string;
     rootPath: string;
+    focusedRepositoryPath?: string;
     entries: HistoryEntry[];
 }
 
@@ -198,6 +200,7 @@ export interface HistoryState {
     activeDatePicker?: HistoryDateFieldKey;
     repositoryLabel: string;
     rootPath: string;
+    focusedRepositoryPath?: string;
     locale: SupportedLocale;
     platform: FileManagerPlatform;
 }
@@ -224,6 +227,8 @@ export interface ChangeTreeNodeProps {
     depth: number;
     revision: number;
     rootPath: string;
+    focusedRepositoryPath?: string;
+    hasFocusedFileMatch?: boolean;
     searchQuery: string;
     collapsedDirectories: CollapsedDirectories;
     onToggleDirectory: (revision: number, fullPath: string) => void;
@@ -239,6 +244,7 @@ export interface CommitDetailsProps {
     i18n: RuntimeI18n;
     entry: HistoryEntry;
     rootPath: string;
+    focusedRepositoryPath?: string;
     searchQuery: string;
     collapsedDirectories: CollapsedDirectories;
     onToggleDirectory: (revision: number, fullPath: string) => void;
@@ -254,6 +260,7 @@ export interface CommitItemProps {
     entry: HistoryEntry;
     i18n: RuntimeI18n;
     rootPath: string;
+    focusedRepositoryPath?: string;
     searchQuery: string;
     collapsedDirectories: CollapsedDirectories;
     currentRevision?: number;

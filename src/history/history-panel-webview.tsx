@@ -48,6 +48,7 @@ import type {
     const bootstrap: HistoryBootstrap = window.__SVN_HISTORY_BOOTSTRAP__ ?? {
         repositoryLabel: "",
         rootPath: "",
+        focusedRepositoryPath: undefined,
         locale: "en",
         platform: "unknown",
     };
@@ -78,6 +79,7 @@ import type {
             activeDatePicker: undefined,
             repositoryLabel: bootstrap.repositoryLabel,
             rootPath: bootstrap.rootPath,
+            focusedRepositoryPath: bootstrap.focusedRepositoryPath,
             locale: bootstrap.locale,
             platform: bootstrap.platform,
         });
@@ -456,6 +458,7 @@ import type {
                             loadMoreError: undefined,
                             repositoryLabel: data.payload.repositoryLabel,
                             rootPath: data.payload.rootPath,
+                            focusedRepositoryPath: data.payload.focusedRepositoryPath,
                         };
                     });
                     setTimeout(function () {
@@ -948,6 +951,7 @@ import type {
                         entry: item.entry,
                         i18n: i18n,
                         rootPath: state.rootPath,
+                        focusedRepositoryPath: state.focusedRepositoryPath,
                         searchQuery: searchQuery,
                         collapsedDirectories: state.collapsedDirectories,
                         currentRevision: state.currentRevision,

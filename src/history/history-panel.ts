@@ -35,6 +35,7 @@ interface HistoryPanelScope {
     key: string;
     label: string;
     targetPath?: string;
+    focusedRepositoryPath?: string;
 }
 
 interface HistoryPanelState {
@@ -71,6 +72,7 @@ export class HistoryPanel implements vscode.Disposable {
         const existingPanel = existingState?.panel;
 
         if (existingPanel) {
+            existingState.scope = resolvedScope;
             this.updatePanelLocalization(existingPanel, resolvedScope);
             existingPanel.reveal(vscode.ViewColumn.Active);
             await this.pushEntries(existingPanel, repository, {
@@ -429,6 +431,7 @@ export class HistoryPanel implements vscode.Disposable {
                     nextBeforeRevision: page.nextBeforeRevision,
                     repositoryLabel: scope.label,
                     rootPath: repository.rootPath,
+                    focusedRepositoryPath: scope.focusedRepositoryPath,
                     entries: page.entries,
                 },
             });
@@ -500,6 +503,7 @@ export class HistoryPanel implements vscode.Disposable {
       window.__SVN_HISTORY_BOOTSTRAP__ = {
         repositoryLabel: ${JSON.stringify(scope.label)},
         rootPath: ${JSON.stringify(repository.rootPath)},
+        focusedRepositoryPath: ${JSON.stringify(scope.focusedRepositoryPath)},
         locale: ${JSON.stringify(locale as SupportedLocale)},
         platform: ${JSON.stringify(normalizeFileManagerPlatform(process.platform))}
       };
@@ -517,6 +521,7 @@ export class HistoryPanel implements vscode.Disposable {
             key: scope.key ?? `${repository.rootPath}::repository`,
             label: scope.label ?? repository.label,
             targetPath: scope.targetPath,
+            focusedRepositoryPath: scope.focusedRepositoryPath,
         };
     }
 

@@ -14,6 +14,31 @@ import {
     summarizeMessage,
 } from "./history-webview-utils";
 
+function normalizeRepositoryPath(value: string | undefined): string | undefined {
+    if (!value) {
+        return undefined;
+    }
+
+    const normalized = value.replace(/\\/g, "/").replace(/^\/+|\/+$/g, "");
+    return normalized ? `/${normalized}` : "/";
+}
+
+function isFocusedAncestorDirectory(
+    directoryPath: string,
+    focusedRepositoryPath: string | undefined
+): boolean {
+    if (!focusedRepositoryPath) {
+        return false;
+    }
+
+    const normalizedDirectoryPath = normalizeRepositoryPath(directoryPath);
+    if (!normalizedDirectoryPath || normalizedDirectoryPath === "/") {
+        return false;
+    }
+
+    return focusedRepositoryPath.startsWith(`${normalizedDirectoryPath}/`);
+}
+
 function ChangeTreeNode(props: ChangeTreeNodeProps): React.ReactElement {
     const node = props.node;
     const depthStyle = { "--depth": props.depth } as React.CSSProperties & {
@@ -23,6 +48,9 @@ function ChangeTreeNode(props: ChangeTreeNodeProps): React.ReactElement {
     if (node.type === "dir") {
         const key = directoryKey(props.revision, node.fullPath);
         const collapsed = props.collapsedDirectories[key] === true;
+        const isFocusedAncestor =
+            props.hasFocusedFileMatch === true &&
+            isFocusedAncestorDirectory(node.fullPath, props.focusedRepositoryPath);
 
         return React.createElement(
             React.Fragment,
@@ -30,7 +58,12 @@ function ChangeTreeNode(props: ChangeTreeNodeProps): React.ReactElement {
             React.createElement(
                 "div",
                 {
-                    className: "tree-row tree-dir",
+                    className:
+                        "tree-row tree-dir" +
+                        (isFocusedAncestor ? " is-focused-ancestor" : "") +
+                        (props.hasFocusedFileMatch === true && !isFocusedAncestor
+                            ? " is-dimmed-dir"
+                            : ""),
                     style: depthStyle,
                     onClick: function () {
                         props.onToggleDirectory(props.revision, node.fullPath);
@@ -71,6 +104,8 @@ function ChangeTreeNode(props: ChangeTreeNodeProps): React.ReactElement {
                           depth: props.depth + 1,
                           revision: props.revision,
                           rootPath: props.rootPath,
+                          focusedRepositoryPath: props.focusedRepositoryPath,
+                          hasFocusedFileMatch: props.hasFocusedFileMatch,
                           searchQuery: props.searchQuery,
                           collapsedDirectories: props.collapsedDirectories,
                           onToggleDirectory: props.onToggleDirectory,
@@ -82,6 +117,9 @@ function ChangeTreeNode(props: ChangeTreeNodeProps): React.ReactElement {
 
     const change = node.change;
     const action = String(change.action).toUpperCase();
+    const isFocusedFile =
+        props.hasFocusedFileMatch === true &&
+        normalizeRepositoryPath(change.path) === props.focusedRepositoryPath;
     const noteSegments: string[] = [];
 
     if (change.kind) {
@@ -113,7 +151,10 @@ function ChangeTreeNode(props: ChangeTreeNodeProps): React.ReactElement {
     return React.createElement(
         "a",
         {
-            className: "tree-row change-row",
+            className:
+                "tree-row change-row" +
+                (isFocusedFile ? " is-focused-file" : "") +
+                (props.hasFocusedFileMatch === true && !isFocusedFile ? " is-dimmed-file" : ""),
             style: depthStyle,
             title: props.i18n.t("openDiff"),
             href: createHistoryDiffCommandUri(
@@ -163,6 +204,12 @@ function ChangeTreeNode(props: ChangeTreeNodeProps): React.ReactElement {
 
 export function CommitDetails(props: CommitDetailsProps): React.ReactElement {
     const entry = props.entry;
+    const focusedRepositoryPath = normalizeRepositoryPath(props.focusedRepositoryPath);
+    const hasFocusedFileMatch =
+        focusedRepositoryPath !== undefined &&
+        entry.changes.some(function (change) {
+            return normalizeRepositoryPath(change.path) === focusedRepositoryPath;
+        });
     const treeMarkup =
         entry.changes.length === 0
             ? React.createElement(
@@ -182,6 +229,8 @@ export function CommitDetails(props: CommitDetailsProps): React.ReactElement {
                       depth: 0,
                       revision: entry.revision,
                       rootPath: props.rootPath,
+                      focusedRepositoryPath: focusedRepositoryPath,
+                      hasFocusedFileMatch: hasFocusedFileMatch,
                       searchQuery: props.searchQuery,
                       collapsedDirectories: props.collapsedDirectories,
                       onToggleDirectory: props.onToggleDirectory,

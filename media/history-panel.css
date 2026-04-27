@@ -810,6 +810,30 @@ button.secondary:hover {
   cursor: pointer;
 }
 
+.tree-dir.is-focused-ancestor {
+  color: color-mix(in srgb, var(--vscode-editor-foreground) 84%, var(--muted));
+}
+
+.tree-dir.is-focused-ancestor .tree-label {
+  color: color-mix(in srgb, var(--vscode-editor-foreground) 88%, var(--muted));
+  font-weight: 500;
+}
+
+.tree-dir.is-focused-ancestor .tree-icon,
+.tree-dir.is-focused-ancestor .tree-chevron {
+  color: color-mix(in srgb, var(--vscode-editor-foreground) 68%, var(--muted));
+}
+
+.tree-dir.is-dimmed-dir {
+  color: color-mix(in srgb, var(--muted) 78%, transparent);
+}
+
+.tree-dir.is-dimmed-dir .tree-label,
+.tree-dir.is-dimmed-dir .tree-icon,
+.tree-dir.is-dimmed-dir .tree-chevron {
+  color: color-mix(in srgb, var(--muted) 78%, transparent);
+}
+
 .tree-main {
   min-width: 0;
   display: flex;
@@ -846,6 +870,23 @@ button.secondary:hover {
   outline: 1px solid var(--vscode-focusBorder, var(--graph-node));
   outline-offset: -1px;
   background: var(--row-hover);
+}
+
+.change-row.is-focused-file .change-path {
+  color: var(--vscode-editor-foreground);
+  font-weight: 600;
+}
+
+.change-row.is-dimmed-file .change-path {
+  color: color-mix(in srgb, var(--vscode-editor-foreground) 22%, var(--muted));
+}
+
+.change-row.is-dimmed-file .change-icon {
+  color: color-mix(in srgb, currentColor 72%, transparent);
+}
+
+.change-row.is-dimmed-file .change-note {
+  color: color-mix(in srgb, var(--muted) 58%, transparent);
 }
 
 .change-icon {

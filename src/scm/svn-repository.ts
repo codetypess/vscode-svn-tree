@@ -1673,11 +1673,13 @@ export class SvnRepository implements vscode.Disposable {
     }
 
     public async showFileHistory(target: vscode.Uri | string): Promise<void> {
+        const targetPath = typeof target === "string" ? target : target.fsPath;
         const relativePath = this.getHistoryTargetRelativePath(target);
         await this.historyPanel.show(this, {
             key: `${this.rootPath}::file::${relativePath}`,
             label: relativePath,
             targetPath: relativePath,
+            focusedRepositoryPath: this.resolveRepositoryPath(targetPath),
         });
     }
 
@@ -1693,6 +1695,7 @@ export class SvnRepository implements vscode.Disposable {
             key: `${this.rootPath}::repository-file::${repositoryPath}`,
             label,
             targetPath: buildRepositoryUrl(this.info.repositoryRoot, repositoryPath),
+            focusedRepositoryPath: normalizeRepositoryPath(repositoryPath),
         });
     }
 
