@@ -67,6 +67,12 @@ interface ResolvedRepositoryPaths {
     readonly paths: string[];
 }
 
+interface ResolvedNodeInfoTarget {
+    readonly target: ResolvedPathTarget;
+    readonly nodeInfo: SvnNodeInfo;
+    readonly displayPath: string;
+}
+
 const conflictActionDefinitions: readonly ConflictActionDefinition[] = [
     {
         selectedCommand: "svn-tree.resolve-conflict",
@@ -1106,9 +1112,7 @@ export class SvnRepositoryManager implements vscode.Disposable {
     }
 
     private async showPathInfo(arg: unknown): Promise<void> {
-        await this.runForPathTarget(arg, async (target) => {
-            const nodeInfo = await this.resolveNodeInfoOrThrow(target);
-            const displayPath = this.getTargetDisplayPath(target.repository, target.uri);
+        await this.runForResolvedNodeInfoTarget(arg, async ({ nodeInfo, displayPath }) => {
             const i18n = getI18n();
             const lines = buildPathInfoOutputLines(nodeInfo, {
                 labels: {
@@ -1140,8 +1144,7 @@ export class SvnRepositoryManager implements vscode.Disposable {
     }
 
     private async copyRepositoryUrl(arg: unknown): Promise<void> {
-        await this.runForPathTarget(arg, async (target) => {
-            const nodeInfo = await this.resolveNodeInfoOrThrow(target);
+        await this.runForResolvedNodeInfoTarget(arg, async ({ nodeInfo }) => {
             await vscode.env.clipboard.writeText(nodeInfo.url);
             void vscode.window.setStatusBarMessage(
                 getI18n().t("copiedRepositoryUrlStatus"),
@@ -1151,8 +1154,7 @@ export class SvnRepositoryManager implements vscode.Disposable {
     }
 
     private async copyRepositoryPath(arg: unknown): Promise<void> {
-        await this.runForPathTarget(arg, async (target) => {
-            const nodeInfo = await this.resolveNodeInfoOrThrow(target);
+        await this.runForResolvedNodeInfoTarget(arg, async ({ nodeInfo }) => {
             await vscode.env.clipboard.writeText(nodeInfo.repositoryRelativePath);
             void vscode.window.setStatusBarMessage(
                 getI18n().t("copiedRepositoryPathStatus"),
@@ -1776,6 +1778,19 @@ export class SvnRepositoryManager implements vscode.Disposable {
         }
 
         await this.runForRepository(arg, repositoryAction);
+    }
+
+    private async runForResolvedNodeInfoTarget(
+        arg: unknown,
+        action: (resolved: ResolvedNodeInfoTarget) => Promise<void>
+    ): Promise<void> {
+        await this.runForPathTarget(arg, async (target) => {
+            await action({
+                target,
+                nodeInfo: await this.resolveNodeInfoOrThrow(target),
+                displayPath: this.getTargetDisplayPath(target.repository, target.uri),
+            });
+        });
     }
 
     private async runSelectedResourceAction(
