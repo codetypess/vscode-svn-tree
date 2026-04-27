@@ -84,6 +84,7 @@ import {
     getRepositoryReferenceDisplay,
     getWorkingCopyPathForRepositoryPath,
     getWorkingCopyRelativePathForRepositoryPath,
+    isSameOrChildWorkingCopyPath,
     isUrlTarget,
     normalizeRepositoryPath,
     RepositoryReferenceKind,
@@ -1901,7 +1902,7 @@ export class SvnRepository implements vscode.Disposable {
     }
 
     private provideOriginalResource(uri: vscode.Uri): vscode.ProviderResult<vscode.Uri> {
-        if (!uri.fsPath.startsWith(this.rootPath)) {
+        if (!isSameOrChildWorkingCopyPath(this.rootPath, uri.fsPath)) {
             return undefined;
         }
 

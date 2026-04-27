@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import * as nodePath from "node:path";
 import {
     buildHistoryFileExportName,
     buildReferenceDestinationPath,
@@ -12,6 +13,7 @@ import {
     getRepositoryReferenceDisplay,
     getWorkingCopyPathForRepositoryPath,
     getWorkingCopyRelativePathForRepositoryPath,
+    isSameOrChildWorkingCopyPath,
     isUrlTarget,
     normalizeRepositoryPath,
     resolveRepositoryPathFromWorkingCopy,
@@ -91,7 +93,7 @@ test("repository path helpers map between repository and working copy paths", ()
             "/project/trunk",
             "/project/trunk/src/index.ts"
         ),
-        "/workspace/project/src/index.ts"
+        nodePath.join("/workspace/project", "src", "index.ts")
     );
     assert.equal(
         getWorkingCopyPathForRepositoryPath(
@@ -108,6 +110,34 @@ test("repository path helpers map between repository and working copy paths", ()
             "/project/trunk/src/index.ts"
         ),
         "src/index.ts"
+    );
+});
+
+test("working copy path containment handles equivalent Windows paths", () => {
+    if (process.platform !== "win32") {
+        return;
+    }
+
+    assert.equal(
+        isSameOrChildWorkingCopyPath(
+            "D:/Users/bite/Desktop/github/subversion",
+            "d:\\Users\\bite\\Desktop\\github\\subversion"
+        ),
+        true
+    );
+    assert.equal(
+        isSameOrChildWorkingCopyPath(
+            "D:/Users/bite/Desktop/github/subversion",
+            "d:\\Users\\bite\\Desktop\\github\\subversion\\src\\index.ts"
+        ),
+        true
+    );
+    assert.equal(
+        isSameOrChildWorkingCopyPath(
+            "D:/Users/bite/Desktop/github/subversion",
+            "d:\\Users\\bite\\Desktop\\github\\subversion-other"
+        ),
+        false
     );
 });
 

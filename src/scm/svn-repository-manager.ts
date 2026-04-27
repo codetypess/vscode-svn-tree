@@ -17,6 +17,7 @@ import { SvnService } from "../svn/svn-service";
 import { ScmResource } from "./scm-resource";
 import { buildPathInfoOutputLines } from "./svn-output-formatters";
 import { SvnRepository } from "./svn-repository";
+import { isSameOrChildWorkingCopyPath } from "./svn-repository-paths";
 
 interface RepositoryActionDefinition {
     readonly labelKey: MessageKey;
@@ -601,7 +602,7 @@ export class SvnRepositoryManager implements vscode.Disposable {
 
     private getRepositoryForUri(uri: vscode.Uri): SvnRepository | undefined {
         const candidates = [...this.repositories.values()].filter((repository) =>
-            uri.fsPath.startsWith(repository.rootPath)
+            isSameOrChildWorkingCopyPath(repository.rootPath, uri.fsPath)
         );
 
         if (candidates.length === 0) {

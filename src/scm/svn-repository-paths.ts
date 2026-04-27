@@ -25,6 +25,16 @@ export function resolveRepositoryPathFromWorkingCopy(
     );
 }
 
+export function isSameOrChildWorkingCopyPath(rootPath: string, targetPath: string): boolean {
+    const relativePath = nodePath.relative(rootPath, targetPath);
+    return (
+        relativePath === "" ||
+        (relativePath !== ".." &&
+            !relativePath.startsWith(`..${nodePath.sep}`) &&
+            !nodePath.isAbsolute(relativePath))
+    );
+}
+
 export function isUrlTarget(value: string): boolean {
     return /^[a-z][a-z0-9+.-]*:\/\//i.test(value);
 }
