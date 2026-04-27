@@ -31,6 +31,7 @@ import type {
     SvnLogEntry,
     SvnLogPage,
     SvnLogPathChange,
+    SvnNodeInfo,
     SvnPropertyEntry,
     SvnStatusEntry,
     SvnWorkingCopyInfo,
@@ -92,6 +93,21 @@ import {
 interface RefreshOptions {
     forceRemote?: boolean;
     allowWhileBusy?: boolean;
+}
+
+interface RepositoryMutationFinalizationOptions {
+    readonly invalidateRevisionGraphCaches?: boolean;
+    readonly clearCommitInput?: boolean;
+    readonly refresh?: boolean;
+    readonly refreshOptions?: RefreshOptions;
+    readonly refreshWorkingCopyInfo?: boolean;
+    readonly refreshHistory?: boolean;
+}
+
+interface ResolvedWorkingCopyNodeTarget {
+    readonly targetPath: string;
+    readonly displayPath: string;
+    readonly targetInfo: SvnNodeInfo;
 }
 
 interface CommitQuickPickItem extends vscode.QuickPickItem {
@@ -454,6 +470,87 @@ export class SvnRepository implements vscode.Disposable {
         );
     }
 
+    private clearCommitInput(): void {
+        this.sourceControl.inputBox.value = "";
+    }
+
+    private async finalizeRepositoryMutation(
+        options: RepositoryMutationFinalizationOptions = {}
+    ): Promise<void> {
+        if (options.invalidateRevisionGraphCaches) {
+            this.invalidateRevisionGraphCaches();
+        }
+
+        if (options.clearCommitInput) {
+            this.clearCommitInput();
+        }
+
+        if (options.refreshWorkingCopyInfo) {
+            await this.refreshWorkingCopyInfo();
+        }
+
+        if (options.refresh || options.refreshOptions) {
+            await this.refresh(options.refreshOptions);
+        }
+
+        if (options.refreshHistory) {
+            await this.historyPanel.refresh(this);
+        }
+    }
+
+    private async runNotificationProgress<T>(
+        title: string,
+        action: () => Promise<T>
+    ): Promise<T> {
+        return vscode.window.withProgress(
+            {
+                location: vscode.ProgressLocation.Notification,
+                title,
+            },
+            action
+        );
+    }
+
+    private async offerReferencePathCopy(
+        kindLabel: string,
+        destinationPath: string,
+        message: string
+    ): Promise<void> {
+        const copyPathButton = this.i18n.t("copyPathButton");
+        const selection = await vscode.window.showInformationMessage(message, copyPathButton);
+        if (selection !== copyPathButton) {
+            return;
+        }
+
+        await vscode.env.clipboard.writeText(destinationPath);
+        void vscode.window.setStatusBarMessage(
+            this.i18n.t("copiedReferencePathStatus", {
+                kind: kindLabel,
+                destination: destinationPath,
+            }),
+            2000
+        );
+    }
+
+    private async resolveWorkingCopyNodeTarget(
+        target: vscode.Uri | string
+    ): Promise<ResolvedWorkingCopyNodeTarget> {
+        const targetPath = typeof target === "string" ? target : target.fsPath;
+        const displayPath =
+            nodePath.relative(this.rootPath, targetPath).replace(/\\/g, "/") ||
+            nodePath.basename(targetPath);
+        const targetInfo = await this.svnService.getNodeInfo(targetPath);
+        if (!targetInfo) {
+            throw new Error(this.i18n.t("noSvnInfoForPathError", { path: displayPath }));
+        }
+
+        return {
+            targetPath,
+            displayPath,
+            targetInfo,
+        };
+    }
+
     public async commit(paths?: string[]): Promise<void> {
         const message = this.sourceControl.inputBox.value.trim();
 
@@ -471,10 +568,12 @@ export class SvnRepository implements vscode.Disposable {
         }
 
         await this.svnService.commit(this.rootPath, message, commitPaths);
-        this.invalidateRevisionGraphCaches();
-        this.sourceControl.inputBox.value = "";
-        await this.refresh({ forceRemote: true });
-        await this.historyPanel.refresh(this);
+        await this.finalizeRepositoryMutation({
+            invalidateRevisionGraphCaches: true,
+            clearCommitInput: true,
+            refreshOptions: { forceRemote: true },
+            refreshHistory: true,
+        });
     }
 
     public async update(paths?: string[]): Promise<void> {
@@ -484,8 +583,10 @@ export class SvnRepository implements vscode.Disposable {
             this.i18n.t("updateWorkingCopyCompleted", { label: this.label }),
             async () => {
                 await this.svnService.update(this.rootPath, paths);
-                await this.refresh({ forceRemote: true, allowWhileBusy: true });
-                await this.historyPanel.refresh(this);
+                await this.finalizeRepositoryMutation({
+                    refreshOptions: { forceRemote: true, allowWhileBusy: true },
+                    refreshHistory: true,
+                });
             }
         );
     }
@@ -510,7 +611,9 @@ export class SvnRepository implements vscode.Disposable {
         }
 
         await this.updateIgnoredName(nodePath.dirname(targetPath), nodePath.basename(targetPath), true);
-        await this.refresh({ allowWhileBusy: true });
+        await this.finalizeRepositoryMutation({
+            refreshOptions: { allowWhileBusy: true },
+        });
     }
 
     public async unignoreWorkingCopyPath(targetPath: string): Promise<void> {
@@ -519,7 +622,9 @@ export class SvnRepository implements vscode.Disposable {
         }
 
         await this.updateIgnoredName(nodePath.dirname(targetPath), nodePath.basename(targetPath), false);
-        await this.refresh({ allowWhileBusy: true });
+        await this.finalizeRepositoryMutation({
+            refreshOptions: { allowWhileBusy: true },
+        });
     }
 
     public async renameWorkingCopyPath(targetPath: string, newName: string): Promise<string> {
@@ -582,7 +687,9 @@ export class SvnRepository implements vscode.Disposable {
                     );
                 }
 
-                await this.refresh({ allowWhileBusy: true });
+                await this.finalizeRepositoryMutation({
+                    refreshOptions: { allowWhileBusy: true },
+                });
             }
         );
 
@@ -602,7 +709,9 @@ export class SvnRepository implements vscode.Disposable {
             this.i18n.t("lockedPathCompleted", { items: itemLabel }),
             async () => {
                 await this.svnService.lock(this.rootPath, lockablePaths);
-                await this.refresh({ allowWhileBusy: true });
+                await this.finalizeRepositoryMutation({
+                    refreshOptions: { allowWhileBusy: true },
+                });
             }
         );
     }
@@ -620,7 +729,9 @@ export class SvnRepository implements vscode.Disposable {
             this.i18n.t("unlockedPathCompleted", { items: itemLabel }),
             async () => {
                 await this.svnService.unlock(this.rootPath, lockablePaths);
-                await this.refresh({ allowWhileBusy: true });
+                await this.finalizeRepositoryMutation({
+                    refreshOptions: { allowWhileBusy: true },
+                });
             }
         );
     }
@@ -633,7 +744,9 @@ export class SvnRepository implements vscode.Disposable {
         }
 
         await this.svnService.addToChangelist(this.rootPath, selectedPaths, changelistName);
-        await this.refresh({ allowWhileBusy: true });
+        await this.finalizeRepositoryMutation({
+            refreshOptions: { allowWhileBusy: true },
+        });
     }
 
     public async removeFromChangelist(paths: string[]): Promise<void> {
@@ -643,7 +756,9 @@ export class SvnRepository implements vscode.Disposable {
         }
 
         await this.svnService.removeFromChangelist(this.rootPath, selectedPaths);
-        await this.refresh({ allowWhileBusy: true });
+        await this.finalizeRepositoryMutation({
+            refreshOptions: { allowWhileBusy: true },
+        });
     }
 
     public async commitChangelist(name: string): Promise<void> {
@@ -659,9 +774,11 @@ export class SvnRepository implements vscode.Disposable {
         }
 
         await this.svnService.commitChangelist(this.rootPath, message, changelistName);
-        this.sourceControl.inputBox.value = "";
-        await this.refresh({ forceRemote: true });
-        await this.historyPanel.refresh(this);
+        await this.finalizeRepositoryMutation({
+            clearCommitInput: true,
+            refreshOptions: { forceRemote: true },
+            refreshHistory: true,
+        });
     }
 
     private getCommittableResources(): ScmResource[] {
@@ -721,8 +838,10 @@ export class SvnRepository implements vscode.Disposable {
                     selectedPaths,
                     String(revision)
                 );
-                await this.refresh({ forceRemote: true, allowWhileBusy: true });
-                await this.historyPanel.refresh(this);
+                await this.finalizeRepositoryMutation({
+                    refreshOptions: { forceRemote: true, allowWhileBusy: true },
+                    refreshHistory: true,
+                });
             }
         );
     }
@@ -745,9 +864,11 @@ export class SvnRepository implements vscode.Disposable {
             }),
             async () => {
                 await this.svnService.switch(this.rootPath, target.url);
-                await this.refreshWorkingCopyInfo();
-                await this.refresh({ forceRemote: true, allowWhileBusy: true });
-                await this.historyPanel.refresh(this);
+                await this.finalizeRepositoryMutation({
+                    refreshWorkingCopyInfo: true,
+                    refreshOptions: { forceRemote: true, allowWhileBusy: true },
+                    refreshHistory: true,
+                });
             }
         );
     }
@@ -816,8 +937,10 @@ export class SvnRepository implements vscode.Disposable {
             }),
             async () => {
                 await this.svnService.update(this.rootPath, undefined, String(revision));
-                await this.refresh({ forceRemote: true, allowWhileBusy: true });
-                await this.historyPanel.refresh(this);
+                await this.finalizeRepositoryMutation({
+                    refreshOptions: { forceRemote: true, allowWhileBusy: true },
+                    refreshHistory: true,
+                });
             }
         );
     }
@@ -854,14 +977,11 @@ export class SvnRepository implements vscode.Disposable {
             return;
         }
 
-        await vscode.window.withProgress(
-            {
-                location: vscode.ProgressLocation.Notification,
-                title: this.i18n.t("exportFileProgress", {
-                    path: repositoryPath,
-                    revision: exportRevision,
-                }),
-            },
+        await this.runNotificationProgress(
+            this.i18n.t("exportFileProgress", {
+                path: repositoryPath,
+                revision: exportRevision,
+            }),
             async () => {
                 await this.svnService.export(
                     buildRepositoryUrl(this.info.repositoryRoot, repositoryPath),
@@ -983,22 +1103,21 @@ export class SvnRepository implements vscode.Disposable {
             return;
         }
 
-        await vscode.window.withProgress(
-            {
-                location: vscode.ProgressLocation.Notification,
-                title: this.i18n.t("relocateWorkingCopyProgress", {
-                    label: this.label,
-                }),
-            },
+        await this.runNotificationProgress(
+            this.i18n.t("relocateWorkingCopyProgress", {
+                label: this.label,
+            }),
             async () => {
                 await this.svnService.relocate(this.rootPath, targetUrl);
             }
         );
 
-        this.invalidateRevisionGraphCaches();
-        await this.refreshWorkingCopyInfo();
-        await this.refresh({ forceRemote: true, allowWhileBusy: true });
-        await this.historyPanel.refresh(this);
+        await this.finalizeRepositoryMutation({
+            invalidateRevisionGraphCaches: true,
+            refreshWorkingCopyInfo: true,
+            refreshOptions: { forceRemote: true, allowWhileBusy: true },
+            refreshHistory: true,
+        });
         void vscode.window.showInformationMessage(
             this.i18n.t("relocatedWorkingCopyInfo", {
                 label: this.label,
@@ -1020,20 +1139,19 @@ export class SvnRepository implements vscode.Disposable {
             target: target.display,
         });
 
-        await vscode.window.withProgress(
-            {
-                location: vscode.ProgressLocation.Notification,
-                title: this.i18n.t("deleteReferenceProgress", {
-                    target: target.display,
-                }),
-            },
+        await this.runNotificationProgress(
+            this.i18n.t("deleteReferenceProgress", {
+                target: target.display,
+            }),
             async () => {
                 await this.svnService.deleteUrl(target.url, message);
             }
         );
 
-        this.invalidateRevisionGraphCaches();
-        await this.historyPanel.refresh(this);
+        await this.finalizeRepositoryMutation({
+            invalidateRevisionGraphCaches: true,
+            refreshHistory: true,
+        });
         void vscode.window.showInformationMessage(
             this.i18n.t("deletedReferenceInfo", {
                 target: target.display,
@@ -1045,25 +1163,15 @@ export class SvnRepository implements vscode.Disposable {
         target: vscode.Uri | string,
         displayMode: BlameDisplayMode = "text"
     ): Promise<void> {
-        const targetPath = typeof target === "string" ? target : target.fsPath;
-        const targetInfo = await this.svnService.getNodeInfo(targetPath);
-        const displayPath =
-            nodePath.relative(this.rootPath, targetPath).replace(/\\/g, "/") ||
-            nodePath.basename(targetPath);
-
-        if (!targetInfo) {
-            throw new Error(this.i18n.t("noSvnInfoForPathError", { path: displayPath }));
-        }
+        const { targetPath, displayPath, targetInfo } =
+            await this.resolveWorkingCopyNodeTarget(target);
 
         if (targetInfo.kind !== "file") {
             throw new Error(this.i18n.t("blameFileOnlyError"));
         }
 
-        const blameOutput = await vscode.window.withProgress(
-            {
-                location: vscode.ProgressLocation.Notification,
-                title: this.i18n.t("showBlameProgress", { path: displayPath }),
-            },
+        const blameOutput = await this.runNotificationProgress(
+            this.i18n.t("showBlameProgress", { path: displayPath }),
             async () => this.svnService.blame(this.rootPath, targetPath)
         );
 
@@ -1080,22 +1188,13 @@ export class SvnRepository implements vscode.Disposable {
     }
 
     public async showPathProperties(target: vscode.Uri | string): Promise<void> {
-        const targetPath = typeof target === "string" ? target : target.fsPath;
-        const displayPath =
-            nodePath.relative(this.rootPath, targetPath).replace(/\\/g, "/") ||
-            nodePath.basename(targetPath);
-        const targetInfo = await this.svnService.getNodeInfo(targetPath);
-        if (!targetInfo) {
-            throw new Error(this.i18n.t("noSvnInfoForPathError", { path: displayPath }));
-        }
+        const { targetPath, displayPath, targetInfo } =
+            await this.resolveWorkingCopyNodeTarget(target);
 
-        const properties = await vscode.window.withProgress(
-            {
-                location: vscode.ProgressLocation.Notification,
-                title: this.i18n.t("showPropertiesProgress", {
-                    path: displayPath,
-                }),
-            },
+        const properties = await this.runNotificationProgress(
+            this.i18n.t("showPropertiesProgress", {
+                path: displayPath,
+            }),
             async () => this.svnService.getProperties(targetPath)
         );
 
@@ -1108,14 +1207,7 @@ export class SvnRepository implements vscode.Disposable {
     }
 
     public async editPathProperty(target: vscode.Uri | string): Promise<void> {
-        const targetPath = typeof target === "string" ? target : target.fsPath;
-        const displayPath =
-            nodePath.relative(this.rootPath, targetPath).replace(/\\/g, "/") ||
-            nodePath.basename(targetPath);
-        const targetInfo = await this.svnService.getNodeInfo(targetPath);
-        if (!targetInfo) {
-            throw new Error(this.i18n.t("noSvnInfoForPathError", { path: displayPath }));
-        }
+        const { targetPath, displayPath } = await this.resolveWorkingCopyNodeTarget(target);
 
         const propertyName = await this.promptPropertyName();
         if (!propertyName) {
@@ -1138,19 +1230,18 @@ export class SvnRepository implements vscode.Disposable {
                 return;
             }
 
-            await vscode.window.withProgress(
-                {
-                    location: vscode.ProgressLocation.Notification,
-                    title: this.i18n.t("deletePropertyProgress", {
-                        name: propertyName,
-                    }),
-                },
+            await this.runNotificationProgress(
+                this.i18n.t("deletePropertyProgress", {
+                    name: propertyName,
+                }),
                 async () => {
                     await this.svnService.deleteProperty(targetPath, propertyName);
                 }
             );
 
-            await this.refresh({ allowWhileBusy: true });
+            await this.finalizeRepositoryMutation({
+                refreshOptions: { allowWhileBusy: true },
+            });
             void vscode.window.showInformationMessage(
                 this.i18n.t("deletedPropertyInfo", {
                     name: propertyName,
@@ -1165,19 +1256,18 @@ export class SvnRepository implements vscode.Disposable {
             return;
         }
 
-        await vscode.window.withProgress(
-            {
-                location: vscode.ProgressLocation.Notification,
-                title: this.i18n.t("setPropertyProgress", {
-                    name: propertyName,
-                }),
-            },
+        await this.runNotificationProgress(
+            this.i18n.t("setPropertyProgress", {
+                name: propertyName,
+            }),
             async () => {
                 await this.svnService.setProperty(targetPath, propertyName, nextValue);
             }
         );
 
-        await this.refresh({ allowWhileBusy: true });
+        await this.finalizeRepositoryMutation({
+            refreshOptions: { allowWhileBusy: true },
+        });
         void vscode.window.showInformationMessage(
             this.i18n.t("updatedPropertyInfo", {
                 name: propertyName,
@@ -1200,11 +1290,8 @@ export class SvnRepository implements vscode.Disposable {
             this.info.repositoryRelativePath
         );
 
-        await vscode.window.withProgress(
-            {
-                location: vscode.ProgressLocation.Notification,
-                title: this.i18n.t("revertWorkingCopyProgress", { revision }),
-            },
+        await this.runNotificationProgress(
+            this.i18n.t("revertWorkingCopyProgress", { revision }),
             async () => {
                 await this.svnService.reverseMergeToRevision(
                     this.rootPath,
@@ -1214,7 +1301,7 @@ export class SvnRepository implements vscode.Disposable {
             }
         );
 
-        await this.refresh();
+        await this.finalizeRepositoryMutation({ refresh: true });
         void vscode.window.showInformationMessage(
             this.i18n.t("revertedWorkingCopyInfo", { revision })
         );
@@ -1234,11 +1321,8 @@ export class SvnRepository implements vscode.Disposable {
             this.info.repositoryRelativePath
         );
 
-        await vscode.window.withProgress(
-            {
-                location: vscode.ProgressLocation.Notification,
-                title: this.i18n.t("revertChangesProgress", { revision }),
-            },
+        await this.runNotificationProgress(
+            this.i18n.t("revertChangesProgress", { revision }),
             async () => {
                 await this.svnService.reverseMergeRevision(
                     this.rootPath,
@@ -1248,7 +1332,7 @@ export class SvnRepository implements vscode.Disposable {
             }
         );
 
-        await this.refresh();
+        await this.finalizeRepositoryMutation({ refresh: true });
         void vscode.window.showInformationMessage(
             this.i18n.t("revertedChangesInfo", { revision })
         );
@@ -1261,14 +1345,16 @@ export class SvnRepository implements vscode.Disposable {
             this.i18n.t("cleanupWorkingCopyCompleted", { label: this.label }),
             async () => {
                 await this.svnService.cleanup(this.rootPath);
-                await this.refresh({ allowWhileBusy: true });
+                await this.finalizeRepositoryMutation({
+                    refreshOptions: { allowWhileBusy: true },
+                });
             }
         );
     }
 
     public async revert(paths: string[]): Promise<void> {
         await this.svnService.revert(this.rootPath, paths);
-        await this.refresh();
+        await this.finalizeRepositoryMutation({ refresh: true });
     }
 
     public async markResolved(paths: string[]): Promise<void> {
@@ -1289,7 +1375,9 @@ export class SvnRepository implements vscode.Disposable {
             this.i18n.t("markedResolvedInfo", { items: itemLabel }),
             async () => {
                 await this.svnService.resolve(this.rootPath, conflictPaths, "working");
-                await this.refresh({ allowWhileBusy: true });
+                await this.finalizeRepositoryMutation({
+                    refreshOptions: { allowWhileBusy: true },
+                });
             }
         );
     }
@@ -1304,12 +1392,12 @@ export class SvnRepository implements vscode.Disposable {
 
     public async add(paths: string[]): Promise<void> {
         await this.svnService.add(this.rootPath, paths);
-        await this.refresh();
+        await this.finalizeRepositoryMutation({ refresh: true });
     }
 
     public async delete(paths: string[]): Promise<void> {
         await this.svnService.delete(this.rootPath, paths);
-        await this.refresh();
+        await this.finalizeRepositoryMutation({ refresh: true });
     }
 
     public async showHistory(): Promise<void> {
@@ -1495,13 +1583,10 @@ export class SvnRepository implements vscode.Disposable {
                 this.info.repositoryRoot,
                 currentRepositoryPath
             );
-            const entries = await vscode.window.withProgress(
-                {
-                    location: vscode.ProgressLocation.Notification,
-                    title: this.i18n.t("repositoryBrowserProgress", {
-                        path: currentRepositoryPath,
-                    }),
-                },
+            const entries = await this.runNotificationProgress(
+                this.i18n.t("repositoryBrowserProgress", {
+                    path: currentRepositoryPath,
+                }),
                 async () => this.svnService.list(currentUrl)
             );
 
@@ -2011,13 +2096,10 @@ export class SvnRepository implements vscode.Disposable {
         repositoryPath: string,
         url: string
     ): Promise<void> {
-        const properties = await vscode.window.withProgress(
-            {
-                location: vscode.ProgressLocation.Notification,
-                title: this.i18n.t("showPropertiesProgress", {
-                    path: repositoryPath,
-                }),
-            },
+        const properties = await this.runNotificationProgress(
+            this.i18n.t("showPropertiesProgress", {
+                path: repositoryPath,
+            }),
             async () => this.svnService.getProperties(url)
         );
 
@@ -2034,11 +2116,8 @@ export class SvnRepository implements vscode.Disposable {
         url: string,
         displayMode: BlameDisplayMode = "text"
     ): Promise<void> {
-        const blameOutput = await vscode.window.withProgress(
-            {
-                location: vscode.ProgressLocation.Notification,
-                title: this.i18n.t("showBlameProgress", { path: repositoryPath }),
-            },
+        const blameOutput = await this.runNotificationProgress(
+            this.i18n.t("showBlameProgress", { path: repositoryPath }),
             async () => this.svnService.blameTarget(url)
         );
 
@@ -2089,9 +2168,11 @@ export class SvnRepository implements vscode.Disposable {
             }),
             async () => {
                 await this.svnService.switch(this.rootPath, targetUrl);
-                await this.refreshWorkingCopyInfo();
-                await this.refresh({ forceRemote: true, allowWhileBusy: true });
-                await this.historyPanel.refresh(this);
+                await this.finalizeRepositoryMutation({
+                    refreshWorkingCopyInfo: true,
+                    refreshOptions: { forceRemote: true, allowWhileBusy: true },
+                    refreshHistory: true,
+                });
             }
         );
     }
@@ -2240,11 +2321,8 @@ export class SvnRepository implements vscode.Disposable {
     ): Promise<void> {
         const resolvedBlameOutput =
             blameOutput ??
-            (await vscode.window.withProgress(
-                {
-                    location: vscode.ProgressLocation.Notification,
-                    title: this.i18n.t("showBlameProgress", { path: displayPath }),
-                },
+            (await this.runNotificationProgress(
+                this.i18n.t("showBlameProgress", { path: displayPath }),
                 async () =>
                     workingCopyPath
                         ? this.svnService.blame(this.rootPath, workingCopyPath)
@@ -2437,11 +2515,8 @@ export class SvnRepository implements vscode.Disposable {
 
         const { progressKey, completedKey } = repositoryRevisionTransferMessages[operation];
         const repositoryUrl = this.resolveRepositoryUrl(this.rootPath);
-        await vscode.window.withProgress(
-            {
-                location: vscode.ProgressLocation.Notification,
-                title: this.i18n.t(progressKey, { revision }),
-            },
+        await this.runNotificationProgress(
+            this.i18n.t(progressKey, { revision }),
             async () => {
                 if (operation === "checkout") {
                     await this.svnService.checkout(
@@ -2881,15 +2956,9 @@ export class SvnRepository implements vscode.Disposable {
         this.updateStatusBarCommands(this.remoteChangeCount);
 
         try {
-            await vscode.window.withProgress(
-                {
-                    location: vscode.ProgressLocation.Notification,
-                    title: progressTitle,
-                },
-                async () => {
-                    await action();
-                }
-            );
+            await this.runNotificationProgress(progressTitle, async () => {
+                await action();
+            });
 
             void vscode.window.showInformationMessage(completedMessage);
         } finally {
@@ -2952,14 +3021,11 @@ export class SvnRepository implements vscode.Disposable {
             revision,
         });
 
-        await vscode.window.withProgress(
-            {
-                location: vscode.ProgressLocation.Notification,
-                title: this.i18n.t("createReferenceProgress", {
-                    kind: kindLabel,
-                    revision,
-                }),
-            },
+        await this.runNotificationProgress(
+            this.i18n.t("createReferenceProgress", {
+                kind: kindLabel,
+                revision,
+            }),
             async () => {
                 await this.svnService.copy(
                     sourceUrl,
@@ -2970,25 +3036,18 @@ export class SvnRepository implements vscode.Disposable {
             }
         );
 
-        this.invalidateRevisionGraphCaches();
-        const selection = await vscode.window.showInformationMessage(
+        await this.finalizeRepositoryMutation({
+            invalidateRevisionGraphCaches: true,
+        });
+        await this.offerReferencePathCopy(
+            kindLabel,
+            destinationPath,
             this.i18n.t("createdReferenceMessage", {
                 kind: kindLabel,
                 revision,
                 destination: destinationPath,
-            }),
-            this.i18n.t("copyPathButton")
+            })
         );
-        if (selection === this.i18n.t("copyPathButton")) {
-            await vscode.env.clipboard.writeText(destinationPath);
-            void vscode.window.setStatusBarMessage(
-                this.i18n.t("copiedReferencePathStatus", {
-                    kind: kindLabel,
-                    destination: destinationPath,
-                }),
-                2000
-            );
-        }
     }
 
     private async createRepositoryReferenceFromWorkingCopy(
@@ -3024,37 +3083,27 @@ export class SvnRepository implements vscode.Disposable {
             resolvedDestinationPath
         );
 
-        await vscode.window.withProgress(
-            {
-                location: vscode.ProgressLocation.Notification,
-                title: this.i18n.t("createReferenceFromWorkingCopyProgress", {
-                    kind: kindLabel,
-                }),
-            },
+        await this.runNotificationProgress(
+            this.i18n.t("createReferenceFromWorkingCopyProgress", {
+                kind: kindLabel,
+            }),
             async () => {
                 await this.svnService.copy(this.rootPath, destinationUrl, message);
             }
         );
 
-        this.invalidateRevisionGraphCaches();
-        await this.historyPanel.refresh(this);
-        const selection = await vscode.window.showInformationMessage(
+        await this.finalizeRepositoryMutation({
+            invalidateRevisionGraphCaches: true,
+            refreshHistory: true,
+        });
+        await this.offerReferencePathCopy(
+            kindLabel,
+            resolvedDestinationPath,
             this.i18n.t("createdReferenceFromWorkingCopyMessage", {
                 kind: kindLabel,
                 destination: resolvedDestinationPath,
-            }),
-            this.i18n.t("copyPathButton")
+            })
         );
-        if (selection === this.i18n.t("copyPathButton")) {
-            await vscode.env.clipboard.writeText(resolvedDestinationPath);
-            void vscode.window.setStatusBarMessage(
-                this.i18n.t("copiedReferencePathStatus", {
-                    kind: kindLabel,
-                    destination: resolvedDestinationPath,
-                }),
-                2000
-            );
-        }
     }
 
     private async confirmCreateReferenceFromWorkingCopy(
@@ -3471,7 +3520,9 @@ export class SvnRepository implements vscode.Disposable {
             this.i18n.t(completedKey, { items: itemLabel }),
             async () => {
                 await this.svnService.resolve(this.rootPath, conflictPaths, accept);
-                await this.refresh({ allowWhileBusy: true });
+                await this.finalizeRepositoryMutation({
+                    refreshOptions: { allowWhileBusy: true },
+                });
             }
         );
     }

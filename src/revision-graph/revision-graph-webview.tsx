@@ -1,6 +1,13 @@
 import React from "react";
 import { createRoot } from "react-dom/client";
+import { DayPicker } from "react-day-picker";
+import { enUS, zhCN } from "react-day-picker/locale";
 import { createI18n } from "../i18n";
+import {
+    formatHistoryDateValue,
+    getMenuPosition,
+    parseHistoryDateValue,
+} from "../history/history-webview-utils";
 import type {
     RevisionGraphBootstrap,
     RevisionGraphData,
@@ -50,6 +57,8 @@ interface ContextMenuState {
     edge?: RevisionGraphEdge;
 }
 
+type RevisionGraphDateFieldKey = "dateFrom" | "dateTo";
+
 interface HoverCardState {
     x: number;
     y: number;
@@ -69,6 +78,7 @@ interface GraphState {
     contextMenu?: ContextMenuState;
     hoverCard?: HoverCardState;
     filterError?: string;
+    activeDatePicker?: RevisionGraphDateFieldKey;
 }
 
 function createEmptyFilterForm(): FilterFormState {
@@ -373,12 +383,18 @@ function buildGraphSummaryText(graph: RevisionGraphData): string {
             loading: true,
             searchQuery: "",
             draftFilters: createEmptyFilterForm(),
+            activeDatePicker: undefined,
         });
         const surfaceRef = React.useRef<HTMLDivElement | null>(null);
         const nodeRefs = React.useRef<Record<string, HTMLElement | null>>({});
+        const dateFromFieldRef = React.useRef<HTMLLabelElement | null>(null);
+        const dateToFieldRef = React.useRef<HTMLLabelElement | null>(null);
         const [edgeLayout, setEdgeLayout] = React.useState<EdgeLayout[]>([]);
         const i18n = createI18n(state.locale);
         const graph = state.graph;
+        const dayPickerLocale = state.locale === "zh-CN" ? zhCN : enUS;
+        const selectedDateFrom = parseHistoryDateValue(state.draftFilters.dateFrom);
+        const selectedDateTo = parseHistoryDateValue(state.draftFilters.dateTo);
 
         const normalizedSearchQuery = state.searchQuery.trim().toLowerCase();
         const visibleNodes = React.useMemo(() => {
@@ -467,22 +483,79 @@ function buildGraphSummaryText(graph: RevisionGraphData): string {
             []
         );
 
-        React.useEffect(
-            function () {
-                function dismissMenus(): void {
-                    setState((previous) => ({
+        React.useEffect(function () {
+            function closeDatePicker(): void {
+                setState((previous) => {
+                    if (!previous.activeDatePicker) {
+                        return previous;
+                    }
+
+                    return {
+                        ...previous,
+                        activeDatePicker: undefined,
+                    };
+                });
+            }
+
+            function closeContextMenu(): void {
+                setState((previous) => {
+                    if (!previous.contextMenu) {
+                        return previous;
+                    }
+
+                    return {
                         ...previous,
                         contextMenu: undefined,
-                    }));
+                    };
+                });
+            }
+
+            function handleResize(): void {
+                closeContextMenu();
+                closeDatePicker();
+            }
+
+            function handleKeydown(event: KeyboardEvent): void {
+                if (event.key === "Escape") {
+                    closeContextMenu();
+                    closeDatePicker();
+                }
+            }
+
+            function handleMouseDown(event: MouseEvent): void {
+                const activeField =
+                    state.activeDatePicker === "dateFrom"
+                        ? dateFromFieldRef.current
+                        : state.activeDatePicker === "dateTo"
+                          ? dateToFieldRef.current
+                          : null;
+                if (!activeField) {
+                    return;
                 }
 
-                window.addEventListener("click", dismissMenus);
-                return function () {
-                    window.removeEventListener("click", dismissMenus);
-                };
-            },
-            []
-        );
+                if (event.target instanceof Node && activeField.contains(event.target)) {
+                    return;
+                }
+
+                closeDatePicker();
+            }
+
+            function handleClick(): void {
+                closeContextMenu();
+            }
+
+            window.addEventListener("resize", handleResize);
+            window.addEventListener("keydown", handleKeydown);
+            window.addEventListener("mousedown", handleMouseDown);
+            window.addEventListener("click", handleClick);
+
+            return function () {
+                window.removeEventListener("resize", handleResize);
+                window.removeEventListener("keydown", handleKeydown);
+                window.removeEventListener("mousedown", handleMouseDown);
+                window.removeEventListener("click", handleClick);
+            };
+        });
 
         React.useEffect(
             function () {
@@ -570,6 +643,7 @@ function buildGraphSummaryText(graph: RevisionGraphData): string {
                 loading: true,
                 error: undefined,
                 contextMenu: undefined,
+                activeDatePicker: undefined,
             }));
         }
 
@@ -610,11 +684,34 @@ function buildGraphSummaryText(graph: RevisionGraphData): string {
             requestGraph("load-more", Math.min(5000, currentBudget + 300));
         }
 
+        function toggleDatePicker(field: RevisionGraphDateFieldKey): void {
+            setState((previous) => ({
+                ...previous,
+                activeDatePicker:
+                    previous.activeDatePicker === field ? undefined : field,
+            }));
+        }
+
+        function selectDateFromPicker(
+            field: RevisionGraphDateFieldKey,
+            date: Date | undefined
+        ): void {
+            setState((previous) => ({
+                ...previous,
+                draftFilters: {
+                    ...previous.draftFilters,
+                    [field]: formatHistoryDateValue(date),
+                },
+                activeDatePicker: undefined,
+            }));
+        }
+
         function clearFilters(): void {
             setState((previous) => ({
                 ...previous,
                 draftFilters: createEmptyFilterForm(),
                 filterError: undefined,
+                activeDatePicker: undefined,
             }));
             setLoading();
             vscode.postMessage({
@@ -733,11 +830,12 @@ function buildGraphSummaryText(graph: RevisionGraphData): string {
             event: React.MouseEvent<HTMLElement>
         ): void {
             event.preventDefault();
+            const position = getMenuPosition(event.clientX, event.clientY);
             setState((previous) => ({
                 ...previous,
                 contextMenu: {
-                    x: event.clientX,
-                    y: event.clientY,
+                    x: position.x,
+                    y: position.y,
                     node,
                 },
             }));
@@ -748,14 +846,109 @@ function buildGraphSummaryText(graph: RevisionGraphData): string {
             event: React.MouseEvent<SVGElement>
         ): void {
             event.preventDefault();
+            const position = getMenuPosition(event.clientX, event.clientY);
             setState((previous) => ({
                 ...previous,
                 contextMenu: {
-                    x: event.clientX,
-                    y: event.clientY,
+                    x: position.x,
+                    y: position.y,
                     edge,
                 },
             }));
+        }
+
+        function renderDateFilterField(
+            field: RevisionGraphDateFieldKey,
+            label: string,
+            value: string,
+            selectedDate: Date | undefined,
+            ref: React.RefObject<HTMLLabelElement | null>
+        ): React.ReactElement {
+            const isOpen = state.activeDatePicker === field;
+
+            return (
+                <label
+                    className={`filter-field filter-date-field${isOpen ? " is-open" : ""}`}
+                    ref={ref}
+                >
+                    <span className="filter-label">{label}</span>
+                    <div className="filter-date-input">
+                        <input
+                            className="filter-input"
+                            type="text"
+                            inputMode="numeric"
+                            placeholder="YYYY-MM-DD"
+                            value={value}
+                            onChange={(event) =>
+                                setState((previous) => ({
+                                    ...previous,
+                                    draftFilters: {
+                                        ...previous.draftFilters,
+                                        [field]: event.target.value,
+                                    },
+                                }))
+                            }
+                            onKeyDown={(event) => {
+                                if (event.key === "ArrowDown" || event.key === "Enter") {
+                                    event.preventDefault();
+                                    toggleDatePicker(field);
+                                }
+                            }}
+                        />
+                        <button
+                            className="filter-date-button"
+                            type="button"
+                            title={i18n.t("openDatePicker")}
+                            aria-label={`${label}: ${i18n.t("openDatePicker")}`}
+                            aria-expanded={isOpen}
+                            onClick={(event) => {
+                                event.stopPropagation();
+                                toggleDatePicker(field);
+                            }}
+                        >
+                            <span
+                                className="codicon codicon-calendar"
+                                aria-hidden="true"
+                            />
+                        </button>
+                    </div>
+                    {isOpen ? (
+                        <div className="filter-date-popover">
+                            <DayPicker
+                                mode="single"
+                                selected={selectedDate}
+                                onSelect={(date) => selectDateFromPicker(field, date)}
+                                defaultMonth={selectedDate ?? new Date()}
+                                locale={dayPickerLocale}
+                                navLayout="around"
+                                showOutsideDays
+                                fixedWeeks
+                            />
+                        </div>
+                    ) : null}
+                </label>
+            );
+        }
+
+        function renderContextMenuItem(
+            icon: string,
+            label: string,
+            onClick: () => void,
+            danger = false
+        ): React.ReactElement {
+            return (
+                <button
+                    className={`context-menu-item${danger ? " danger" : ""}`}
+                    type="button"
+                    onClick={(event) => {
+                        event.stopPropagation();
+                        onClick();
+                    }}
+                >
+                    <span className={`codicon ${icon}`} aria-hidden="true" />
+                    <span className="context-menu-label">{label}</span>
+                </button>
+            );
         }
 
         function copySummary(): void {
@@ -830,24 +1023,42 @@ function buildGraphSummaryText(graph: RevisionGraphData): string {
                         </div>
                     </div>
                     <div className="revision-graph-header-actions">
+                        <input
+                            className="search"
+                            type="search"
+                            value={state.searchQuery}
+                            placeholder={i18n.t("revisionGraphSearchPlaceholder")}
+                            onChange={(event) =>
+                                setState((previous) => ({
+                                    ...previous,
+                                    searchQuery: event.target.value,
+                                }))
+                            }
+                        />
                         <button
-                            className="secondary"
+                            className="toolbar-button secondary"
                             type="button"
                             onClick={copySummary}
                             disabled={!graph}
                         >
-                            {i18n.t("revisionGraphCopySummary")}
+                            <span className="codicon codicon-copy" aria-hidden="true" />
+                            <span className="toolbar-button-label">
+                                {i18n.t("revisionGraphCopySummary")}
+                            </span>
                         </button>
                         <button
-                            className="secondary"
+                            className="toolbar-button secondary"
                             type="button"
                             onClick={exportSummary}
                             disabled={!graph}
                         >
-                            {i18n.t("revisionGraphExportSummary")}
+                            <span className="codicon codicon-export" aria-hidden="true" />
+                            <span className="toolbar-button-label">
+                                {i18n.t("revisionGraphExportSummary")}
+                            </span>
                         </button>
                         <button
-                            className="primary revision-graph-refresh"
+                            className={`toolbar-button secondary${state.loading ? " is-active" : ""}`}
                             type="button"
                             onClick={requestRefresh}
                         >
@@ -860,30 +1071,19 @@ function buildGraphSummaryText(graph: RevisionGraphData): string {
                                 }
                                 aria-hidden="true"
                             />
-                            <span>{i18n.t("refreshButton")}</span>
+                            <span className="toolbar-button-label">
+                                {i18n.t("refreshButton")}
+                            </span>
                         </button>
                     </div>
                 </header>
 
-                <section className="revision-graph-toolbar">
-                    <div className="revision-graph-toolbar-row">
-                        <label className="revision-graph-field wide">
-                            <span>{i18n.t("filterPlaceholder")}</span>
+                <section className="filter-panel revision-graph-toolbar">
+                    <div className="filter-grid revision-graph-filter-grid">
+                        <label className="filter-field">
+                            <span className="filter-label">{i18n.t("historyFilterAuthorLabel")}</span>
                             <input
-                                type="search"
-                                value={state.searchQuery}
-                                placeholder={i18n.t("revisionGraphSearchPlaceholder")}
-                                onChange={(event) =>
-                                    setState((previous) => ({
-                                        ...previous,
-                                        searchQuery: event.target.value,
-                                    }))
-                                }
-                            />
-                        </label>
-                        <label className="revision-graph-field">
-                            <span>{i18n.t("historyFilterAuthorLabel")}</span>
-                            <input
+                                className="filter-input"
                                 type="text"
                                 value={state.draftFilters.author}
                                 placeholder={i18n.t("historyFilterAuthorPlaceholder")}
@@ -898,43 +1098,26 @@ function buildGraphSummaryText(graph: RevisionGraphData): string {
                                 }
                             />
                         </label>
-                        <label className="revision-graph-field">
-                            <span>{i18n.t("historyFilterDateFromLabel")}</span>
+                        {renderDateFilterField(
+                            "dateFrom",
+                            i18n.t("historyFilterDateFromLabel"),
+                            state.draftFilters.dateFrom,
+                            selectedDateFrom,
+                            dateFromFieldRef
+                        )}
+                        {renderDateFilterField(
+                            "dateTo",
+                            i18n.t("historyFilterDateToLabel"),
+                            state.draftFilters.dateTo,
+                            selectedDateTo,
+                            dateToFieldRef
+                        )}
+                        <label className="filter-field">
+                            <span className="filter-label">
+                                {i18n.t("revisionGraphRevisionFromLabel")}
+                            </span>
                             <input
-                                type="date"
-                                value={state.draftFilters.dateFrom}
-                                onChange={(event) =>
-                                    setState((previous) => ({
-                                        ...previous,
-                                        draftFilters: {
-                                            ...previous.draftFilters,
-                                            dateFrom: event.target.value,
-                                        },
-                                    }))
-                                }
-                            />
-                        </label>
-                        <label className="revision-graph-field">
-                            <span>{i18n.t("historyFilterDateToLabel")}</span>
-                            <input
-                                type="date"
-                                value={state.draftFilters.dateTo}
-                                onChange={(event) =>
-                                    setState((previous) => ({
-                                        ...previous,
-                                        draftFilters: {
-                                            ...previous.draftFilters,
-                                            dateTo: event.target.value,
-                                        },
-                                    }))
-                                }
-                            />
-                        </label>
-                    </div>
-                    <div className="revision-graph-toolbar-row">
-                        <label className="revision-graph-field">
-                            <span>{i18n.t("revisionGraphRevisionFromLabel")}</span>
-                            <input
+                                className="filter-input"
                                 type="number"
                                 min="1"
                                 value={state.draftFilters.revisionFrom}
@@ -949,9 +1132,12 @@ function buildGraphSummaryText(graph: RevisionGraphData): string {
                                 }
                             />
                         </label>
-                        <label className="revision-graph-field">
-                            <span>{i18n.t("revisionGraphRevisionToLabel")}</span>
+                        <label className="filter-field">
+                            <span className="filter-label">
+                                {i18n.t("revisionGraphRevisionToLabel")}
+                            </span>
                             <input
+                                className="filter-input"
                                 type="number"
                                 min="1"
                                 value={state.draftFilters.revisionTo}
@@ -966,32 +1152,54 @@ function buildGraphSummaryText(graph: RevisionGraphData): string {
                                 }
                             />
                         </label>
-                        <div className="revision-graph-toolbar-actions">
-                            <button className="secondary" type="button" onClick={clearFilters}>
-                                {i18n.t("clearFiltersButton")}
-                            </button>
-                            <button className="primary small" type="button" onClick={requestRefresh}>
-                                {i18n.t("applyFiltersButton")}
-                            </button>
-                            {compareSource ? (
-                                <button
-                                    className="secondary"
-                                    type="button"
-                                    onClick={() =>
-                                        setState((previous) => ({
-                                            ...previous,
-                                            compareSourceId: undefined,
-                                        }))
-                                    }
-                                >
-                                    {i18n.t("revisionGraphClearCompareSource")}
-                                </button>
-                            ) : null}
-                        </div>
                     </div>
                     {state.filterError ? (
-                        <div className="revision-graph-inline-error">{state.filterError}</div>
+                        <div className="filter-error revision-graph-inline-error">
+                            {state.filterError}
+                        </div>
                     ) : null}
+                    <div className="filter-actions revision-graph-toolbar-actions">
+                        {compareSource ? (
+                            <button
+                                className="filter-action-button secondary"
+                                type="button"
+                                onClick={() =>
+                                    setState((previous) => ({
+                                        ...previous,
+                                        compareSourceId: undefined,
+                                    }))
+                                }
+                            >
+                                <span
+                                    className="codicon codicon-close"
+                                    aria-hidden="true"
+                                />
+                                <span className="filter-action-button-label">
+                                    {i18n.t("revisionGraphClearCompareSource")}
+                                </span>
+                            </button>
+                        ) : null}
+                        <button
+                            className="filter-action-button secondary"
+                            type="button"
+                            onClick={clearFilters}
+                        >
+                            <span className="codicon codicon-clear-all" aria-hidden="true" />
+                            <span className="filter-action-button-label">
+                                {i18n.t("clearFiltersButton")}
+                            </span>
+                        </button>
+                        <button
+                            className="filter-action-button"
+                            type="button"
+                            onClick={requestRefresh}
+                        >
+                            <span className="codicon codicon-check" aria-hidden="true" />
+                            <span className="filter-action-button-label">
+                                {i18n.t("applyFiltersButton")}
+                            </span>
+                        </button>
+                    </div>
                 </section>
 
                 {state.error ? (
@@ -1158,25 +1366,29 @@ function buildGraphSummaryText(graph: RevisionGraphData): string {
 
                                             <dl className="revision-node-facts">
                                                 <div className="revision-node-fact">
-                                                    <dt>{i18n.t("revisionLabel")}</dt>
-                                                    <dd>
-                                                        {node.createdRevision
-                                                            ? `r${String(node.createdRevision)}`
-                                                            : "\u2014"}
-                                                    </dd>
-                                                </div>
-                                                <div className="revision-node-fact">
-                                                    <dt>{i18n.t("authorDetailLabel")}</dt>
-                                                    <dd>{node.createdAuthor ?? "\u2014"}</dd>
-                                                </div>
-                                                <div className="revision-node-fact wide">
                                                     <dt>{i18n.t("dateLabel")}</dt>
                                                     <dd>
                                                         {formatDate(state.locale, node.createdDate) ??
                                                             "\u2014"}
                                                     </dd>
                                                 </div>
-                                                <div className="revision-node-fact wide">
+                                                <div className="revision-node-fact">
+                                                    <dt>{i18n.t("authorDetailLabel")}</dt>
+                                                    <dd className="revision-node-fact-stack">
+                                                        <span>{node.createdAuthor ?? "\u2014"}</span>
+                                                        <span className="revision-node-inline-meta">
+                                                            <span className="revision-node-inline-meta-label">
+                                                                {i18n.t("revisionLabel")}
+                                                            </span>
+                                                            <span className="revision-node-inline-meta-value">
+                                                                {node.createdRevision
+                                                                    ? `r${String(node.createdRevision)}`
+                                                                    : "\u2014"}
+                                                            </span>
+                                                        </span>
+                                                    </dd>
+                                                </div>
+                                                <div className="revision-node-fact">
                                                     <dt>{i18n.t("revisionGraphLastSeenLabel")}</dt>
                                                     <dd>
                                                         {node.lastSeenRevision
@@ -1288,163 +1500,219 @@ function buildGraphSummaryText(graph: RevisionGraphData): string {
                 ) : null}
 
                 {state.contextMenu?.node ? (
-                    <div
-                        className="revision-graph-context-menu"
-                        style={{
-                            left: `${state.contextMenu.x}px`,
-                            top: `${state.contextMenu.y}px`,
-                        }}
-                    >
-                        <button
-                            type="button"
-                            onClick={() =>
-                                runNodeAction(
-                                    "open-at-head",
-                                    state.contextMenu?.node?.repositoryPath ?? ""
-                                )
-                            }
-                        >
-                            {i18n.t("revisionGraphOpenAtHead")}
-                        </button>
-                        <button
-                            type="button"
-                            onClick={() =>
-                                runNodeAction(
-                                    "open-browser",
-                                    state.contextMenu?.node?.repositoryPath ?? ""
-                                )
-                            }
-                        >
-                            {i18n.t("repositoryBrowserActionLabel")}
-                        </button>
-                        <button
-                            type="button"
-                            onClick={() =>
-                                runNodeAction(
-                                    "copy-url",
-                                    state.contextMenu?.node?.repositoryPath ?? ""
-                                )
-                            }
-                        >
-                            {i18n.t("copyRepositoryUrlActionLabel")}
-                        </button>
-                        <button
-                            type="button"
-                            onClick={() =>
-                                runNodeAction(
-                                    "copy-path",
-                                    state.contextMenu?.node?.repositoryPath ?? ""
-                                )
-                            }
-                        >
-                            {i18n.t("copyRepositoryPathActionLabel")}
-                        </button>
-                        <button
-                            type="button"
-                            onClick={() =>
-                                runNodeAction(
-                                    "create-branch",
-                                    state.contextMenu?.node?.repositoryPath ?? ""
-                                )
-                            }
-                        >
-                            {i18n.t("revisionGraphCreateBranchHere")}
-                        </button>
-                        <button
-                            type="button"
-                            onClick={() =>
-                                runNodeAction(
-                                    "create-tag",
-                                    state.contextMenu?.node?.repositoryPath ?? ""
-                                )
-                            }
-                        >
-                            {i18n.t("revisionGraphCreateTagHere")}
-                        </button>
-                        <button
-                            type="button"
+                    <div className="context-menu-root">
+                        <div
+                            className="context-menu-backdrop"
                             onClick={() =>
                                 setState((previous) => ({
                                     ...previous,
-                                    compareSourceId: previous.contextMenu?.node?.id,
                                     contextMenu: undefined,
                                 }))
                             }
+                        />
+                        <div
+                            className="context-menu revision-graph-context-menu"
+                            style={{
+                                left: `${state.contextMenu.x}px`,
+                                top: `${state.contextMenu.y}px`,
+                            }}
+                            onClick={(event) => event.stopPropagation()}
+                            onMouseDown={(event) => event.stopPropagation()}
                         >
-                            {i18n.t("revisionGraphSetCompareSource")}
-                        </button>
-                        {compareSource &&
-                        state.contextMenu.node &&
-                        compareSource.id !== state.contextMenu.node.id ? (
-                            <>
-                                <button
-                                    type="button"
-                                    onClick={() =>
-                                        runNodeComparison(
-                                            "compare-references",
-                                            state.contextMenu?.node as RevisionGraphNode
-                                        )
-                                    }
+                            <div className="context-menu-header">
+                                <div
+                                    className="context-menu-title"
+                                    title={state.contextMenu.node.label}
                                 >
-                                    {i18n.t("revisionGraphCompareAction")}
-                                </button>
-                                <button
-                                    type="button"
-                                    onClick={() =>
-                                        runNodeComparison(
-                                            "diff-references",
-                                            state.contextMenu?.node as RevisionGraphNode
-                                        )
-                                    }
+                                    {state.contextMenu.node.label}
+                                </div>
+                                <div
+                                    className="context-menu-subtitle"
+                                    title={state.contextMenu.node.detail}
                                 >
-                                    {i18n.t("openDiff")}
-                                </button>
-                            </>
-                        ) : null}
-                        {!state.contextMenu.node.current && state.contextMenu.node.kind !== "path" ? (
-                            <button
-                                type="button"
-                                onClick={() =>
-                                    runNodeAction(
-                                        "switch-reference",
-                                        state.contextMenu?.node?.repositoryPath ?? ""
-                                    )
-                                }
-                            >
-                                {i18n.t("repositoryBrowserSwitchHereLabel")}
-                            </button>
-                        ) : null}
-                        {state.contextMenu.node.kind !== "path" ? (
-                            <button
-                                type="button"
-                                className="danger"
-                                onClick={() =>
-                                    runNodeAction(
-                                        "delete-reference",
-                                        state.contextMenu?.node?.repositoryPath ?? ""
-                                    )
-                                }
-                            >
-                                {i18n.t("deleteReferenceActionLabel")}
-                            </button>
-                        ) : null}
+                                    {state.contextMenu.node.detail}
+                                </div>
+                            </div>
+                            <div className="context-menu-actions">
+                                {renderContextMenuItem(
+                                    "codicon-go-to-file",
+                                    i18n.t("revisionGraphOpenAtHead"),
+                                    () =>
+                                        runNodeAction(
+                                            "open-at-head",
+                                            state.contextMenu?.node?.repositoryPath ?? ""
+                                        )
+                                )}
+                                {renderContextMenuItem(
+                                    "codicon-folder-opened",
+                                    i18n.t("repositoryBrowserActionLabel"),
+                                    () =>
+                                        runNodeAction(
+                                            "open-browser",
+                                            state.contextMenu?.node?.repositoryPath ?? ""
+                                        )
+                                )}
+                                <div className="context-menu-separator" aria-hidden="true" />
+                                {renderContextMenuItem(
+                                    "codicon-link",
+                                    i18n.t("copyRepositoryUrlActionLabel"),
+                                    () =>
+                                        runNodeAction(
+                                            "copy-url",
+                                            state.contextMenu?.node?.repositoryPath ?? ""
+                                        )
+                                )}
+                                {renderContextMenuItem(
+                                    "codicon-copy",
+                                    i18n.t("copyRepositoryPathActionLabel"),
+                                    () =>
+                                        runNodeAction(
+                                            "copy-path",
+                                            state.contextMenu?.node?.repositoryPath ?? ""
+                                        )
+                                )}
+                                <div className="context-menu-separator" aria-hidden="true" />
+                                {renderContextMenuItem(
+                                    "codicon-git-branch",
+                                    i18n.t("revisionGraphCreateBranchHere"),
+                                    () =>
+                                        runNodeAction(
+                                            "create-branch",
+                                            state.contextMenu?.node?.repositoryPath ?? ""
+                                        )
+                                )}
+                                {renderContextMenuItem(
+                                    "codicon-tag",
+                                    i18n.t("revisionGraphCreateTagHere"),
+                                    () =>
+                                        runNodeAction(
+                                            "create-tag",
+                                            state.contextMenu?.node?.repositoryPath ?? ""
+                                        )
+                                )}
+                                {renderContextMenuItem(
+                                    "codicon-git-compare",
+                                    i18n.t("revisionGraphSetCompareSource"),
+                                    () =>
+                                        setState((previous) => ({
+                                            ...previous,
+                                            compareSourceId: previous.contextMenu?.node?.id,
+                                            contextMenu: undefined,
+                                        }))
+                                )}
+                                {compareSource &&
+                                state.contextMenu.node &&
+                                compareSource.id !== state.contextMenu.node.id ? (
+                                    <>
+                                        {renderContextMenuItem(
+                                            "codicon-git-compare",
+                                            i18n.t("revisionGraphCompareAction"),
+                                            () =>
+                                                runNodeComparison(
+                                                    "compare-references",
+                                                    state.contextMenu?.node as RevisionGraphNode
+                                                )
+                                        )}
+                                        {renderContextMenuItem(
+                                            "codicon-diff",
+                                            i18n.t("openDiff"),
+                                            () =>
+                                                runNodeComparison(
+                                                    "diff-references",
+                                                    state.contextMenu?.node as RevisionGraphNode
+                                                )
+                                        )}
+                                    </>
+                                ) : null}
+                                {!state.contextMenu.node.current &&
+                                state.contextMenu.node.kind !== "path" ? (
+                                    <>
+                                        <div
+                                            className="context-menu-separator"
+                                            aria-hidden="true"
+                                        />
+                                        {renderContextMenuItem(
+                                            "codicon-source-control",
+                                            i18n.t("repositoryBrowserSwitchHereLabel"),
+                                            () =>
+                                                runNodeAction(
+                                                    "switch-reference",
+                                                    state.contextMenu?.node?.repositoryPath ?? ""
+                                                )
+                                        )}
+                                    </>
+                                ) : null}
+                                {state.contextMenu.node.kind !== "path" ? (
+                                    <>
+                                        <div
+                                            className="context-menu-separator"
+                                            aria-hidden="true"
+                                        />
+                                        {renderContextMenuItem(
+                                            "codicon-trash",
+                                            i18n.t("deleteReferenceActionLabel"),
+                                            () =>
+                                                runNodeAction(
+                                                    "delete-reference",
+                                                    state.contextMenu?.node?.repositoryPath ?? ""
+                                                ),
+                                            true
+                                        )}
+                                    </>
+                                ) : null}
+                            </div>
+                        </div>
                     </div>
                 ) : null}
 
                 {state.contextMenu?.edge ? (
-                    <div
-                        className="revision-graph-context-menu"
-                        style={{
-                            left: `${state.contextMenu.x}px`,
-                            top: `${state.contextMenu.y}px`,
-                        }}
-                    >
-                        <button
-                            type="button"
-                            onClick={() => openEdgeRevision(state.contextMenu?.edge as RevisionGraphEdge)}
+                    <div className="context-menu-root">
+                        <div
+                            className="context-menu-backdrop"
+                            onClick={() =>
+                                setState((previous) => ({
+                                    ...previous,
+                                    contextMenu: undefined,
+                                }))
+                            }
+                        />
+                        <div
+                            className="context-menu revision-graph-context-menu"
+                            style={{
+                                left: `${state.contextMenu.x}px`,
+                                top: `${state.contextMenu.y}px`,
+                            }}
+                            onClick={(event) => event.stopPropagation()}
+                            onMouseDown={(event) => event.stopPropagation()}
                         >
-                            {i18n.t("revisionGraphOpenRevisionDetails")}
-                        </button>
+                            <div className="context-menu-header">
+                                <div className="context-menu-title">
+                                    {`r${state.contextMenu.edge.revision}`}
+                                </div>
+                                <div
+                                    className="context-menu-subtitle"
+                                    title={state.contextMenu.edge.targetRepositoryPath}
+                                >
+                                    {[
+                                        state.contextMenu.edge.targetRepositoryPath,
+                                        state.contextMenu.edge.author,
+                                        formatDate(state.locale, state.contextMenu.edge.date),
+                                    ]
+                                        .filter(Boolean)
+                                        .join(" • ")}
+                                </div>
+                            </div>
+                            <div className="context-menu-actions">
+                                {renderContextMenuItem(
+                                    "codicon-history",
+                                    i18n.t("revisionGraphOpenRevisionDetails"),
+                                    () =>
+                                        openEdgeRevision(
+                                            state.contextMenu?.edge as RevisionGraphEdge
+                                        )
+                                )}
+                            </div>
+                        </div>
                     </div>
                 ) : null}
 
