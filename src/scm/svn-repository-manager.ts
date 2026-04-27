@@ -56,6 +56,17 @@ interface ConflictActionDefinition {
     readonly run: ConflictCommandHandler;
 }
 
+interface ResolvedPathTarget {
+    readonly repository: SvnRepository;
+    readonly uri: vscode.Uri;
+    readonly resource?: ScmResource;
+}
+
+interface ResolvedRepositoryPaths {
+    readonly repository: SvnRepository;
+    readonly paths: string[];
+}
+
 const conflictActionDefinitions: readonly ConflictActionDefinition[] = [
     {
         selectedCommand: "svn-tree.resolve-conflict",
@@ -1089,38 +1100,15 @@ export class SvnRepositoryManager implements vscode.Disposable {
     }
 
     private async openFileHistory(arg: unknown): Promise<void> {
-        const uri = this.getUriFromArg(arg) ?? vscode.window.activeTextEditor?.document.uri;
-        if (!uri) {
-            return;
-        }
-
-        const repository = this.getRepositoryForUri(uri);
-        if (!repository) {
-            void vscode.window.showInformationMessage(getI18n().t("noWorkingCopyInfo"));
-            return;
-        }
-
-        try {
+        await this.runForUriRepository(arg, async (repository, uri) => {
             await repository.showFileHistory(uri);
-        } catch (error) {
-            this.showError(error);
-        }
+        });
     }
 
     private async showPathInfo(arg: unknown): Promise<void> {
-        const target = this.resolvePathTarget(arg);
-        if (!target) {
-            void vscode.window.showInformationMessage(getI18n().t("noWorkingCopyInfo"));
-            return;
-        }
-
-        try {
-            const nodeInfo = await this.resolveNodeInfo(target);
+        await this.runForPathTarget(arg, async (target) => {
+            const nodeInfo = await this.resolveNodeInfoOrThrow(target);
             const displayPath = this.getTargetDisplayPath(target.repository, target.uri);
-            if (!nodeInfo) {
-                throw new Error(getI18n().t("noSvnInfoForPathError", { path: displayPath }));
-            }
-
             const i18n = getI18n();
             const lines = buildPathInfoOutputLines(nodeInfo, {
                 labels: {
@@ -1148,79 +1136,34 @@ export class SvnRepositoryManager implements vscode.Disposable {
             );
             this.outputChannel.show(true);
             void vscode.window.setStatusBarMessage(i18n.t("openedPathInfoStatus"), 2000);
-        } catch (error) {
-            this.showError(error);
-        }
+        });
     }
 
     private async copyRepositoryUrl(arg: unknown): Promise<void> {
-        const target = this.resolvePathTarget(arg);
-        if (!target) {
-            void vscode.window.showInformationMessage(getI18n().t("noWorkingCopyInfo"));
-            return;
-        }
-
-        try {
-            const nodeInfo = await this.resolveNodeInfo(target);
-            if (!nodeInfo) {
-                throw new Error(
-                    getI18n().t("noSvnInfoForPathError", {
-                        path: this.getTargetDisplayPath(target.repository, target.uri),
-                    })
-                );
-            }
-
+        await this.runForPathTarget(arg, async (target) => {
+            const nodeInfo = await this.resolveNodeInfoOrThrow(target);
             await vscode.env.clipboard.writeText(nodeInfo.url);
             void vscode.window.setStatusBarMessage(
                 getI18n().t("copiedRepositoryUrlStatus"),
                 2000
             );
-        } catch (error) {
-            this.showError(error);
-        }
+        });
     }
 
     private async copyRepositoryPath(arg: unknown): Promise<void> {
-        const target = this.resolvePathTarget(arg);
-        if (!target) {
-            void vscode.window.showInformationMessage(getI18n().t("noWorkingCopyInfo"));
-            return;
-        }
-
-        try {
-            const nodeInfo = await this.resolveNodeInfo(target);
-            if (!nodeInfo) {
-                throw new Error(
-                    getI18n().t("noSvnInfoForPathError", {
-                        path: this.getTargetDisplayPath(target.repository, target.uri),
-                    })
-                );
-            }
-
+        await this.runForPathTarget(arg, async (target) => {
+            const nodeInfo = await this.resolveNodeInfoOrThrow(target);
             await vscode.env.clipboard.writeText(nodeInfo.repositoryRelativePath);
             void vscode.window.setStatusBarMessage(
                 getI18n().t("copiedRepositoryPathStatus"),
                 2000
             );
-        } catch (error) {
-            this.showError(error);
-        }
+        });
     }
 
     private async showBlame(arg: unknown): Promise<void> {
-        const target = this.resolvePathTarget(arg);
-        if (!target) {
-            void vscode.window.showInformationMessage(getI18n().t("noWorkingCopyInfo"));
-            return;
-        }
-
-        try {
-            if (
-                target.resource &&
-                (target.resource.kind === "remote-change" ||
-                    target.resource.status.wcStatus === "deleted" ||
-                    target.resource.status.wcStatus === "missing")
-            ) {
+        await this.runForPathTarget(arg, async (target) => {
+            if (this.shouldUseRepositoryPathTarget(target)) {
                 const repositoryPath = target.repository.resolveRepositoryPath(target.uri.fsPath);
                 await target.repository.showBlameForRepositoryPath(
                     repositoryPath,
@@ -1230,21 +1173,14 @@ export class SvnRepositoryManager implements vscode.Disposable {
             }
 
             await target.repository.showBlame(target.uri);
-        } catch (error) {
-            this.showError(error);
-        }
+        });
     }
 
     private async showProperties(arg: unknown): Promise<void> {
-        const target = this.resolvePathTarget(arg);
-        if (target) {
-            try {
-                if (
-                    target.resource &&
-                    (target.resource.kind === "remote-change" ||
-                        target.resource.status.wcStatus === "deleted" ||
-                        target.resource.status.wcStatus === "missing")
-                ) {
+        await this.runForOptionalPathTargetOrRepository(
+            arg,
+            async (target) => {
+                if (this.shouldUseRepositoryPathTarget(target)) {
                     const repositoryPath = target.repository.resolveRepositoryPath(
                         target.uri.fsPath
                     );
@@ -1256,35 +1192,21 @@ export class SvnRepositoryManager implements vscode.Disposable {
                 }
 
                 await target.repository.showPathProperties(target.uri);
-            } catch (error) {
-                this.showError(error);
-            }
-            return;
-        }
-
-        await this.runForRepository(arg, (repository) =>
-            repository.showPathProperties(repository.rootPath)
+            },
+            (repository) => repository.showPathProperties(repository.rootPath)
         );
     }
 
     private async editProperty(arg: unknown): Promise<void> {
-        const target = this.resolvePathTarget(arg);
-        if (!target) {
-            void vscode.window.showInformationMessage(getI18n().t("noWorkingCopyInfo"));
-            return;
-        }
-
-        try {
+        await this.runForPathTarget(arg, async (target) => {
             await target.repository.editPathProperty(target.uri);
-        } catch (error) {
-            this.showError(error);
-        }
+        });
     }
 
     private async openRepositoryBrowser(arg: unknown): Promise<void> {
-        const target = this.resolvePathTarget(arg);
-        if (target) {
-            try {
+        await this.runForOptionalPathTargetOrRepository(
+            arg,
+            async (target) => {
                 const nodeInfo = await this.resolveNodeInfo(target);
                 const repositoryPath = target.repository.resolveRepositoryPath(target.uri.fsPath);
                 await target.repository.openRepositoryBrowser(
@@ -1292,35 +1214,26 @@ export class SvnRepositoryManager implements vscode.Disposable {
                         ? nodePath.posix.dirname(repositoryPath).replace(/^$/, "/")
                         : repositoryPath
                 );
-            } catch (error) {
-                this.showError(error);
-            }
-            return;
-        }
-
-        await this.runForRepository(arg, (repository) => repository.openRepositoryBrowser());
+            },
+            (repository) => repository.openRepositoryBrowser()
+        );
     }
 
     private async openRevisionGraph(arg: unknown): Promise<void> {
-        const target = this.resolvePathTarget(arg);
-        if (target) {
-            try {
+        await this.runForOptionalPathTargetOrRepository(
+            arg,
+            async (target) => {
                 await target.repository.showRevisionGraph(
                     target.repository.resolveRepositoryPath(target.uri.fsPath)
                 );
-            } catch (error) {
-                this.showError(error);
-            }
-            return;
-        }
-
-        await this.runForRepository(arg, (repository) => repository.showRevisionGraph());
+            },
+            (repository) => repository.showRevisionGraph()
+        );
     }
 
     private async renamePath(arg: unknown): Promise<void> {
-        const target = this.resolvePathTarget(arg);
+        const target = this.resolvePathTargetOrShowInfo(arg);
         if (!target) {
-            void vscode.window.showInformationMessage(getI18n().t("noWorkingCopyInfo"));
             return;
         }
 
@@ -1344,69 +1257,15 @@ export class SvnRepositoryManager implements vscode.Disposable {
     }
 
     private async lockPath(arg: unknown): Promise<void> {
-        const resources = this.getSelectedResources(arg, ["svn-change", "svn-conflict"]).filter(
-            (resource) => resource.status.kind === "file"
+        await this.runLockablePathAction(arg, (repository, paths) =>
+            repository.lockWorkingCopyPaths(paths)
         );
-        if (resources.length > 0) {
-            try {
-                await resources[0].repository.lockWorkingCopyPaths(
-                    resources.map((resource) => resource.status.absolutePath)
-                );
-            } catch (error) {
-                this.showError(error);
-            }
-            return;
-        }
-
-        const target = this.resolvePathTarget(arg);
-        if (!target) {
-            void vscode.window.showInformationMessage(getI18n().t("noWorkingCopyInfo"));
-            return;
-        }
-
-        if (target.resource?.status.kind && target.resource.status.kind !== "file") {
-            void vscode.window.showInformationMessage(getI18n().t("noLockablePathsInfo"));
-            return;
-        }
-
-        try {
-            await target.repository.lockWorkingCopyPaths([target.uri.fsPath]);
-        } catch (error) {
-            this.showError(error);
-        }
     }
 
     private async unlockPath(arg: unknown): Promise<void> {
-        const resources = this.getSelectedResources(arg, ["svn-change", "svn-conflict"]).filter(
-            (resource) => resource.status.kind === "file"
+        await this.runLockablePathAction(arg, (repository, paths) =>
+            repository.unlockWorkingCopyPaths(paths)
         );
-        if (resources.length > 0) {
-            try {
-                await resources[0].repository.unlockWorkingCopyPaths(
-                    resources.map((resource) => resource.status.absolutePath)
-                );
-            } catch (error) {
-                this.showError(error);
-            }
-            return;
-        }
-
-        const target = this.resolvePathTarget(arg);
-        if (!target) {
-            void vscode.window.showInformationMessage(getI18n().t("noWorkingCopyInfo"));
-            return;
-        }
-
-        if (target.resource?.status.kind && target.resource.status.kind !== "file") {
-            void vscode.window.showInformationMessage(getI18n().t("noLockablePathsInfo"));
-            return;
-        }
-
-        try {
-            await target.repository.unlockWorkingCopyPaths([target.uri.fsPath]);
-        } catch (error) {
-            this.showError(error);
-        }
     }
 
     private async revertResource(arg: unknown): Promise<void> {
@@ -1433,18 +1292,9 @@ export class SvnRepositoryManager implements vscode.Disposable {
     }
 
     private async commitSelected(arg: unknown): Promise<void> {
-        const resources = this.getSelectedResources(arg, ["svn-change"]);
-        if (resources.length === 0) {
-            return;
-        }
-
-        try {
-            await resources[0].repository.commit(
-                resources.map((resource) => resource.status.absolutePath)
-            );
-        } catch (error) {
-            this.showError(error);
-        }
+        await this.runSelectedResourceAction(arg, ["svn-change"], (repository, paths) =>
+            repository.commit(paths)
+        );
     }
 
     private async commitChangelist(arg: unknown): Promise<void> {
@@ -1470,18 +1320,9 @@ export class SvnRepositoryManager implements vscode.Disposable {
     }
 
     private async updateSelected(arg: unknown): Promise<void> {
-        const resources = this.getSelectedResources(arg, ["svn-change"]);
-        if (resources.length === 0) {
-            return;
-        }
-
-        try {
-            await resources[0].repository.update(
-                resources.map((resource) => resource.status.absolutePath)
-            );
-        } catch (error) {
-            this.showError(error);
-        }
+        await this.runSelectedResourceAction(arg, ["svn-change"], (repository, paths) =>
+            repository.update(paths)
+        );
     }
 
     private async runAllConflictAction(
@@ -1491,7 +1332,7 @@ export class SvnRepositoryManager implements vscode.Disposable {
         await this.runForRepository(arg, async (repository) => {
             const conflictedPaths = repository.getConflictedPaths();
             if (conflictedPaths.length === 0) {
-                void vscode.window.showInformationMessage(getI18n().t("noConflictsInfo"));
+                this.showInformationStatus("noConflictsInfo");
                 return;
             }
 
@@ -1503,37 +1344,22 @@ export class SvnRepositoryManager implements vscode.Disposable {
         arg: unknown,
         action: ConflictCommandHandler
     ): Promise<void> {
-        const resources = this.getSelectedResources(arg, ["svn-conflict"]);
-        if (resources.length === 0) {
-            return;
-        }
-
-        try {
-            await action(
-                resources[0].repository,
-                resources.map((resource) => resource.status.absolutePath)
-            );
-        } catch (error) {
-            this.showError(error);
-        }
+        await this.runSelectedResourceAction(arg, ["svn-conflict"], (repository, paths) =>
+            action(repository, paths)
+        );
     }
 
     private async revertGroup(arg: unknown): Promise<void> {
         const i18n = getI18n();
-        const resources = this.getGroupResources(arg, "svn-changes-group");
-        const repository = resources[0]?.repository ?? (await this.resolveRepository(arg));
-        if (!repository) {
+        const resolved = await this.resolveGroupPaths(arg, {
+            contextValue: "svn-changes-group",
+            getFallbackPaths: (repository) => repository.getChangedPaths(),
+            emptyMessageKey: "noLocalChangesInfo",
+        });
+        if (!resolved) {
             return;
         }
-
-        const paths =
-            resources.length > 0
-                ? resources.map((resource) => resource.status.absolutePath)
-                : repository.getChangedPaths();
-        if (paths.length === 0) {
-            void vscode.window.showInformationMessage(i18n.t("noLocalChangesInfo"));
-            return;
-        }
+        const { repository, paths } = resolved;
 
         const confirmation = await vscode.window.showWarningMessage(
             i18n.t("revertGroupWarning", {
@@ -1582,58 +1408,27 @@ export class SvnRepositoryManager implements vscode.Disposable {
     }
 
     private async ignorePath(arg: unknown): Promise<void> {
-        const uri = this.getUriFromArg(arg);
-        if (!uri) {
-            return;
-        }
-
-        const repository = this.getRepositoryForUri(uri);
-        if (!repository) {
-            void vscode.window.showInformationMessage(getI18n().t("noWorkingCopyInfo"));
-            return;
-        }
-
-        try {
+        await this.runForUriRepository(arg, async (repository, uri) => {
             await repository.ignoreWorkingCopyPath(uri.fsPath);
-        } catch (error) {
-            this.showError(error);
-        }
+        });
     }
 
     private async unignorePath(arg: unknown): Promise<void> {
-        const uri = this.getUriFromArg(arg);
-        if (!uri) {
-            return;
-        }
-
-        const repository = this.getRepositoryForUri(uri);
-        if (!repository) {
-            void vscode.window.showInformationMessage(getI18n().t("noWorkingCopyInfo"));
-            return;
-        }
-
-        try {
+        await this.runForUriRepository(arg, async (repository, uri) => {
             await repository.unignoreWorkingCopyPath(uri.fsPath);
-        } catch (error) {
-            this.showError(error);
-        }
+        });
     }
 
     private async addGroup(arg: unknown): Promise<void> {
-        const resources = this.getGroupResources(arg, "svn-unversioned-group");
-        const repository = resources[0]?.repository ?? (await this.resolveRepository(arg));
-        if (!repository) {
+        const resolved = await this.resolveGroupPaths(arg, {
+            contextValue: "svn-unversioned-group",
+            getFallbackPaths: (repository) => repository.getUnversionedPaths(),
+            emptyMessageKey: "noUnversionedChangesInfo",
+        });
+        if (!resolved) {
             return;
         }
-
-        const paths =
-            resources.length > 0
-                ? resources.map((resource) => resource.status.absolutePath)
-                : repository.getUnversionedPaths();
-        if (paths.length === 0) {
-            void vscode.window.showInformationMessage(getI18n().t("noUnversionedChangesInfo"));
-            return;
-        }
+        const { repository, paths } = resolved;
 
         try {
             await repository.add(paths);
@@ -1655,47 +1450,32 @@ export class SvnRepositoryManager implements vscode.Disposable {
             return;
         }
 
-        try {
-            await resources[0].repository.addToChangelist(
-                resources.map((resource) => resource.status.absolutePath),
-                changelistName
-            );
-        } catch (error) {
-            this.showError(error);
-        }
+        await this.runSelectedResourceAction(
+            resources,
+            ["svn-change", "svn-conflict"],
+            (repository, paths) => repository.addToChangelist(paths, changelistName)
+        );
     }
 
     private async removeFromChangelist(arg: unknown): Promise<void> {
-        const resources = this.getSelectedResources(arg, ["svn-change", "svn-conflict"]);
-        if (resources.length === 0) {
-            return;
-        }
-
-        try {
-            await resources[0].repository.removeFromChangelist(
-                resources.map((resource) => resource.status.absolutePath)
-            );
-        } catch (error) {
-            this.showError(error);
-        }
+        await this.runSelectedResourceAction(
+            arg,
+            ["svn-change", "svn-conflict"],
+            (repository, paths) => repository.removeFromChangelist(paths)
+        );
     }
 
     private async deleteGroup(arg: unknown): Promise<void> {
         const i18n = getI18n();
-        const resources = this.getGroupResources(arg, "svn-unversioned-group");
-        const repository = resources[0]?.repository ?? (await this.resolveRepository(arg));
-        if (!repository) {
+        const resolved = await this.resolveGroupPaths(arg, {
+            contextValue: "svn-unversioned-group",
+            getFallbackPaths: (repository) => repository.getUnversionedPaths(),
+            emptyMessageKey: "noUnversionedChangesInfo",
+        });
+        if (!resolved) {
             return;
         }
-
-        const paths =
-            resources.length > 0
-                ? resources.map((resource) => resource.status.absolutePath)
-                : repository.getUnversionedPaths();
-        if (paths.length === 0) {
-            void vscode.window.showInformationMessage(i18n.t("noUnversionedChangesInfo"));
-            return;
-        }
+        const { repository, paths } = resolved;
 
         const confirmation = await vscode.window.showWarningMessage(
             i18n.t("deleteGroupWarning", {
@@ -1725,22 +1505,9 @@ export class SvnRepositoryManager implements vscode.Disposable {
     }
 
     private async revealInFileManager(arg: unknown): Promise<void> {
-        const uri = this.getUriFromArg(arg) ?? vscode.window.activeTextEditor?.document.uri;
-        if (!uri) {
-            return;
-        }
-
-        const repository = this.getRepositoryForUri(uri);
-        if (!repository) {
-            void vscode.window.showInformationMessage(getI18n().t("noWorkingCopyInfo"));
-            return;
-        }
-
-        try {
+        await this.runForUriRepository(arg, async (repository, uri) => {
             await repository.revealWorkingCopyPathInFileManager(uri);
-        } catch (error) {
-            this.showError(error);
-        }
+        });
     }
 
     private async deleteResource(arg: unknown): Promise<void> {
@@ -1774,6 +1541,10 @@ export class SvnRepositoryManager implements vscode.Disposable {
         const message = error instanceof Error ? error.message : String(error);
         this.outputChannel.show(true);
         void vscode.window.showErrorMessage(message);
+    }
+
+    private showInformationStatus(messageKey: MessageKey): void {
+        void vscode.window.showInformationMessage(getI18n().t(messageKey));
     }
 
     private refreshLocalization(): void {
@@ -1921,6 +1692,10 @@ export class SvnRepositoryManager implements vscode.Disposable {
         return undefined;
     }
 
+    private getUriFromArgOrActiveEditor(arg: unknown): vscode.Uri | undefined {
+        return this.getUriFromArg(arg) ?? vscode.window.activeTextEditor?.document.uri;
+    }
+
     private getResourceFromArg(arg: unknown): ScmResource | undefined {
         if (arg instanceof ScmResource) {
             return arg;
@@ -1933,9 +1708,7 @@ export class SvnRepositoryManager implements vscode.Disposable {
         return undefined;
     }
 
-    private resolvePathTarget(
-        arg: unknown
-    ): { repository: SvnRepository; uri: vscode.Uri; resource?: ScmResource } | undefined {
+    private resolvePathTarget(arg: unknown): ResolvedPathTarget | undefined {
         const resource = this.getResourceFromArg(arg);
         if (resource) {
             return {
@@ -1958,11 +1731,177 @@ export class SvnRepositoryManager implements vscode.Disposable {
         return { repository, uri };
     }
 
-    private async resolveNodeInfo(target: {
-        repository: SvnRepository;
-        uri: vscode.Uri;
-        resource?: ScmResource;
-    }): Promise<SvnNodeInfo | undefined> {
+    private resolvePathTargetOrShowInfo(arg: unknown): ResolvedPathTarget | undefined {
+        const target = this.resolvePathTarget(arg);
+        if (!target) {
+            this.showInformationStatus("noWorkingCopyInfo");
+            return undefined;
+        }
+
+        return target;
+    }
+
+    private getRepositoryForUriOrShowInfo(uri: vscode.Uri): SvnRepository | undefined {
+        const repository = this.getRepositoryForUri(uri);
+        if (!repository) {
+            this.showInformationStatus("noWorkingCopyInfo");
+            return undefined;
+        }
+
+        return repository;
+    }
+
+    private async runForUriRepository(
+        arg: unknown,
+        action: (repository: SvnRepository, uri: vscode.Uri) => Promise<void>
+    ): Promise<void> {
+        const uri = this.getUriFromArgOrActiveEditor(arg);
+        if (!uri) {
+            return;
+        }
+
+        const repository = this.getRepositoryForUriOrShowInfo(uri);
+        if (!repository) {
+            return;
+        }
+
+        try {
+            await action(repository, uri);
+        } catch (error) {
+            this.showError(error);
+        }
+    }
+
+    private async runForPathTarget(
+        arg: unknown,
+        action: (target: ResolvedPathTarget) => Promise<void>
+    ): Promise<void> {
+        const target = this.resolvePathTargetOrShowInfo(arg);
+        if (!target) {
+            return;
+        }
+
+        try {
+            await action(target);
+        } catch (error) {
+            this.showError(error);
+        }
+    }
+
+    private async runForOptionalPathTargetOrRepository(
+        arg: unknown,
+        targetAction: (target: ResolvedPathTarget) => Promise<void>,
+        repositoryAction: RepositoryCommandHandler
+    ): Promise<void> {
+        const target = this.resolvePathTarget(arg);
+        if (target) {
+            try {
+                await targetAction(target);
+            } catch (error) {
+                this.showError(error);
+            }
+            return;
+        }
+
+        await this.runForRepository(arg, repositoryAction);
+    }
+
+    private async runSelectedResourceAction(
+        arg: unknown,
+        contextValues: readonly string[],
+        action: (
+            repository: SvnRepository,
+            paths: string[],
+            resources: ScmResource[]
+        ) => Promise<void>,
+        filter?: (resource: ScmResource) => boolean
+    ): Promise<boolean> {
+        const resources = this.getSelectedResources(arg, contextValues).filter(
+            (resource) => !filter || filter(resource)
+        );
+        if (resources.length === 0) {
+            return false;
+        }
+
+        try {
+            await action(
+                resources[0].repository,
+                resources.map((resource) => resource.status.absolutePath),
+                resources
+            );
+            return true;
+        } catch (error) {
+            this.showError(error);
+            return true;
+        }
+    }
+
+    private async runLockablePathAction(
+        arg: unknown,
+        action: (repository: SvnRepository, paths: string[]) => Promise<void>
+    ): Promise<void> {
+        const handledSelection = await this.runSelectedResourceAction(
+            arg,
+            ["svn-change", "svn-conflict"],
+            (repository, paths) => action(repository, paths),
+            (resource) => resource.status.kind === "file"
+        );
+        if (handledSelection) {
+            return;
+        }
+
+        const target = this.resolvePathTargetOrShowInfo(arg);
+        if (!target) {
+            return;
+        }
+
+        if (target.resource?.status.kind && target.resource.status.kind !== "file") {
+            this.showInformationStatus("noLockablePathsInfo");
+            return;
+        }
+
+        try {
+            await action(target.repository, [target.uri.fsPath]);
+        } catch (error) {
+            this.showError(error);
+        }
+    }
+
+    private shouldUseRepositoryPathTarget(target: ResolvedPathTarget): boolean {
+        return (
+            target.resource?.kind === "remote-change" ||
+            target.resource?.status.wcStatus === "deleted" ||
+            target.resource?.status.wcStatus === "missing"
+        );
+    }
+
+    private async resolveGroupPaths(
+        arg: unknown,
+        options: {
+            readonly contextValue: string;
+            readonly getFallbackPaths: (repository: SvnRepository) => string[];
+            readonly emptyMessageKey: MessageKey;
+        }
+    ): Promise<ResolvedRepositoryPaths | undefined> {
+        const resources = this.getGroupResources(arg, options.contextValue);
+        const repository = resources[0]?.repository ?? (await this.resolveRepository(arg));
+        if (!repository) {
+            return undefined;
+        }
+
+        const paths =
+            resources.length > 0
+                ? resources.map((resource) => resource.status.absolutePath)
+                : options.getFallbackPaths(repository);
+        if (paths.length === 0) {
+            this.showInformationStatus(options.emptyMessageKey);
+            return undefined;
+        }
+
+        return { repository, paths };
+    }
+
+    private async resolveNodeInfo(target: ResolvedPathTarget): Promise<SvnNodeInfo | undefined> {
         const nodeInfo = await this.svnService.getNodeInfo(target.uri.fsPath);
         if (nodeInfo) {
             return nodeInfo;
@@ -1986,6 +1925,19 @@ export class SvnRepositoryManager implements vscode.Disposable {
         }
 
         return undefined;
+    }
+
+    private async resolveNodeInfoOrThrow(target: ResolvedPathTarget): Promise<SvnNodeInfo> {
+        const nodeInfo = await this.resolveNodeInfo(target);
+        if (nodeInfo) {
+            return nodeInfo;
+        }
+
+        throw new Error(
+            getI18n().t("noSvnInfoForPathError", {
+                path: this.getTargetDisplayPath(target.repository, target.uri),
+            })
+        );
     }
 
     private getTargetDisplayPath(repository: SvnRepository, uri: vscode.Uri): string {
