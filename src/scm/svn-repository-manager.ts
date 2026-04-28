@@ -21,6 +21,7 @@ import {
     normalizeCheckoutRepositoryUrl,
     normalizeCheckoutRevision,
 } from "./svn-checkout-utils";
+import { partitionDeleteTargets } from "./svn-delete-utils";
 import { SvnRepository } from "./svn-repository";
 import { isSameOrChildWorkingCopyPath } from "./svn-repository-paths";
 
@@ -1567,22 +1568,41 @@ export class SvnRepositoryManager implements vscode.Disposable {
     }
 
     private async deleteResource(arg: unknown): Promise<void> {
-        const i18n = getI18n();
-        await this.runForSingleResource(arg, async (resource) => {
-            const confirmed = await this.confirmModalAction({
-                message: i18n.t("deleteResourceWarning", { path: resource.status.relativePath }),
-                buttonLabel: i18n.t("deleteButton"),
-            });
-            if (!confirmed) {
-                return;
-            }
+        const resources = this.getSelectedResources(arg, ["svn-change", "svn-unversioned"]);
+        if (resources.length === 0) {
+            return;
+        }
 
-            await vscode.workspace.fs.delete(resource.resourceUri, {
-                recursive: resource.status.kind === "dir",
-                useTrash: true,
-            });
-            await resource.repository.refresh();
+        const i18n = getI18n();
+        const label =
+            resources.length === 1
+                ? resources[0].status.relativePath
+                : i18n.formatItemCount(resources.length);
+        const hasVersionedResources = resources.some(
+            (resource) => resource.contextValue === "svn-change"
+        );
+        const hasUnversionedResources = resources.some(
+            (resource) => resource.contextValue === "svn-unversioned"
+        );
+        const detail = hasVersionedResources
+            ? hasUnversionedResources
+                ? i18n.t("deleteMixedResourcesDetail")
+                : i18n.t("deleteTrackedResourceDetail")
+            : i18n.t("deleteUnversionedResourceDetail");
+        const confirmed = await this.confirmModalAction({
+            message: i18n.t("deleteResourceWarning", { path: label }),
+            buttonLabel: i18n.t("deleteButton"),
+            detail,
         });
+        if (!confirmed) {
+            return;
+        }
+
+        try {
+            await this.deleteSelectedResources(resources);
+        } catch (error) {
+            this.showError(error);
+        }
     }
 
     private showError(error: unknown): void {
@@ -2176,6 +2196,48 @@ export class SvnRepositoryManager implements vscode.Disposable {
 
     private getUniqueDescendingPaths(paths: readonly string[]): string[] {
         return [...new Set(paths)].sort((left, right) => right.length - left.length);
+    }
+
+    private async deleteSelectedResources(resources: readonly ScmResource[]): Promise<void> {
+        const resourcesByRepository = new Map<SvnRepository, ScmResource[]>();
+
+        for (const resource of resources) {
+            const repositoryResources = resourcesByRepository.get(resource.repository);
+            if (repositoryResources) {
+                repositoryResources.push(resource);
+            } else {
+                resourcesByRepository.set(resource.repository, [resource]);
+            }
+        }
+
+        for (const [repository, repositoryResources] of resourcesByRepository) {
+            const partitioned = partitionDeleteTargets(
+                repositoryResources.map((resource) => ({
+                    absolutePath: resource.status.absolutePath,
+                    kind:
+                        resource.contextValue === "svn-unversioned"
+                            ? "unversioned"
+                            : "versioned",
+                }))
+            );
+
+            if (partitioned.versionedPaths.length > 0) {
+                await repository.delete(partitioned.versionedPaths);
+            }
+
+            if (partitioned.unversionedPaths.length === 0) {
+                continue;
+            }
+
+            for (const targetPath of partitioned.unversionedPaths) {
+                await vscode.workspace.fs.delete(vscode.Uri.file(targetPath), {
+                    recursive: true,
+                    useTrash: true,
+                });
+            }
+
+            await repository.refresh();
+        }
     }
 
     private async resolveGroupPaths(

@@ -665,7 +665,7 @@
         },
         {
           "command": "svn-tree.delete-resource",
-          "when": "scmProvider == svn-tree && scmResourceState == svn-unversioned",
+          "when": "scmProvider == svn-tree && (scmResourceState == svn-change || scmResourceState == svn-unversioned)",
           "group": "1_primary@5"
         },
         {

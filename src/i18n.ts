@@ -331,7 +331,13 @@ const englishMessages = {
     revertButton: "Revert",
     revertGroupWarning: "Revert changes in {label}?",
     revertAllButton: "Revert All",
-    deleteResourceWarning: "Delete {path} from disk?",
+    deleteResourceWarning: "Delete {path}?",
+    deleteTrackedResourceDetail:
+        "This removes the path from the working copy and schedules it for deletion in SVN.",
+    deleteUnversionedResourceDetail:
+        "This removes the path from disk and moves it to the trash when supported.",
+    deleteMixedResourcesDetail:
+        "Versioned paths will be scheduled for deletion in SVN. Unversioned paths will be deleted from disk.",
     deleteButton: "Delete",
     deleteGroupWarning: "Delete {label} from disk?",
     deleteAllButton: "Delete All",
@@ -904,7 +910,11 @@ const messages: Record<SupportedLocale, MessageCatalog> = {
         revertButton: "还原",
         revertGroupWarning: "要还原 {label} 的更改吗？",
         revertAllButton: "全部还原",
-        deleteResourceWarning: "要从磁盘删除 {path} 吗？",
+        deleteResourceWarning: "要删除 {path} 吗？",
+        deleteTrackedResourceDetail: "这会将该路径从工作副本中删除，并在 SVN 中标记为待删除。",
+        deleteUnversionedResourceDetail: "这会从磁盘删除该路径，并在支持时移入回收站。",
+        deleteMixedResourcesDetail:
+            "已纳管路径会在 SVN 中标记为待删除；未纳管路径会从磁盘删除。",
         deleteButton: "删除",
         deleteGroupWarning: "要从磁盘删除 {label} 吗？",
         deleteAllButton: "全部删除",
