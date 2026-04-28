@@ -210,7 +210,8 @@
       {
         "command": "svn-tree.delete-resource",
         "title": "%command.deleteResource.title%",
-        "category": "%command.category%"
+        "category": "%command.category%",
+        "icon": "$(trash)"
       },
       {
         "command": "svn-tree.rename-path",
@@ -236,6 +237,12 @@
         "command": "svn-tree.unignore-path",
         "title": "%command.unignorePath.title%",
         "category": "%command.category%"
+      },
+      {
+        "command": "svn-tree.edit-ignore",
+        "title": "%command.editIgnore.title%",
+        "category": "%command.category%",
+        "icon": "$(edit)"
       },
       {
         "command": "svn-tree.show-path-info",
@@ -473,6 +480,11 @@
           "group": "5_ignore@2"
         },
         {
+          "command": "svn-tree.edit-ignore",
+          "when": "resourceScheme == file",
+          "group": "5_ignore@3"
+        },
+        {
           "command": "svn-tree.show-path-info",
           "when": "resourceScheme == file",
           "group": "6_info@1"
@@ -577,6 +589,10 @@
         {
           "command": "svn-tree.relocate-working-copy",
           "group": "1_working_copy@7"
+        },
+        {
+          "command": "svn-tree.edit-ignore",
+          "group": "1_working_copy@8"
         }
       ],
       "svn-tree.repository-actions.changes": [
@@ -649,6 +665,11 @@
           "group": "inline@2"
         },
         {
+          "command": "svn-tree.delete-resource",
+          "when": "scmProvider == svn-tree && scmResourceState == svn-unversioned",
+          "group": "inline@3"
+        },
+        {
           "command": "svn-tree.revert-resource",
           "when": "scmProvider == svn-tree && (scmResourceState == svn-change || scmResourceState == svn-conflict)",
           "group": "inline@2"
@@ -682,6 +703,11 @@
           "command": "svn-tree.ignore-resource",
           "when": "scmProvider == svn-tree && scmResourceState == svn-unversioned",
           "group": "1_primary@4"
+        },
+        {
+          "command": "svn-tree.edit-ignore",
+          "when": "scmProvider == svn-tree && scmResourceState == svn-unversioned",
+          "group": "1_primary@6"
         },
         {
           "submenu": "svn-tree.resource-actions.browse",
@@ -760,16 +786,20 @@
           "group": "1_path@2"
         },
         {
-          "command": "svn-tree.copy-repository-url",
+          "command": "svn-tree.edit-ignore",
           "group": "1_path@3"
         },
         {
-          "command": "svn-tree.copy-repository-path",
+          "command": "svn-tree.copy-repository-url",
           "group": "1_path@4"
         },
         {
-          "command": "svn-tree.show-path-info",
+          "command": "svn-tree.copy-repository-path",
           "group": "1_path@5"
+        },
+        {
+          "command": "svn-tree.show-path-info",
+          "group": "1_path@6"
         }
       ],
       "svn-tree.resource-actions.conflicts": [

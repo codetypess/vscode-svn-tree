@@ -39,6 +39,7 @@
   "command.unlockPath.title": "解锁",
   "command.ignorePath.title": "忽略路径",
   "command.unignorePath.title": "取消忽略路径",
+  "command.editIgnore.title": "编辑 SVN Ignore 规则",
   "command.showPathInfo.title": "显示 SVN 信息",
   "command.copyRepositoryUrl.title": "复制仓库 URL",
   "command.copyRepositoryPath.title": "复制仓库路径",

@@ -268,6 +268,10 @@ export class SvnRepositoryManager implements vscode.Disposable {
                 run: (arg) => this.editProperty(arg),
             },
             {
+                command: "svn-tree.edit-ignore",
+                run: (arg) => this.editIgnore(arg),
+            },
+            {
                 command: "svn-tree.open-repository-browser",
                 run: (arg) => this.openRepositoryBrowser(arg),
             },
@@ -838,6 +842,11 @@ export class SvnRepositoryManager implements vscode.Disposable {
                         descriptionKey: "relocateWorkingCopyActionDescription",
                         run: (repository) => repository.relocateWorkingCopy(),
                     },
+                    {
+                        labelKey: "editIgnoreActionLabel",
+                        descriptionKey: "editIgnoreActionDescription",
+                        run: (repository) => repository.editIgnoreRules(repository.rootPath, "dir"),
+                    },
                 ],
             },
             {
@@ -1307,6 +1316,16 @@ export class SvnRepositoryManager implements vscode.Disposable {
         await this.runForPathTarget(arg, async (target) => {
             await target.repository.editPathProperty(target.uri);
         });
+    }
+
+    private async editIgnore(arg: unknown): Promise<void> {
+        await this.runForOptionalPathTargetOrRepository(
+            arg,
+            async (target) => {
+                await target.repository.editIgnoreRules(target.uri, target.resource?.status.kind);
+            },
+            (repository) => repository.editIgnoreRules(repository.rootPath, "dir")
+        );
     }
 
     private async openRepositoryBrowser(arg: unknown): Promise<void> {

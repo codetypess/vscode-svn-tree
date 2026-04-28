@@ -39,6 +39,7 @@
   "command.unlockPath.title": "Unlock",
   "command.ignorePath.title": "Ignore Path",
   "command.unignorePath.title": "Unignore Path",
+  "command.editIgnore.title": "Edit SVN Ignore Rules",
   "command.showPathInfo.title": "Show SVN Info",
   "command.copyRepositoryUrl.title": "Copy Repository URL",
   "command.copyRepositoryPath.title": "Copy Repository Path",

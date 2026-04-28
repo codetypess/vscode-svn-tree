@@ -31,6 +31,7 @@ import type {
     SvnLogEntry,
     SvnLogPage,
     SvnLogPathChange,
+    SvnNodeKind,
     SvnNodeInfo,
     SvnPropertyEntry,
     SvnStatusEntry,
@@ -38,9 +39,18 @@ import type {
 } from "../svn/svn-types";
 import type { MessageKey } from "../i18n";
 import { getI18n } from "../vscode-i18n";
-import { appendOutputSection } from "./output-channel-utils";
+import { appendOutputSection, buildErrorOutputLines } from "./output-channel-utils";
 import { parseBlameLines } from "./svn-blame-utils";
 import { isCommittableStatus } from "./commit-utils";
+import {
+    IgnoreEditorPanelState,
+    SvnIgnoreEditorPanel,
+} from "./svn-ignore-editor-panel";
+import {
+    getSuggestedIgnoreEntry,
+    parseIgnoreEntries,
+    normalizeIgnoreEditorValue,
+} from "./svn-ignore-utils";
 import {
     getCurrentReferenceSuggestion,
     getReferenceLocationPath,
@@ -320,6 +330,7 @@ export class SvnRepository implements vscode.Disposable {
         string,
         RevisionGraphNodeMetadata
     >();
+    private readonly ignoreEditorPanel = new SvnIgnoreEditorPanel();
 
     public constructor(
         public readonly info: SvnWorkingCopyInfo,
@@ -388,6 +399,7 @@ export class SvnRepository implements vscode.Disposable {
         while (this.disposables.length > 0) {
             this.disposables.pop()?.dispose();
         }
+        this.ignoreEditorPanel.dispose();
         this.sourceControl.dispose();
     }
 
@@ -923,12 +935,7 @@ export class SvnRepository implements vscode.Disposable {
         ignored: boolean
     ): Promise<void> {
         const currentValue = await this.svnService.getProperty(parentPath, "svn:ignore");
-        const entries = new Set(
-            (currentValue ?? "")
-                .split(/\r?\n/)
-                .map((entry) => entry.trim())
-                .filter(Boolean)
-        );
+        const entries = new Set(parseIgnoreEntries(currentValue));
 
         if (ignored) {
             entries.add(name);
@@ -1375,6 +1382,59 @@ export class SvnRepository implements vscode.Disposable {
                 path: displayPath,
             })
         );
+    }
+
+    public async editIgnoreRules(
+        target: vscode.Uri | string,
+        targetKind?: SvnNodeKind
+    ): Promise<void> {
+        const targetPath = typeof target === "string" ? target : target.fsPath;
+        const ignoreTarget = await this.resolveIgnoreEditorTarget(targetPath, targetKind);
+        const currentValue = await this.runNotificationProgress(
+            this.i18n.t("editIgnoreProgress", {
+                path: ignoreTarget.directoryDisplayPath,
+            }),
+            async () => this.loadIgnoreEditorValue(ignoreTarget.propertyDirectoryPath)
+        );
+
+        this.ignoreEditorPanel.show({
+            targetKey: ignoreTarget.propertyDirectoryPath,
+            title: this.i18n.t("ignoreEditorTitle", {
+                path: ignoreTarget.directoryDisplayPath,
+            }),
+            strings: {
+                heading: this.i18n.t("ignoreEditorHeading"),
+                directoryLabel: this.i18n.t("ignoreEditorDirectoryLabel"),
+                rulesHint: this.i18n.t("ignoreEditorRulesHint"),
+                placeholder: this.i18n.t("ignoreEditorPlaceholder"),
+                saveButton: this.i18n.t("ignoreEditorSaveButton"),
+                reloadButton: this.i18n.t("ignoreEditorReloadButton"),
+                savingStatus: this.i18n.t("ignoreEditorSavingStatus"),
+                reloadingStatus: this.i18n.t("ignoreEditorReloadingStatus"),
+                suggestedEntryLabel: this.i18n.t("ignoreEditorSuggestedEntryLabel", {
+                    entry: "{entry}",
+                }),
+                addSuggestedEntryButton: this.i18n.t("ignoreEditorAddSuggestedEntryButton"),
+            },
+            initialState: {
+                directoryDisplayPath: ignoreTarget.directoryDisplayPath,
+                suggestedEntry: ignoreTarget.suggestedEntry,
+                value: currentValue,
+            },
+            save: async (value) =>
+                this.saveIgnoreEditorState(
+                    ignoreTarget.propertyDirectoryPath,
+                    ignoreTarget.directoryDisplayPath,
+                    ignoreTarget.suggestedEntry,
+                    value
+                ),
+            reload: async () => ({
+                directoryDisplayPath: ignoreTarget.directoryDisplayPath,
+                suggestedEntry: ignoreTarget.suggestedEntry,
+                value: await this.loadIgnoreEditorValue(ignoreTarget.propertyDirectoryPath),
+            }),
+            handleError: (error) => this.showError(error),
+        });
     }
 
     public async revertToRevision(revision: number): Promise<void> {
@@ -2665,6 +2725,125 @@ export class SvnRepository implements vscode.Disposable {
         }
     }
 
+    private async resolveIgnoreEditorTarget(
+        targetPath: string,
+        targetKind?: SvnNodeKind
+    ): Promise<{
+        propertyDirectoryPath: string;
+        directoryDisplayPath: string;
+        suggestedEntry?: string;
+    }> {
+        const resolvedTargetPath = nodePath.resolve(targetPath);
+        const directoryCandidate = await this.resolveIgnoreDirectoryCandidate(
+            resolvedTargetPath,
+            targetKind
+        );
+        const propertyDirectoryPath =
+            (await this.findNearestVersionedDirectory(directoryCandidate)) ?? this.rootPath;
+
+        return {
+            propertyDirectoryPath,
+            directoryDisplayPath:
+                nodePath.relative(this.rootPath, propertyDirectoryPath).replace(/\\/g, "/") ||
+                nodePath.basename(this.rootPath),
+            suggestedEntry: getSuggestedIgnoreEntry(propertyDirectoryPath, resolvedTargetPath),
+        };
+    }
+
+    private async resolveIgnoreDirectoryCandidate(
+        targetPath: string,
+        targetKind?: SvnNodeKind
+    ): Promise<string> {
+        if (targetKind === "dir") {
+            return targetPath;
+        }
+
+        if (targetKind === "file") {
+            return nodePath.dirname(targetPath);
+        }
+
+        try {
+            const stats = await vscode.workspace.fs.stat(vscode.Uri.file(targetPath));
+            return stats.type & vscode.FileType.Directory ? targetPath : nodePath.dirname(targetPath);
+        } catch {
+            return nodePath.dirname(targetPath);
+        }
+    }
+
+    private async findNearestVersionedDirectory(targetPath: string): Promise<string | undefined> {
+        let candidatePath = (await this.getNearestExistingPath(targetPath)) ?? targetPath;
+
+        while (true) {
+            if (!isSameOrChildWorkingCopyPath(this.rootPath, candidatePath)) {
+                return undefined;
+            }
+
+            const nodeInfo = await this.svnService.getNodeInfo(candidatePath);
+            if (nodeInfo?.kind === "dir") {
+                return candidatePath;
+            }
+
+            const parentPath = nodePath.dirname(candidatePath);
+            if (parentPath === candidatePath) {
+                return undefined;
+            }
+
+            candidatePath = parentPath;
+        }
+    }
+
+    private async loadIgnoreEditorValue(propertyDirectoryPath: string): Promise<string> {
+        const currentValue = await this.svnService.getProperty(propertyDirectoryPath, "svn:ignore");
+        return parseIgnoreEntries(currentValue).join("\n");
+    }
+
+    private async saveIgnoreEditorState(
+        propertyDirectoryPath: string,
+        directoryDisplayPath: string,
+        suggestedEntry: string | undefined,
+        value: string
+    ): Promise<IgnoreEditorPanelState> {
+        const nextValue = normalizeIgnoreEditorValue(value);
+
+        await this.runNotificationProgress(
+            this.i18n.t("updateIgnoreProgress", {
+                path: directoryDisplayPath,
+            }),
+            async () => {
+                if (!nextValue) {
+                    if (
+                        (await this.svnService.getProperty(propertyDirectoryPath, "svn:ignore")) !==
+                        undefined
+                    ) {
+                        await this.svnService.deleteProperty(propertyDirectoryPath, "svn:ignore");
+                    }
+                    return;
+                }
+
+                await this.svnService.setProperty(propertyDirectoryPath, "svn:ignore", nextValue);
+            }
+        );
+
+        await this.finalizeRepositoryMutation({
+            refreshOptions: { allowWhileBusy: true },
+        });
+        void vscode.window.setStatusBarMessage(
+            this.i18n.t("updatedIgnoreInfo", {
+                path: directoryDisplayPath,
+            }),
+            2000
+        );
+
+        return {
+            directoryDisplayPath,
+            suggestedEntry,
+            statusMessage: this.i18n.t("updatedIgnoreInfo", {
+                path: directoryDisplayPath,
+            }),
+            value: nextValue ?? "",
+        };
+    }
+
     private async getNearestExistingPath(targetPath: string): Promise<string | undefined> {
         let candidatePath = targetPath;
 
@@ -3412,6 +3591,28 @@ export class SvnRepository implements vscode.Disposable {
         });
 
         return customName?.trim() || undefined;
+    }
+
+    private showError(error: unknown): void {
+        appendOutputSection(
+            this.outputChannel,
+            this.i18n.t("errorOutputHeader"),
+            buildErrorOutputLines(error, {
+                timeLabel: this.i18n.t("errorOutputTimeLabel"),
+                messageLabel: this.i18n.t("errorOutputMessageLabel"),
+                stackLabel: this.i18n.t("errorOutputStackLabel"),
+                causeLabel: this.i18n.t("errorOutputCauseLabel"),
+                valueLabel: this.i18n.t("errorOutputValueLabel"),
+            })
+        );
+
+        const message = error instanceof Error ? error.message : String(error);
+        const showOutputAction = this.i18n.t("showOutputActionLabel");
+        void vscode.window.showErrorMessage(message, showOutputAction).then((selection) => {
+            if (selection === showOutputAction) {
+                this.outputChannel.show(true);
+            }
+        });
     }
 
     private async promptPropertyAction(

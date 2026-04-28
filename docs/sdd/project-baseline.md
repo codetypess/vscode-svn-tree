@@ -39,6 +39,7 @@ Users open a folder that already belongs to an SVN working copy and then:
 - Commit all or selected paths.
 - Update the whole working copy or selected paths.
 - Revert, add, delete, rename, ignore, lock, unlock, or clean up paths.
+- Edit `svn:ignore` rules through a dedicated editor when a generic property prompt is too coarse.
 
 ### 3. History Inspection
 
@@ -81,6 +82,7 @@ The extension currently supports:
 - History webview with incremental loading and filters.
 - Revision graph webview with reference comparison and mergeinfo metadata.
 - Property inspection and editing, including common built-in SVN property names.
+- Specialized editor support for `svn:ignore`.
 - Conflict resolution flows based on SVN accept modes.
 - Output channel logging for SVN commands and troubleshooting.
 - Runtime localization in English and Simplified Chinese.
@@ -118,7 +120,7 @@ These are useful candidates for future specs:
 
 - Importing a local folder into a repository.
 - Stronger repository-browser support for remote directory operations.
-- More specialized editors for `svn:ignore` and `svn:externals`.
+- More specialized editors for `svn:externals`.
 - Sparse checkout or depth-aware workflows for large repositories.
 - Patch-oriented workflows.
 - More visual conflict inspection flows.
