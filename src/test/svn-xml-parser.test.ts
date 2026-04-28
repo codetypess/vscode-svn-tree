@@ -27,9 +27,33 @@ test("parseInfoXml extracts working copy metadata", () => {
     const info = parseInfoXml(xml, "/workspace/project");
 
     assert.ok(info);
+    assert.equal(info.rootPath, "/workspace/project");
     assert.equal(info.workingCopyRoot, "/workspace/project");
     assert.equal(info.repositoryRelativePath, "/project/trunk");
     assert.equal(info.repositoryRoot, "https://svn.example.com/repos");
+});
+
+test("parseInfoXml preserves nested workspace scope separately from working copy root", () => {
+    const xml = `<?xml version="1.0"?>
+<info>
+  <entry kind="dir" path="." revision="42">
+    <url>https://svn.example.com/repos/project/trunk/src/feature</url>
+    <relative-url>^/project/trunk/src/feature</relative-url>
+    <repository>
+      <root>https://svn.example.com/repos</root>
+    </repository>
+    <wc-info>
+      <wcroot-abspath>/workspace/project</wcroot-abspath>
+    </wc-info>
+  </entry>
+</info>`;
+
+    const info = parseInfoXml(xml, "/workspace/project/src/feature");
+
+    assert.ok(info);
+    assert.equal(info.rootPath, "/workspace/project/src/feature");
+    assert.equal(info.workingCopyRoot, "/workspace/project");
+    assert.equal(info.repositoryRelativePath, "/project/trunk/src/feature");
 });
 
 test("parseStatusXml extracts local and remote states", () => {

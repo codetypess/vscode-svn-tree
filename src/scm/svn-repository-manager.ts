@@ -497,7 +497,7 @@ export class SvnRepositoryManager implements vscode.Disposable {
                 continue;
             }
 
-            discoveredRoots.add(info.workingCopyRoot);
+            discoveredRoots.add(info.rootPath);
             this.registerRepository(info);
         }
 
@@ -525,16 +525,13 @@ export class SvnRepositoryManager implements vscode.Disposable {
     }
 
     private registerRepository(info: SvnWorkingCopyInfo): SvnRepository {
-        const existingRepository = this.repositories.get(info.workingCopyRoot);
+        const existingRepository = this.repositories.get(info.rootPath);
         if (existingRepository) {
             return existingRepository;
         }
 
         const repository = new SvnRepository(
-            {
-                ...info,
-                rootPath: info.workingCopyRoot,
-            },
+            info,
             this.svnService,
             this.historyPanel,
             this.revisionGraphPanel,
@@ -542,7 +539,7 @@ export class SvnRepositoryManager implements vscode.Disposable {
             this.outputChannel
         );
 
-        this.repositories.set(info.workingCopyRoot, repository);
+        this.repositories.set(info.rootPath, repository);
         return repository;
     }
 

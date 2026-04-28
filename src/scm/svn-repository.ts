@@ -332,8 +332,8 @@ export class SvnRepository implements vscode.Disposable {
         const i18n = getI18n();
         this.sourceControl = vscode.scm.createSourceControl(
             "svn-tree",
-            `SVN: ${nodePath.basename(info.workingCopyRoot)}`,
-            vscode.Uri.file(info.workingCopyRoot)
+            `SVN: ${nodePath.basename(info.rootPath)}`,
+            vscode.Uri.file(info.rootPath)
         );
         this.sourceControl.quickDiffProvider = {
             provideOriginalResource: (uri) => this.provideOriginalResource(uri),
@@ -373,7 +373,7 @@ export class SvnRepository implements vscode.Disposable {
     }
 
     public get rootPath(): string {
-        return this.info.workingCopyRoot;
+        return this.info.rootPath;
     }
 
     public get label(): string {
