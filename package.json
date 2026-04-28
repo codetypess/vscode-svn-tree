@@ -2,7 +2,7 @@
   "name": "svn-tree",
   "displayName": "%displayName%",
   "description": "%description%",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "publisher": "codetypess",
   "license": "MIT",
   "icon": "media/icon.png",
@@ -154,6 +154,12 @@
         "title": "%command.openRepositoryActions.title%",
         "category": "%command.category%",
         "icon": "$(ellipsis)"
+      },
+      {
+        "command": "svn-tree.checkout-from-url",
+        "title": "%command.checkoutFromUrl.title%",
+        "category": "%command.category%",
+        "icon": "$(repo-clone)"
       },
       {
         "command": "svn-tree.show-output",

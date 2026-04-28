@@ -24,6 +24,7 @@
   "command.cleanup.title": "清理 SVN 工作副本",
   "command.openHistory.title": "打开 SVN 历史",
   "command.openRepositoryActions.title": "更多 SVN 操作",
+  "command.checkoutFromUrl.title": "检出 SVN 仓库 URL",
   "command.showOutput.title": "显示 SVN 输出",
   "command.openDiff.title": "打开差异",
   "command.openFile.title": "打开文件",

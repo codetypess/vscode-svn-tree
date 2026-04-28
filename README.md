@@ -6,6 +6,7 @@ SVN Tree adds a focused Subversion workflow to Visual Studio Code. It integrates
 
 ## Highlights
 
+- Global checkout command for creating new local working copies from SVN repository URLs.
 - Native SCM integration for SVN working copies in the current workspace.
 - Local, unversioned, conflict, and optional incoming remote change groups with inline actions.
 - Built-in diff flows for working copy changes, incoming changes, file history, revision-to-revision comparison, and revision-to-working-copy comparison.
@@ -17,20 +18,22 @@ SVN Tree adds a focused Subversion workflow to Visual Studio Code. It integrates
 
 - Visual Studio Code 1.95 or newer.
 - The `svn` command-line client must be installed and available on your `PATH`.
-- Open a workspace folder that is inside an SVN working copy.
+- To use working-copy features, open a workspace folder that is inside an SVN working copy.
 
 If `svn` is unavailable, the extension stays inactive and shows a warning until the CLI is available.
 
 ## Getting Started
 
-1. Open a folder that belongs to an SVN working copy.
-2. Open the Source Control view.
-3. Review the `Changes`, `Unversioned`, `Conflict Artifacts`, and optional `Remote Changes` groups.
-4. Enter a commit message in the SCM input box and run `SVN Tree: Commit SVN Changes`, or use the repository title actions to refresh, update, or open history.
-5. Use file and repository context menus for path-specific operations such as diff, blame, properties, ignore, lock, or history.
+1. If you need a local working copy first, run `SVN Tree: Checkout SVN Repository URL` from the command palette.
+2. Open a folder that belongs to an SVN working copy.
+3. Open the Source Control view.
+4. Review the `Changes`, `Unversioned`, `Conflict Artifacts`, and optional `Remote Changes` groups.
+5. Enter a commit message in the SCM input box and run `SVN Tree: Commit SVN Changes`, or use the repository title actions to refresh, update, or open history.
+6. Use file and repository context menus for path-specific operations such as diff, blame, properties, ignore, lock, or history.
 
 ## What You Can Do
 
+- Acquire working copies: check out any absolute SVN repository URL to a new local folder at `HEAD` or a specific revision.
 - Track working copy changes: refresh status, review diffs, update the working copy, commit the whole repository, commit selected paths, update selected paths, and run cleanup after interrupted operations.
 - Inspect history: open repository or file history, filter revisions by author, commit message, changed path, and date range, then compare revisions, copy commit messages, export files, or update and check out to a selected revision.
 - Manage repository references: switch branch or tag, update to a specific revision, relocate a working copy, and create or delete branches and tags from the working copy.
@@ -41,7 +44,7 @@ If `svn` is unavailable, the extension stays inactive and shows a warning until 
 
 Most commands are context-sensitive and are available from the Source Control view, file explorer context menus, or repository action menus.
 
-- Repository commands: `Refresh SVN Status`, `Update SVN Working Copy`, `Commit SVN Changes`, `Open SVN History`, `More SVN Actions`, `Show SVN Output`, `Cleanup SVN Working Copy`, `Update Working Copy To Revision`, `Switch Branch Or Tag`, and `Relocate Working Copy`.
+- Global and repository commands: `Checkout SVN Repository URL`, `Refresh SVN Status`, `Update SVN Working Copy`, `Commit SVN Changes`, `Open SVN History`, `More SVN Actions`, `Show SVN Output`, `Cleanup SVN Working Copy`, `Update Working Copy To Revision`, `Switch Branch Or Tag`, and `Relocate Working Copy`.
 - Path and change commands: `Open Diff`, `Open File`, `Open File History`, `Commit Selected Changes`, `Update Selected Paths`, `Update Selected Paths To Revision`, `Add Resource`, `Revert Resource`, `Delete Resource`, `Rename`, `Ignore Path`, `Unignore Path`, `Lock`, `Unlock`, `Add To Changelist`, `Remove From Changelist`, and `Reveal In File Manager`.
 - Metadata and repository tools: `Blame / Annotate`, `Show Properties`, `Edit Properties`, `Show SVN Info`, `Copy Repository URL`, `Copy Repository Path`, and `Repository Browser`.
 - Branch, tag, and conflict commands: `Create Branch From Working Copy`, `Create Tag From Working Copy`, `Delete Branch / Tag`, `Mark Conflict As Resolved`, `Accept Local Version`, `Accept Base Version`, `Accept Incoming Version`, and `Postpone Conflict Resolution`.
@@ -52,6 +55,10 @@ Most commands are context-sensitive and are available from the Source Control vi
 - `svn-tree.enable-remote-status`: fetch incoming changes with `svn status -u`.
 - `svn-tree.remote-status-interval-seconds`: interval between automatic remote status refreshes. Default: `60`. Minimum: `10`.
 - `svn-tree.max-log-entries`: number of revisions loaded per batch in the history webview. Default: `200`. Minimum: `20`.
+
+## Development
+
+- SDD baseline and spec template: [docs/sdd/README.md](docs/sdd/README.md)
 
 ## Notes
 

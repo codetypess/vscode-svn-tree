@@ -2,8 +2,8 @@ import * as nodePath from "node:path";
 import * as vscode from "vscode";
 import { HistoryPanel } from "../history/history-panel";
 import { RevisionGraphPanel } from "../revision-graph/revision-graph-panel";
-import type { MessageKey } from "../i18n";
-import type { SvnNodeInfo } from "../svn/svn-types";
+import { normalizeFileManagerPlatform, type MessageKey } from "../i18n";
+import type { SvnNodeInfo, SvnWorkingCopyInfo } from "../svn/svn-types";
 import { getI18n } from "../vscode-i18n";
 import { appendOutputSection } from "./output-channel-utils";
 import {
@@ -16,6 +16,11 @@ import { SvnContentProvider } from "../svn/svn-content-provider";
 import { SvnService } from "../svn/svn-service";
 import { ScmResource } from "./scm-resource";
 import { buildPathInfoOutputLines } from "./svn-output-formatters";
+import {
+    deriveCheckoutDestinationName,
+    normalizeCheckoutRepositoryUrl,
+    normalizeCheckoutRevision,
+} from "./svn-checkout-utils";
 import { SvnRepository } from "./svn-repository";
 import { isSameOrChildWorkingCopyPath } from "./svn-repository-paths";
 
@@ -274,6 +279,10 @@ export class SvnRepositoryManager implements vscode.Disposable {
                 run: (arg) => this.openRepositoryActions(arg),
             },
             {
+                command: "svn-tree.checkout-from-url",
+                run: async () => this.checkoutFromUrl(),
+            },
+            {
                 command: "svn-tree.show-output",
                 run: async () => {
                     this.outputChannel.show(true);
@@ -475,10 +484,7 @@ export class SvnRepositoryManager implements vscode.Disposable {
     }
 
     private async initialize(): Promise<void> {
-        const i18n = getI18n();
-        const isAvailable = await this.svnService.checkAvailability();
-        if (!isAvailable) {
-            void vscode.window.showWarningMessage(i18n.t("noSvnExecutableWarning"));
+        if (!(await this.ensureSvnAvailable())) {
             return;
         }
 
@@ -491,22 +497,7 @@ export class SvnRepositoryManager implements vscode.Disposable {
             }
 
             discoveredRoots.add(info.workingCopyRoot);
-
-            if (!this.repositories.has(info.workingCopyRoot)) {
-                const repository = new SvnRepository(
-                    {
-                        ...info,
-                        rootPath: info.workingCopyRoot,
-                    },
-                    this.svnService,
-                    this.historyPanel,
-                    this.revisionGraphPanel,
-                    this.contentProvider,
-                    this.outputChannel
-                );
-
-                this.repositories.set(info.workingCopyRoot, repository);
-            }
+            this.registerRepository(info);
         }
 
         for (const [rootPath, repository] of this.repositories.entries()) {
@@ -520,6 +511,54 @@ export class SvnRepositoryManager implements vscode.Disposable {
         this.refreshLocalization();
         this.updateHistoryStatusBarVisibility();
         await this.refreshAll(true);
+    }
+
+    private async ensureSvnAvailable(): Promise<boolean> {
+        const isAvailable = await this.svnService.checkAvailability();
+        if (!isAvailable) {
+            void vscode.window.showWarningMessage(getI18n().t("noSvnExecutableWarning"));
+            return false;
+        }
+
+        return true;
+    }
+
+    private registerRepository(info: SvnWorkingCopyInfo): SvnRepository {
+        const existingRepository = this.repositories.get(info.workingCopyRoot);
+        if (existingRepository) {
+            return existingRepository;
+        }
+
+        const repository = new SvnRepository(
+            {
+                ...info,
+                rootPath: info.workingCopyRoot,
+            },
+            this.svnService,
+            this.historyPanel,
+            this.revisionGraphPanel,
+            this.contentProvider,
+            this.outputChannel
+        );
+
+        this.repositories.set(info.workingCopyRoot, repository);
+        return repository;
+    }
+
+    private async registerRepositoryForPath(
+        candidatePath: string,
+        forceRemote: boolean
+    ): Promise<void> {
+        const info = await this.svnService.getWorkingCopyInfo(candidatePath);
+        if (!info) {
+            return;
+        }
+
+        const repository = this.registerRepository(info);
+        this.syncRepositoryWatchers();
+        this.refreshLocalization();
+        this.updateHistoryStatusBarVisibility();
+        await repository.refresh({ forceRemote });
     }
 
     private async refreshAll(forceRemote: boolean): Promise<void> {
@@ -1153,6 +1192,63 @@ export class SvnRepositoryManager implements vscode.Disposable {
         });
     }
 
+    private async checkoutFromUrl(): Promise<void> {
+        try {
+            if (!(await this.ensureSvnAvailable())) {
+                return;
+            }
+
+            const repositoryUrl = await this.promptCheckoutRepositoryUrl();
+            if (!repositoryUrl) {
+                return;
+            }
+
+            const revision = await this.promptCheckoutRevision(repositoryUrl);
+            if (!revision) {
+                return;
+            }
+
+            const destinationPath = await this.promptCheckoutDestination(
+                repositoryUrl,
+                revision
+            );
+            if (!destinationPath) {
+                return;
+            }
+
+            const i18n = getI18n();
+            const revisionLabel = this.formatCheckoutRevisionLabel(revision);
+            await vscode.window.withProgress(
+                {
+                    location: vscode.ProgressLocation.Notification,
+                    title: i18n.t("checkoutFromUrlProgress", {
+                        url: repositoryUrl,
+                        revision: revisionLabel,
+                    }),
+                },
+                async () => {
+                    await this.svnService.checkout(
+                        repositoryUrl,
+                        revision,
+                        destinationPath
+                    );
+                }
+            );
+
+            if (this.isPathWithinWorkspaceFolders(destinationPath)) {
+                await this.registerRepositoryForPath(destinationPath, false);
+            }
+
+            await this.showCheckoutSuccessActions(
+                repositoryUrl,
+                revision,
+                destinationPath
+            );
+        } catch (error) {
+            this.showError(error);
+        }
+    }
+
     private async copyRepositoryUrl(arg: unknown): Promise<void> {
         await this.runForResolvedNodeInfoTarget(arg, async ({ nodeInfo }) => {
             await vscode.env.clipboard.writeText(nodeInfo.url);
@@ -1491,8 +1587,14 @@ export class SvnRepositoryManager implements vscode.Disposable {
 
     private showError(error: unknown): void {
         const message = error instanceof Error ? error.message : String(error);
-        this.outputChannel.show(true);
-        void vscode.window.showErrorMessage(message);
+        const showOutputAction = getI18n().t("showOutputActionLabel");
+        void vscode.window
+            .showErrorMessage(message, showOutputAction)
+            .then((selection) => {
+                if (selection === showOutputAction) {
+                    this.outputChannel.show(true);
+                }
+            });
     }
 
     private showInformationStatus(messageKey: MessageKey): void {
@@ -1578,6 +1680,175 @@ export class SvnRepositoryManager implements vscode.Disposable {
         });
         const trimmedSelection = selection?.trim();
         return trimmedSelection ? trimmedSelection : undefined;
+    }
+
+    private async promptCheckoutRepositoryUrl(): Promise<string | undefined> {
+        const i18n = getI18n();
+        const selection = await vscode.window.showInputBox({
+            title: i18n.t("checkoutFromUrlActionLabel"),
+            prompt: i18n.t("checkoutRepositoryUrlPrompt"),
+            placeHolder: i18n.t("checkoutRepositoryUrlPlaceholder"),
+            validateInput: (value) => {
+                const normalizedValue = normalizeCheckoutRepositoryUrl(value);
+                if (normalizedValue) {
+                    return undefined;
+                }
+
+                return value.trim()
+                    ? i18n.t("checkoutRepositoryUrlInvalid")
+                    : i18n.t("checkoutRepositoryUrlRequired");
+            },
+        });
+
+        return normalizeCheckoutRepositoryUrl(selection);
+    }
+
+    private async promptCheckoutRevision(
+        repositoryUrl: string
+    ): Promise<string | undefined> {
+        const i18n = getI18n();
+        const selection = await vscode.window.showInputBox({
+            title: i18n.t("checkoutFromUrlActionLabel"),
+            prompt: i18n.t("checkoutRevisionPrompt", { url: repositoryUrl }),
+            placeHolder: i18n.t("checkoutRevisionPlaceholder"),
+            value: "HEAD",
+            validateInput: (value) =>
+                normalizeCheckoutRevision(value)
+                    ? undefined
+                    : i18n.t("checkoutRevisionInvalid"),
+        });
+
+        return normalizeCheckoutRevision(selection);
+    }
+
+    private async promptCheckoutDestination(
+        repositoryUrl: string,
+        revision: string
+    ): Promise<string | undefined> {
+        const i18n = getI18n();
+        const selectedFolders = await vscode.window.showOpenDialog({
+            canSelectFiles: false,
+            canSelectFolders: true,
+            canSelectMany: false,
+            openLabel: i18n.t("selectParentFolderLabel"),
+            title: i18n.t("selectParentFolderCheckoutFromUrlTitle"),
+        });
+        const parentFolder = selectedFolders?.[0];
+        if (!parentFolder) {
+            return undefined;
+        }
+
+        const defaultFolderName = deriveCheckoutDestinationName(repositoryUrl, revision);
+        const folderName = await vscode.window.showInputBox({
+            title: i18n.t("checkoutFromUrlActionLabel"),
+            prompt: i18n.t("checkoutFolderNamePrompt"),
+            placeHolder: i18n.t("checkoutFolderNamePlaceholder"),
+            value: defaultFolderName,
+            validateInput: async (value) =>
+                this.validateCheckoutFolderName(parentFolder.fsPath, value),
+        });
+        const trimmedFolderName = folderName?.trim();
+        if (!trimmedFolderName) {
+            return undefined;
+        }
+
+        const destinationPath = nodePath.join(parentFolder.fsPath, trimmedFolderName);
+        if (await this.pathExists(destinationPath)) {
+            void vscode.window.showWarningMessage(
+                i18n.t("destinationExistsWarning", {
+                    destination: destinationPath,
+                })
+            );
+            return undefined;
+        }
+
+        return destinationPath;
+    }
+
+    private async validateCheckoutFolderName(
+        parentFolderPath: string,
+        value: string
+    ): Promise<string | undefined> {
+        const i18n = getI18n();
+        const trimmedValue = value.trim();
+        if (!trimmedValue) {
+            return i18n.t("folderNameRequired");
+        }
+
+        if (trimmedValue.includes("/") || trimmedValue.includes("\\")) {
+            return i18n.t("folderNamePathWarning");
+        }
+
+        if (trimmedValue === "." || trimmedValue === "..") {
+            return i18n.t("renamePathInvalidNameError");
+        }
+
+        const destinationPath = nodePath.join(parentFolderPath, trimmedValue);
+        if (await this.pathExists(destinationPath)) {
+            return i18n.t("destinationExistsWarning", {
+                destination: destinationPath,
+            });
+        }
+
+        return undefined;
+    }
+
+    private async pathExists(targetPath: string): Promise<boolean> {
+        try {
+            await vscode.workspace.fs.stat(vscode.Uri.file(targetPath));
+            return true;
+        } catch {
+            return false;
+        }
+    }
+
+    private formatCheckoutRevisionLabel(revision: string): string {
+        return revision === "HEAD" ? "HEAD" : `r${revision}`;
+    }
+
+    private isPathWithinWorkspaceFolders(targetPath: string): boolean {
+        return (vscode.workspace.workspaceFolders ?? []).some((folder) =>
+            isSameOrChildWorkingCopyPath(folder.uri.fsPath, targetPath)
+        );
+    }
+
+    private async showCheckoutSuccessActions(
+        repositoryUrl: string,
+        revision: string,
+        destinationPath: string
+    ): Promise<void> {
+        const i18n = getI18n();
+        const openFolderAction = i18n.t("openFolder");
+        const revealAction = i18n.formatRevealInFileManager(
+            normalizeFileManagerPlatform(process.platform)
+        );
+        const selection = await vscode.window.showInformationMessage(
+            i18n.t("checkedOutFromUrlMessage", {
+                url: repositoryUrl,
+                revision: this.formatCheckoutRevisionLabel(revision),
+                destination: destinationPath,
+            }),
+            openFolderAction,
+            revealAction
+        );
+
+        if (selection === openFolderAction) {
+            await vscode.commands.executeCommand(
+                "vscode.openFolder",
+                vscode.Uri.file(destinationPath),
+                {
+                    forceNewWindow: true,
+                }
+            );
+            return;
+        }
+
+        if (selection === revealAction) {
+            await vscode.commands.executeCommand(
+                "revealFileInOS",
+                vscode.Uri.file(destinationPath)
+            );
+        }
     }
 
     private async promptRenamePathName(
