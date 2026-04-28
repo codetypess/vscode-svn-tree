@@ -436,7 +436,7 @@ export class SvnService {
         await this.runWithoutOutput(["cleanup", "."], { cwd: rootPath });
     }
 
-    public async revert(rootPath: string, paths: string[]): Promise<void> {
+    public async revert(rootPath: string, paths?: string[]): Promise<void> {
         const targets = this.toRelativeTargets(rootPath, paths);
         const args = ["revert", "-R", ...targets];
         await this.runWithoutOutput(args, { cwd: rootPath });

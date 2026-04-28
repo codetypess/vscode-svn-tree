@@ -1465,7 +1465,7 @@ export class SvnRepositoryManager implements vscode.Disposable {
                     }),
             },
             async ({ repository, paths }) => {
-                await repository.revert(paths);
+                await repository.revert();
             }
         );
     }

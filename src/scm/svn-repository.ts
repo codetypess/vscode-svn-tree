@@ -1453,7 +1453,7 @@ export class SvnRepository implements vscode.Disposable {
         );
     }
 
-    public async revert(paths: string[]): Promise<void> {
+    public async revert(paths?: string[]): Promise<void> {
         await this.svnService.revert(this.rootPath, paths);
         await this.finalizeRepositoryMutation({ refresh: true });
     }
