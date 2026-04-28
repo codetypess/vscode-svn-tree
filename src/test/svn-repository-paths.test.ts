@@ -13,6 +13,7 @@ import {
     getRepositoryReferenceDisplay,
     getWorkingCopyPathForRepositoryPath,
     getWorkingCopyRelativePathForRepositoryPath,
+    isSameOrChildRepositoryPath,
     isSameOrChildWorkingCopyPath,
     isUrlTarget,
     normalizeRepositoryPath,
@@ -76,6 +77,13 @@ test("repository path helpers build repository urls and detect url targets", () 
     );
     assert.equal(isUrlTarget("https://svn.example.com/repos/project/trunk"), true);
     assert.equal(isUrlTarget("/project/trunk"), false);
+});
+
+test("repository path helpers detect repository path containment", () => {
+    assert.equal(isSameOrChildRepositoryPath("/project/trunk", "/project/trunk"), true);
+    assert.equal(isSameOrChildRepositoryPath("/project/trunk", "/project/trunk/src"), true);
+    assert.equal(isSameOrChildRepositoryPath("/project/trunk", "/project/branches/release"), false);
+    assert.equal(isSameOrChildRepositoryPath("/", "/project/trunk"), true);
 });
 
 test("repository path helpers map between repository and working copy paths", () => {

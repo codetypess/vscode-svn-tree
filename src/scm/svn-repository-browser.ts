@@ -3,6 +3,7 @@ import type { SvnNodeKind, SvnRepositoryListEntry } from "../svn/svn-types";
 import {
     buildRepositoryUrl,
     getReferenceKindForRepositoryPath,
+    isSameOrChildRepositoryPath,
     normalizeRepositoryPath,
     splitRepositoryPath,
 } from "./svn-repository-paths";
@@ -10,6 +11,10 @@ import {
 export type RepositoryBrowserAction =
     | "show-history"
     | "show-properties"
+    | "create-directory"
+    | "copy-directory"
+    | "move-directory"
+    | "delete-directory"
     | "copy-url"
     | "copy-path"
     | "switch-here"
@@ -42,6 +47,10 @@ interface RepositoryBrowserStrings {
     readonly actionsSeparator: string;
     readonly openHistoryActionLabel: string;
     readonly showPropertiesActionLabel: string;
+    readonly createDirectoryActionLabel: string;
+    readonly copyDirectoryActionLabel: string;
+    readonly moveDirectoryActionLabel: string;
+    readonly deleteDirectoryActionLabel: string;
     readonly createBranchFromWorkingCopyActionLabel: string;
     readonly createTagFromWorkingCopyActionLabel: string;
     readonly copyRepositoryUrlActionLabel: string;
@@ -64,6 +73,15 @@ interface RepositoryBrowserFileActionStrings {
     readonly copyRepositoryPathActionLabel: string;
 }
 
+export type RepositoryBrowserPathInputMode = "child-relative" | "sibling-or-absolute";
+export type RepositoryBrowserPathValidationError =
+    | "required"
+    | "absolute-path"
+    | "empty-segment"
+    | "relative-navigation"
+    | "same-path"
+    | "nested-target";
+
 export function getParentRepositoryPath(repositoryPath: string): string {
     const segments = splitRepositoryPath(repositoryPath);
     if (segments.length <= 1) {
@@ -83,6 +101,11 @@ export function buildRepositoryBrowserItems(options: {
     readonly separatorKind: vscode.QuickPickItemKind;
     readonly strings: RepositoryBrowserStrings;
 }): RepositoryBrowserQuickPickItem[] {
+    const canCopyCurrentDirectory = normalizeRepositoryPath(options.currentRepositoryPath) !== "/";
+    const canMoveOrDeleteCurrentDirectory = canMutateCurrentRepositoryPath(
+        options.currentRepositoryPath,
+        options.currentWorkingCopyRepositoryPath
+    );
     const items: RepositoryBrowserQuickPickItem[] = [
         {
             label: options.strings.actionsSeparator,
@@ -106,6 +129,14 @@ export function buildRepositoryBrowserItems(options: {
             url: options.currentUrl,
         },
         {
+            label: options.strings.createDirectoryActionLabel,
+            description: options.currentRepositoryPath,
+            itemType: "action",
+            action: "create-directory",
+            repositoryPath: options.currentRepositoryPath,
+            url: options.currentUrl,
+        },
+        {
             label: options.strings.createBranchFromWorkingCopyActionLabel,
             description: options.currentRepositoryPath,
             itemType: "action",
@@ -121,23 +152,29 @@ export function buildRepositoryBrowserItems(options: {
             repositoryPath: options.currentRepositoryPath,
             url: options.currentUrl,
         },
-        {
-            label: options.strings.copyRepositoryUrlActionLabel,
-            description: options.currentUrl,
-            itemType: "action",
-            action: "copy-url",
-            repositoryPath: options.currentRepositoryPath,
-            url: options.currentUrl,
-        },
-        {
-            label: options.strings.copyRepositoryPathActionLabel,
+    ];
+
+    if (canCopyCurrentDirectory) {
+        items.push({
+            label: options.strings.copyDirectoryActionLabel,
             description: options.currentRepositoryPath,
             itemType: "action",
-            action: "copy-path",
+            action: "copy-directory",
             repositoryPath: options.currentRepositoryPath,
             url: options.currentUrl,
-        },
-    ];
+        });
+    }
+
+    if (canMoveOrDeleteCurrentDirectory) {
+        items.push({
+            label: options.strings.moveDirectoryActionLabel,
+            description: options.currentRepositoryPath,
+            itemType: "action",
+            action: "move-directory",
+            repositoryPath: options.currentRepositoryPath,
+            url: options.currentUrl,
+        });
+    }
 
     if (
         normalizeRepositoryPath(options.currentRepositoryPath) !==
@@ -153,12 +190,40 @@ export function buildRepositoryBrowserItems(options: {
         });
     }
 
+    items.push(
+        {
+            label: options.strings.copyRepositoryUrlActionLabel,
+            description: options.currentUrl,
+            itemType: "action",
+            action: "copy-url",
+            repositoryPath: options.currentRepositoryPath,
+            url: options.currentUrl,
+        },
+        {
+            label: options.strings.copyRepositoryPathActionLabel,
+            description: options.currentRepositoryPath,
+            itemType: "action",
+            action: "copy-path",
+            repositoryPath: options.currentRepositoryPath,
+            url: options.currentUrl,
+        }
+    );
+
     if (getReferenceKindForRepositoryPath(options.currentRepositoryPath)) {
         items.push({
             label: options.strings.deleteReferenceActionLabel,
             description: options.currentRepositoryPath,
             itemType: "action",
             action: "delete-reference",
+            repositoryPath: options.currentRepositoryPath,
+            url: options.currentUrl,
+        });
+    } else if (canMoveOrDeleteCurrentDirectory) {
+        items.push({
+            label: options.strings.deleteDirectoryActionLabel,
+            description: options.currentRepositoryPath,
+            itemType: "action",
+            action: "delete-directory",
             repositoryPath: options.currentRepositoryPath,
             url: options.currentUrl,
         });
@@ -268,4 +333,86 @@ export function buildRepositoryBrowserFileActionItems(options: {
             action: "copy-path",
         },
     ];
+}
+
+export function canMutateCurrentRepositoryPath(
+    currentRepositoryPath: string,
+    currentWorkingCopyRepositoryPath: string
+): boolean {
+    const normalizedCurrentPath = normalizeRepositoryPath(currentRepositoryPath);
+    if (normalizedCurrentPath === "/") {
+        return false;
+    }
+
+    return !isSameOrChildRepositoryPath(normalizedCurrentPath, currentWorkingCopyRepositoryPath);
+}
+
+export function getRepositoryBrowserPathValidationError(
+    value: string,
+    mode: RepositoryBrowserPathInputMode
+): RepositoryBrowserPathValidationError | undefined {
+    const normalizedValue = value.trim().replace(/\\/g, "/");
+    if (!normalizedValue) {
+        return "required";
+    }
+
+    if (mode === "child-relative" && normalizedValue.startsWith("/")) {
+        return "absolute-path";
+    }
+
+    const segments = normalizedValue.replace(/^\/+/, "").split("/");
+    if (segments.some((segment) => segment.trim().length === 0)) {
+        return "empty-segment";
+    }
+
+    if (segments.some((segment) => segment === "." || segment === "..")) {
+        return "relative-navigation";
+    }
+
+    return undefined;
+}
+
+export function resolveRepositoryBrowserChildPath(
+    currentRepositoryPath: string,
+    value: string
+): string {
+    return normalizeRepositoryPath(
+        [currentRepositoryPath, value.trim().replace(/\\/g, "/")]
+            .filter((segment) => segment !== "/")
+            .join("/")
+    );
+}
+
+export function resolveRepositoryBrowserSiblingOrAbsolutePath(
+    currentRepositoryPath: string,
+    value: string
+): string {
+    const normalizedValue = value.trim().replace(/\\/g, "/");
+    if (normalizedValue.startsWith("/")) {
+        return normalizeRepositoryPath(normalizedValue);
+    }
+
+    return normalizeRepositoryPath(
+        [getParentRepositoryPath(currentRepositoryPath), normalizedValue]
+            .filter((segment) => segment !== "/")
+            .join("/")
+    );
+}
+
+export function getRepositoryBrowserMutationTargetValidationError(
+    sourceRepositoryPath: string,
+    destinationRepositoryPath: string
+): RepositoryBrowserPathValidationError | undefined {
+    const normalizedSourcePath = normalizeRepositoryPath(sourceRepositoryPath);
+    const normalizedDestinationPath = normalizeRepositoryPath(destinationRepositoryPath);
+
+    if (normalizedDestinationPath === normalizedSourcePath) {
+        return "same-path";
+    }
+
+    if (isSameOrChildRepositoryPath(normalizedSourcePath, normalizedDestinationPath)) {
+        return "nested-target";
+    }
+
+    return undefined;
 }

@@ -39,6 +39,16 @@ export function isUrlTarget(value: string): boolean {
     return /^[a-z][a-z0-9+.-]*:\/\//i.test(value);
 }
 
+export function isSameOrChildRepositoryPath(rootPath: string, targetPath: string): boolean {
+    const normalizedRootPath = normalizeRepositoryPath(rootPath);
+    const normalizedTargetPath = normalizeRepositoryPath(targetPath);
+    return (
+        normalizedRootPath === "/" ||
+        normalizedTargetPath === normalizedRootPath ||
+        normalizedTargetPath.startsWith(`${normalizedRootPath}/`)
+    );
+}
+
 export function normalizeRepositoryPath(value: string): string {
     const normalized = value.replace(/\\/g, "/").replace(/^\/+|\/+$/g, "");
     return normalized ? `/${normalized}` : "/";

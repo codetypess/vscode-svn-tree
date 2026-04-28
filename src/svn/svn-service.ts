@@ -348,6 +348,10 @@ export class SvnService {
         await this.runWithoutOutput(args);
     }
 
+    public async mkdir(target: string, message: string): Promise<void> {
+        await this.runWithoutOutput(["mkdir", "-m", message, target]);
+    }
+
     public async copy(
         source: string,
         destination: string,
@@ -470,6 +474,10 @@ export class SvnService {
         await this.runWithoutOutput(["move", sourceTarget, destinationTarget], {
             cwd: rootPath,
         });
+    }
+
+    public async moveUrl(source: string, destination: string, message: string): Promise<void> {
+        await this.runWithoutOutput(["move", "-m", message, source, destination]);
     }
 
     private buildMergeArgs(

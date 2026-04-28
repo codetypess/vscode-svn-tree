@@ -63,7 +63,12 @@ import {
 import {
     buildRepositoryBrowserFileActionItems,
     buildRepositoryBrowserItems,
+    getRepositoryBrowserMutationTargetValidationError,
+    getRepositoryBrowserPathValidationError,
     getParentRepositoryPath,
+    resolveRepositoryBrowserChildPath,
+    resolveRepositoryBrowserSiblingOrAbsolutePath,
+    type RepositoryBrowserPathInputMode,
     RepositoryBrowserQuickPickItem,
 } from "./svn-repository-browser";
 import {
@@ -1764,6 +1769,18 @@ export class SvnRepository implements vscode.Disposable {
                         actionsSeparator: this.i18n.t("repositoryBrowserActionsSeparator"),
                         openHistoryActionLabel: this.i18n.t("openHistoryActionLabel"),
                         showPropertiesActionLabel: this.i18n.t("showPropertiesActionLabel"),
+                        createDirectoryActionLabel: this.i18n.t(
+                            "repositoryBrowserCreateDirectoryActionLabel"
+                        ),
+                        copyDirectoryActionLabel: this.i18n.t(
+                            "repositoryBrowserCopyDirectoryActionLabel"
+                        ),
+                        moveDirectoryActionLabel: this.i18n.t(
+                            "repositoryBrowserMoveDirectoryActionLabel"
+                        ),
+                        deleteDirectoryActionLabel: this.i18n.t(
+                            "repositoryBrowserDeleteDirectoryActionLabel"
+                        ),
                         createBranchFromWorkingCopyActionLabel: this.i18n.t(
                             "createBranchFromWorkingCopyActionLabel"
                         ),
@@ -1823,11 +1840,14 @@ export class SvnRepository implements vscode.Disposable {
                 selection.repositoryPath &&
                 selection.url
             ) {
-                await this.runRepositoryBrowserAction(
+                const nextRepositoryPath = await this.runRepositoryBrowserAction(
                     selection.action,
                     selection.repositoryPath,
                     selection.url
                 );
+                if (nextRepositoryPath) {
+                    currentRepositoryPath = nextRepositoryPath;
+                }
             }
         }
     }
@@ -2147,7 +2167,7 @@ export class SvnRepository implements vscode.Disposable {
         action: NonNullable<RepositoryBrowserQuickPickItem["action"]>,
         repositoryPath: string,
         url: string
-    ): Promise<void> {
+    ): Promise<string | undefined> {
         switch (action) {
             case "show-history":
                 await this.showHistoryForRepositoryPath(repositoryPath);
@@ -2155,6 +2175,16 @@ export class SvnRepository implements vscode.Disposable {
             case "show-properties":
                 await this.showRepositoryPathProperties(repositoryPath, url);
                 return;
+            case "create-directory":
+                await this.createRepositoryDirectoryAt(repositoryPath);
+                return;
+            case "copy-directory":
+                await this.copyRepositoryDirectoryAt(repositoryPath);
+                return;
+            case "move-directory":
+                return this.moveRepositoryDirectoryAt(repositoryPath);
+            case "delete-directory":
+                return this.deleteRepositoryDirectoryAt(repositoryPath);
             case "copy-url":
                 await this.copyValueToClipboard(url, this.i18n.t("copiedRepositoryUrlStatus"));
                 return;
@@ -2254,6 +2284,141 @@ export class SvnRepository implements vscode.Disposable {
                 );
                 return;
         }
+    }
+
+    private async createRepositoryDirectoryAt(repositoryPath: string): Promise<void> {
+        const destinationPath =
+            await this.promptRepositoryBrowserChildDirectoryPath(repositoryPath);
+        if (!destinationPath) {
+            return;
+        }
+
+        const destinationUrl = buildRepositoryUrl(this.info.repositoryRoot, destinationPath);
+        const message = this.i18n.t("repositoryBrowserCreateDirectoryCommitMessage", {
+            path: destinationPath,
+        });
+
+        await this.runNotificationProgress(
+            this.i18n.t("repositoryBrowserCreateDirectoryProgress", {
+                path: destinationPath,
+            }),
+            async () => {
+                await this.svnService.mkdir(destinationUrl, message);
+            }
+        );
+
+        await this.finalizeRemoteRepositoryMutation();
+        void vscode.window.showInformationMessage(
+            this.i18n.t("repositoryBrowserCreatedDirectoryInfo", {
+                path: destinationPath,
+            })
+        );
+    }
+
+    private async copyRepositoryDirectoryAt(repositoryPath: string): Promise<void> {
+        const destinationPath = await this.promptRepositoryBrowserDirectoryDestination(
+            repositoryPath,
+            "copy"
+        );
+        if (!destinationPath) {
+            return;
+        }
+
+        const sourceUrl = buildRepositoryUrl(this.info.repositoryRoot, repositoryPath);
+        const destinationUrl = buildRepositoryUrl(this.info.repositoryRoot, destinationPath);
+        const message = this.i18n.t("repositoryBrowserCopyDirectoryCommitMessage", {
+            source: repositoryPath,
+            destination: destinationPath,
+        });
+
+        await this.runNotificationProgress(
+            this.i18n.t("repositoryBrowserCopyDirectoryProgress", {
+                source: repositoryPath,
+                destination: destinationPath,
+            }),
+            async () => {
+                await this.svnService.copy(sourceUrl, destinationUrl, message);
+            }
+        );
+
+        await this.finalizeRemoteRepositoryMutation();
+        void vscode.window.showInformationMessage(
+            this.i18n.t("repositoryBrowserCopiedDirectoryInfo", {
+                source: repositoryPath,
+                destination: destinationPath,
+            })
+        );
+    }
+
+    private async moveRepositoryDirectoryAt(
+        repositoryPath: string
+    ): Promise<string | undefined> {
+        const destinationPath = await this.promptRepositoryBrowserDirectoryDestination(
+            repositoryPath,
+            "move"
+        );
+        if (!destinationPath) {
+            return undefined;
+        }
+
+        const sourceUrl = buildRepositoryUrl(this.info.repositoryRoot, repositoryPath);
+        const destinationUrl = buildRepositoryUrl(this.info.repositoryRoot, destinationPath);
+        const message = this.i18n.t("repositoryBrowserMoveDirectoryCommitMessage", {
+            source: repositoryPath,
+            destination: destinationPath,
+        });
+
+        await this.runNotificationProgress(
+            this.i18n.t("repositoryBrowserMoveDirectoryProgress", {
+                source: repositoryPath,
+                destination: destinationPath,
+            }),
+            async () => {
+                await this.svnService.moveUrl(sourceUrl, destinationUrl, message);
+            }
+        );
+
+        await this.finalizeRemoteRepositoryMutation();
+        void vscode.window.showInformationMessage(
+            this.i18n.t("repositoryBrowserMovedDirectoryInfo", {
+                source: repositoryPath,
+                destination: destinationPath,
+            })
+        );
+
+        return destinationPath;
+    }
+
+    private async deleteRepositoryDirectoryAt(
+        repositoryPath: string
+    ): Promise<string | undefined> {
+        const confirmed = await this.confirmDeleteRepositoryDirectory(repositoryPath);
+        if (!confirmed) {
+            return undefined;
+        }
+
+        const targetUrl = buildRepositoryUrl(this.info.repositoryRoot, repositoryPath);
+        const message = this.i18n.t("repositoryBrowserDeleteDirectoryCommitMessage", {
+            target: repositoryPath,
+        });
+
+        await this.runNotificationProgress(
+            this.i18n.t("repositoryBrowserDeleteDirectoryProgress", {
+                target: repositoryPath,
+            }),
+            async () => {
+                await this.svnService.deleteUrl(targetUrl, message);
+            }
+        );
+
+        await this.finalizeRemoteRepositoryMutation();
+        void vscode.window.showInformationMessage(
+            this.i18n.t("repositoryBrowserDeletedDirectoryInfo", {
+                target: repositoryPath,
+            })
+        );
+
+        return getParentRepositoryPath(repositoryPath);
     }
 
     public async showRepositoryPathProperties(
@@ -3532,6 +3697,70 @@ export class SvnRepository implements vscode.Disposable {
         });
     }
 
+    private async promptRepositoryBrowserChildDirectoryPath(
+        repositoryPath: string
+    ): Promise<string | undefined> {
+        const value = await vscode.window.showInputBox({
+            title: this.i18n.t("repositoryBrowserCreateDirectoryActionLabel"),
+            prompt: this.i18n.t("repositoryBrowserCreateDirectoryPrompt", {
+                path: repositoryPath,
+            }),
+            placeHolder: this.i18n.t("repositoryBrowserCreateDirectoryPlaceholder"),
+            validateInput: (input) =>
+                this.validateRepositoryBrowserPathInput(
+                    input,
+                    "child-relative",
+                    repositoryPath
+                ),
+        });
+        const trimmedValue = value?.trim();
+        if (!trimmedValue) {
+            return undefined;
+        }
+
+        return resolveRepositoryBrowserChildPath(repositoryPath, trimmedValue);
+    }
+
+    private async promptRepositoryBrowserDirectoryDestination(
+        repositoryPath: string,
+        operation: "copy" | "move"
+    ): Promise<string | undefined> {
+        const titleKey =
+            operation === "copy"
+                ? "repositoryBrowserCopyDirectoryActionLabel"
+                : "repositoryBrowserMoveDirectoryActionLabel";
+        const promptKey =
+            operation === "copy"
+                ? "repositoryBrowserCopyDirectoryPrompt"
+                : "repositoryBrowserMoveDirectoryPrompt";
+        const defaultValue =
+            operation === "copy"
+                ? `${this.getRepositoryPathLeafName(repositoryPath)}-copy`
+                : `${this.getRepositoryPathLeafName(repositoryPath)}-renamed`;
+        const destinationValue = await vscode.window.showInputBox({
+            title: this.i18n.t(titleKey),
+            prompt: this.i18n.t(promptKey, {
+                path: repositoryPath,
+                parent: getParentRepositoryPath(repositoryPath),
+            }),
+            placeHolder: this.i18n.t("repositoryBrowserDirectoryDestinationPlaceholder"),
+            value: defaultValue,
+            validateInput: (input) =>
+                this.validateRepositoryBrowserPathInput(
+                    input,
+                    "sibling-or-absolute",
+                    repositoryPath,
+                    repositoryPath
+                ),
+        });
+        const trimmedValue = destinationValue?.trim();
+        if (!trimmedValue) {
+            return undefined;
+        }
+
+        return resolveRepositoryBrowserSiblingOrAbsolutePath(repositoryPath, trimmedValue);
+    }
+
     private async promptSwitchTarget(): Promise<{ display: string; url: string } | undefined> {
         const switchTarget = await vscode.window.showInputBox({
             title: this.i18n.t("switchWorkingCopyActionLabel"),
@@ -3552,6 +3781,53 @@ export class SvnRepository implements vscode.Disposable {
             repositoryRoot: this.info.repositoryRoot,
             repositoryRelativePath: this.info.repositoryRelativePath,
         });
+    }
+
+    private validateRepositoryBrowserPathInput(
+        value: string,
+        mode: RepositoryBrowserPathInputMode,
+        currentRepositoryPath: string,
+        sourceRepositoryPath?: string
+    ): string | undefined {
+        const validationError = getRepositoryBrowserPathValidationError(value, mode);
+        switch (validationError) {
+            case "required":
+                return this.i18n.t("repositoryBrowserDirectoryPathRequired");
+            case "absolute-path":
+                return this.i18n.t("relativePathRequired", {
+                    location: currentRepositoryPath,
+                });
+            case "empty-segment":
+                return this.i18n.t("avoidEmptySegments");
+            case "relative-navigation":
+                return this.i18n.t("repositoryBrowserPathTraversalNotAllowed");
+            default:
+                break;
+        }
+
+        if (!sourceRepositoryPath) {
+            return undefined;
+        }
+
+        const destinationRepositoryPath =
+            mode === "child-relative"
+                ? resolveRepositoryBrowserChildPath(currentRepositoryPath, value)
+                : resolveRepositoryBrowserSiblingOrAbsolutePath(currentRepositoryPath, value);
+        const destinationValidationError = getRepositoryBrowserMutationTargetValidationError(
+            sourceRepositoryPath,
+            destinationRepositoryPath
+        );
+
+        switch (destinationValidationError) {
+            case "same-path":
+                return this.i18n.t("repositoryBrowserSamePathError");
+            case "nested-target":
+                return this.i18n.t("repositoryBrowserNestedTargetError", {
+                    path: sourceRepositoryPath,
+                });
+            default:
+                return undefined;
+        }
     }
 
     private async promptPropertyName(): Promise<string | undefined> {
@@ -3688,6 +3964,21 @@ export class SvnRepository implements vscode.Disposable {
         return selection === this.i18n.t("continueButton");
     }
 
+    private async confirmDeleteRepositoryDirectory(displayTarget: string): Promise<boolean> {
+        const selection = await vscode.window.showWarningMessage(
+            this.i18n.t("repositoryBrowserDeleteDirectoryQuestion", { target: displayTarget }),
+            {
+                modal: true,
+                detail: this.i18n.t("repositoryBrowserDeleteDirectoryDetail", {
+                    target: displayTarget,
+                }),
+            },
+            this.i18n.t("continueButton")
+        );
+
+        return selection === this.i18n.t("continueButton");
+    }
+
     private validateDeleteReferenceTarget(value: string): string | undefined {
         const trimmedValue = value.trim();
         if (!trimmedValue) {
@@ -3705,6 +3996,19 @@ export class SvnRepository implements vscode.Disposable {
         }
 
         return undefined;
+    }
+
+    private getRepositoryPathLeafName(repositoryPath: string): string {
+        const segments = repositoryPath.replace(/^\/+|\/+$/g, "").split("/").filter(Boolean);
+        return segments.at(-1) ?? "directory";
+    }
+
+    private async finalizeRemoteRepositoryMutation(): Promise<void> {
+        await this.finalizeRepositoryMutation({
+            invalidateRevisionGraphCaches: true,
+            refreshHistory: true,
+            refreshOptions: { forceRemote: true, allowWhileBusy: true },
+        });
     }
 
     private async promptRelocateTargetUrl(): Promise<string | undefined> {
