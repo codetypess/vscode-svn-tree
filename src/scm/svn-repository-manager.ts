@@ -5,7 +5,7 @@ import { RevisionGraphPanel } from "../revision-graph/revision-graph-panel";
 import { normalizeFileManagerPlatform, type MessageKey } from "../i18n";
 import type { SvnNodeInfo, SvnWorkingCopyInfo } from "../svn/svn-types";
 import { getI18n } from "../vscode-i18n";
-import { appendOutputSection } from "./output-channel-utils";
+import { appendOutputSection, buildErrorOutputLines } from "./output-channel-utils";
 import {
     buildQuickPickActionCategories,
     type QuickPickActionCategoryDefinition,
@@ -1606,8 +1606,21 @@ export class SvnRepositoryManager implements vscode.Disposable {
     }
 
     private showError(error: unknown): void {
+        const i18n = getI18n();
+        appendOutputSection(
+            this.outputChannel,
+            i18n.t("errorOutputHeader"),
+            buildErrorOutputLines(error, {
+                timeLabel: i18n.t("errorOutputTimeLabel"),
+                messageLabel: i18n.t("errorOutputMessageLabel"),
+                stackLabel: i18n.t("errorOutputStackLabel"),
+                causeLabel: i18n.t("errorOutputCauseLabel"),
+                valueLabel: i18n.t("errorOutputValueLabel"),
+            })
+        );
+
         const message = error instanceof Error ? error.message : String(error);
-        const showOutputAction = getI18n().t("showOutputActionLabel");
+        const showOutputAction = i18n.t("showOutputActionLabel");
         void vscode.window
             .showErrorMessage(message, showOutputAction)
             .then((selection) => {

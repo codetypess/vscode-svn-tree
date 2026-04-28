@@ -627,7 +627,7 @@ export class SvnService {
                         totalAttempts > 1 && attempt > 1
                             ? `${message} Failed after ${attempt} attempts.`
                             : message;
-                    throw new Error(finalMessage);
+                    throw this.createCommandError(finalMessage, error);
                 }
 
                 const retryDelayMs = options.retryDelayMs ?? 0;
@@ -875,6 +875,14 @@ export class SvnService {
         error.killed = options.timedOut;
         error.signal = options.signal;
         return error;
+    }
+
+    private createCommandError(message: string, cause: unknown): Error {
+        if (cause instanceof Error && cause.message === message) {
+            return cause;
+        }
+
+        return new Error(message, { cause });
     }
 
     private renderError(
