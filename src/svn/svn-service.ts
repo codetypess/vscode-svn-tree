@@ -1,6 +1,5 @@
-import { execFile } from "node:child_process";
+import { spawn } from "node:child_process";
 import * as nodePath from "node:path";
-import { promisify } from "node:util";
 import * as vscode from "vscode";
 import {
     hasActiveHistoryFilters,
@@ -26,7 +25,6 @@ import type {
     SvnWorkingCopyInfo,
 } from "./svn-types";
 
-const execFileAsync = promisify(execFile);
 const historyLogRetryCount = 1;
 const historyLogRetryDelayMs = 1500;
 const historyLogInitialTimeoutMs = 3000;
@@ -35,6 +33,7 @@ const maxHistoryLogTimeoutMs = 20000;
 const filteredHistoryLogScanMultiplier = 3;
 const filteredHistoryLogMinScanLimit = 100;
 const filteredHistoryLogMaxScanLimit = 600;
+const retainedErrorOutputLimit = 64 * 1024;
 
 interface RunSvnOptions {
     cwd?: string;
@@ -43,6 +42,7 @@ interface RunSvnOptions {
     retryDelayMs?: number;
     timeoutMs?: number;
     getTimeoutMs?: (attempt: number, totalAttempts: number) => number | undefined;
+    captureOutput?: boolean;
 }
 
 type SvnResolveAcceptOption =
@@ -78,7 +78,7 @@ export class SvnService {
 
     public async checkAvailability(): Promise<boolean> {
         try {
-            await this.run(["--version", "--quiet"], { quiet: true });
+            await this.runWithoutOutput(["--version", "--quiet"], { quiet: true });
             return true;
         } catch {
             return false;
@@ -305,7 +305,7 @@ export class SvnService {
     public async commit(rootPath: string, message: string, paths?: string[]): Promise<void> {
         const targets = this.toRelativeTargets(rootPath, paths);
         const args = ["commit", "-m", message, ...targets];
-        await this.run(args, { cwd: rootPath });
+        await this.runWithoutOutput(args, { cwd: rootPath });
     }
 
     public async update(rootPath: string, paths?: string[], revision?: string): Promise<void> {
@@ -316,7 +316,7 @@ export class SvnService {
         }
 
         args.push(...targets);
-        await this.run(args, { cwd: rootPath });
+        await this.runWithoutOutput(args, { cwd: rootPath });
     }
 
     public async blame(rootPath: string, targetPath: string): Promise<string> {
@@ -331,21 +331,21 @@ export class SvnService {
     }
 
     public async switch(rootPath: string, target: string): Promise<void> {
-        await this.run(["switch", target, "."], { cwd: rootPath });
+        await this.runWithoutOutput(["switch", target, "."], { cwd: rootPath });
     }
 
     public async relocate(rootPath: string, targetUrl: string): Promise<void> {
-        await this.run(["relocate", targetUrl, "."], { cwd: rootPath });
+        await this.runWithoutOutput(["relocate", targetUrl, "."], { cwd: rootPath });
     }
 
     public async checkout(target: string, revision: string, destinationPath: string): Promise<void> {
         const args = ["checkout", "-r", revision, target, destinationPath];
-        await this.run(args);
+        await this.runWithoutOutput(args);
     }
 
     public async export(target: string, revision: string, destinationPath: string): Promise<void> {
         const args = ["export", "-r", revision, target, destinationPath];
-        await this.run(args);
+        await this.runWithoutOutput(args);
     }
 
     public async copy(
@@ -360,7 +360,7 @@ export class SvnService {
         }
 
         args.push("-m", message, source, destination);
-        await this.run(args);
+        await this.runWithoutOutput(args);
     }
 
     public async mergeRevision(
@@ -369,7 +369,7 @@ export class SvnService {
         revision: number,
         options: SvnMergeRunOptions = {}
     ): Promise<void> {
-        await this.run(
+        await this.runWithoutOutput(
             this.buildMergeArgs([
                 "-c",
                 String(Math.floor(revision)),
@@ -387,7 +387,7 @@ export class SvnService {
         toRevision: number,
         options: SvnMergeRunOptions = {}
     ): Promise<void> {
-        await this.run(
+        await this.runWithoutOutput(
             this.buildMergeArgs([
                 "-r",
                 `${Math.floor(fromRevision)}:${Math.floor(toRevision)}`,
@@ -404,7 +404,7 @@ export class SvnService {
         revision: number,
         options: SvnMergeRunOptions = {}
     ): Promise<void> {
-        await this.run(
+        await this.runWithoutOutput(
             this.buildMergeArgs([
                 "-c",
                 `-${Math.floor(revision)}`,
@@ -421,7 +421,7 @@ export class SvnService {
         revision: number,
         options: SvnMergeRunOptions = {}
     ): Promise<void> {
-        await this.run(
+        await this.runWithoutOutput(
             this.buildMergeArgs([
                 "-r",
                 `HEAD:${Math.floor(revision)}`,
@@ -433,29 +433,29 @@ export class SvnService {
     }
 
     public async cleanup(rootPath: string): Promise<void> {
-        await this.run(["cleanup", "."], { cwd: rootPath });
+        await this.runWithoutOutput(["cleanup", "."], { cwd: rootPath });
     }
 
     public async revert(rootPath: string, paths: string[]): Promise<void> {
         const targets = this.toRelativeTargets(rootPath, paths);
         const args = ["revert", "-R", ...targets];
-        await this.run(args, { cwd: rootPath });
+        await this.runWithoutOutput(args, { cwd: rootPath });
     }
 
     public async add(rootPath: string, paths: string[]): Promise<void> {
         const targets = this.toRelativeTargets(rootPath, paths);
         const args = ["add", "--parents", ...targets];
-        await this.run(args, { cwd: rootPath });
+        await this.runWithoutOutput(args, { cwd: rootPath });
     }
 
     public async delete(rootPath: string, paths: string[]): Promise<void> {
         const targets = this.toRelativeTargets(rootPath, paths);
         const args = ["delete", "--force", ...targets];
-        await this.run(args, { cwd: rootPath });
+        await this.runWithoutOutput(args, { cwd: rootPath });
     }
 
     public async deleteUrl(target: string, message: string): Promise<void> {
-        await this.run(["delete", target, "-m", message]);
+        await this.runWithoutOutput(["delete", target, "-m", message]);
     }
 
     public async move(
@@ -467,7 +467,9 @@ export class SvnService {
             sourcePath,
             destinationPath,
         ]);
-        await this.run(["move", sourceTarget, destinationTarget], { cwd: rootPath });
+        await this.runWithoutOutput(["move", sourceTarget, destinationTarget], {
+            cwd: rootPath,
+        });
     }
 
     private buildMergeArgs(
@@ -485,22 +487,24 @@ export class SvnService {
 
     public async lock(rootPath: string, paths: string[]): Promise<void> {
         const targets = this.toRelativeTargets(rootPath, paths);
-        await this.run(["lock", ...targets], { cwd: rootPath });
+        await this.runWithoutOutput(["lock", ...targets], { cwd: rootPath });
     }
 
     public async unlock(rootPath: string, paths: string[]): Promise<void> {
         const targets = this.toRelativeTargets(rootPath, paths);
-        await this.run(["unlock", ...targets], { cwd: rootPath });
+        await this.runWithoutOutput(["unlock", ...targets], { cwd: rootPath });
     }
 
     public async addToChangelist(rootPath: string, paths: string[], name: string): Promise<void> {
         const targets = this.toRelativeTargets(rootPath, paths);
-        await this.run(["changelist", name, ...targets], { cwd: rootPath });
+        await this.runWithoutOutput(["changelist", name, ...targets], { cwd: rootPath });
     }
 
     public async removeFromChangelist(rootPath: string, paths: string[]): Promise<void> {
         const targets = this.toRelativeTargets(rootPath, paths);
-        await this.run(["changelist", "--remove", ...targets], { cwd: rootPath });
+        await this.runWithoutOutput(["changelist", "--remove", ...targets], {
+            cwd: rootPath,
+        });
     }
 
     public async commitChangelist(
@@ -508,7 +512,7 @@ export class SvnService {
         message: string,
         changelist: string
     ): Promise<void> {
-        await this.run(
+        await this.runWithoutOutput(
             ["commit", "--changelist", changelist, "-m", message, "."],
             { cwd: rootPath }
         );
@@ -521,7 +525,7 @@ export class SvnService {
     ): Promise<void> {
         const targets = this.toRelativeTargets(rootPath, paths);
         const args = ["resolve", "--accept", accept, ...targets];
-        await this.run(args, { cwd: rootPath });
+        await this.runWithoutOutput(args, { cwd: rootPath });
     }
 
     public async getProperty(target: string, name: string): Promise<string | undefined> {
@@ -539,13 +543,13 @@ export class SvnService {
     }
 
     public async setProperty(target: string, name: string, value: string): Promise<void> {
-        await this.run(["propset", name, value, target], {
+        await this.runWithoutOutput(["propset", name, value, target], {
             cwd: nodePath.isAbsolute(target) ? nodePath.dirname(target) : undefined,
         });
     }
 
     public async deleteProperty(target: string, name: string): Promise<void> {
-        await this.run(["propdel", name, target], {
+        await this.runWithoutOutput(["propdel", name, target], {
             cwd: nodePath.isAbsolute(target) ? nodePath.dirname(target) : undefined,
         });
     }
@@ -607,12 +611,7 @@ export class SvnService {
             }
 
             try {
-                return await execFileAsync("svn", args, {
-                    cwd: options.cwd,
-                    encoding: "utf8",
-                    maxBuffer: 16 * 1024 * 1024,
-                    timeout: timeoutMs,
-                });
+                return await this.spawnSvn(args, options, timeoutMs);
             } catch (error) {
                 const message = this.renderError(error, args, timeoutMs);
                 const canRetry = attempt < totalAttempts && this.shouldRetry(error, timeoutMs);
@@ -644,6 +643,119 @@ export class SvnService {
         }
 
         throw new Error("SVN command did not complete.");
+    }
+
+    private async runWithoutOutput(
+        args: string[],
+        options: RunSvnOptions = {}
+    ): Promise<void> {
+        await this.run(args, {
+            ...options,
+            captureOutput: false,
+        });
+    }
+
+    private async spawnSvn(
+        args: string[],
+        options: RunSvnOptions,
+        timeoutMs?: number
+    ): Promise<{ stdout: string; stderr: string }> {
+        const captureOutput = options.captureOutput ?? true;
+
+        return await new Promise((resolve, reject) => {
+            const child = spawn("svn", args, {
+                cwd: options.cwd,
+                stdio: ["ignore", "pipe", "pipe"],
+            });
+            let stdout = "";
+            let stderr = "";
+            let retainedOutput = "";
+            let timedOut = false;
+            let finished = false;
+            let killTimer: NodeJS.Timeout | undefined;
+            let forceKillTimer: NodeJS.Timeout | undefined;
+
+            child.stdout.setEncoding("utf8");
+            child.stderr.setEncoding("utf8");
+
+            const cleanup = (): void => {
+                if (killTimer) {
+                    clearTimeout(killTimer);
+                }
+
+                if (forceKillTimer) {
+                    clearTimeout(forceKillTimer);
+                }
+            };
+
+            const finish = (handler: () => void): void => {
+                if (finished) {
+                    return;
+                }
+
+                finished = true;
+                cleanup();
+                handler();
+            };
+
+            child.stdout.on("data", (chunk: string) => {
+                if (captureOutput) {
+                    stdout += chunk;
+                } else {
+                    retainedOutput = this.appendRetainedOutput(retainedOutput, chunk);
+                }
+
+                if (!options.quiet && !captureOutput) {
+                    this.outputChannel.append(chunk);
+                }
+            });
+
+            child.stderr.on("data", (chunk: string) => {
+                if (captureOutput) {
+                    stderr += chunk;
+                } else {
+                    retainedOutput = this.appendRetainedOutput(retainedOutput, chunk);
+                }
+
+                if (!options.quiet && !captureOutput) {
+                    this.outputChannel.append(chunk);
+                }
+            });
+
+            child.once("error", (error) => {
+                finish(() => reject(error));
+            });
+
+            child.once("close", (code, signal) => {
+                finish(() => {
+                    if (code === 0 && signal === null) {
+                        resolve({ stdout, stderr });
+                        return;
+                    }
+
+                    const outputExcerpt = captureOutput ? stderr || stdout : retainedOutput;
+                    reject(
+                        this.createProcessError(args, {
+                            code,
+                            signal,
+                            timedOut,
+                            outputExcerpt,
+                        })
+                    );
+                });
+            });
+
+            if (typeof timeoutMs === "number" && timeoutMs > 0) {
+                killTimer = setTimeout(() => {
+                    timedOut = true;
+                    child.kill("SIGTERM");
+
+                    forceKillTimer = setTimeout(() => {
+                        child.kill("SIGKILL");
+                    }, 1000);
+                }, timeoutMs);
+            }
+        });
     }
 
     private toRelativeTargets(rootPath: string, paths?: string[]): string[] {
@@ -681,6 +793,13 @@ export class SvnService {
             totalAttempts > 1 && attempt > 1 ? ` [attempt ${attempt}/${totalAttempts}]` : "";
 
         return `svn ${args.join(" ")}${renderedCwd}${attemptSuffix}`;
+    }
+
+    private appendRetainedOutput(current: string, chunk: string): string {
+        const nextValue = current + chunk;
+        return nextValue.length <= retainedErrorOutputLimit
+            ? nextValue
+            : nextValue.slice(-retainedErrorOutputLimit);
     }
 
     private resolveTimeoutMs(
@@ -732,6 +851,30 @@ export class SvnService {
         await new Promise<void>((resolve) => {
             setTimeout(resolve, milliseconds);
         });
+    }
+
+    private createProcessError(
+        args: string[],
+        options: {
+            code: number | null;
+            signal: NodeJS.Signals | null;
+            timedOut: boolean;
+            outputExcerpt: string;
+        }
+    ): Error {
+        const action = args[0] ?? "command";
+        const excerpt = options.outputExcerpt.trim();
+        const message = options.timedOut
+            ? `svn ${action} timed out.`
+            : excerpt ||
+              `svn ${action} failed with exit code ${options.code ?? "unknown"}.`;
+        const error = new Error(message) as Error & {
+            killed?: boolean;
+            signal?: NodeJS.Signals | null;
+        };
+        error.killed = options.timedOut;
+        error.signal = options.signal;
+        return error;
     }
 
     private renderError(
