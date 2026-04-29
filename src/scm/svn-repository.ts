@@ -93,6 +93,7 @@ import {
 } from "./svn-output-formatters";
 import { partitionStatusEntries } from "./svn-repository-status-utils";
 import { ScmResource } from "./scm-resource";
+import { deriveCheckoutDestinationName } from "./svn-checkout-utils";
 import {
     buildHistoryFileExportName,
     buildReferenceDestinationPath,
@@ -1816,6 +1817,14 @@ export class SvnRepository implements vscode.Disposable {
             );
         }
 
+        if (action === "checkout-directory") {
+            return undefined;
+        }
+
+        if (action === "export-directory") {
+            return undefined;
+        }
+
         await this.runRepositoryBrowserFileAction(action, normalizedRepositoryPath, url);
         return undefined;
     }
@@ -2143,6 +2152,12 @@ export class SvnRepository implements vscode.Disposable {
             case "show-properties":
                 await this.showRepositoryPathProperties(repositoryPath, url);
                 return;
+            case "checkout-directory":
+                await this.checkoutRepositoryDirectoryAt(repositoryPath);
+                return;
+            case "export-directory":
+                await this.exportRepositoryDirectoryAt(repositoryPath);
+                return;
             case "create-directory":
                 await this.createRepositoryDirectoryAt(repositoryPath);
                 return;
@@ -2219,6 +2234,12 @@ export class SvnRepository implements vscode.Disposable {
             ),
             openHistoryActionLabel: this.i18n.t("openHistoryActionLabel"),
             showPropertiesActionLabel: this.i18n.t("showPropertiesActionLabel"),
+            checkoutDirectoryActionLabel: this.i18n.t(
+                "repositoryBrowserCheckoutDirectoryActionLabel"
+            ),
+            exportDirectoryActionLabel: this.i18n.t(
+                "repositoryBrowserExportDirectoryActionLabel"
+            ),
             showBlameActionLabel: this.i18n.t("showBlameActionLabel"),
             showBlameOutputActionLabel: this.i18n.t("showBlameOutputActionLabel"),
             copyBlameLineActionLabel: this.i18n.t("copyBlameLineActionLabel"),
@@ -2273,6 +2294,64 @@ export class SvnRepository implements vscode.Disposable {
         void vscode.window.showInformationMessage(
             this.i18n.t("repositoryBrowserCreatedDirectoryInfo", {
                 path: destinationPath,
+            })
+        );
+    }
+
+    private async checkoutRepositoryDirectoryAt(repositoryPath: string): Promise<void> {
+        const targetUrl = buildRepositoryUrl(this.info.repositoryRoot, repositoryPath);
+        const destinationPath = await this.promptRepositoryBrowserTransferDestination(
+            "checkout",
+            repositoryPath,
+            targetUrl
+        );
+        if (!destinationPath) {
+            return;
+        }
+
+        await this.runNotificationProgress(
+            this.i18n.t("repositoryBrowserCheckoutDirectoryProgress", {
+                path: repositoryPath,
+            }),
+            async () => {
+                await this.svnService.checkout(targetUrl, "HEAD", destinationPath);
+            }
+        );
+
+        await this.revealCreatedPath(
+            destinationPath,
+            this.i18n.t("repositoryBrowserCheckedOutDirectoryInfo", {
+                path: repositoryPath,
+                destination: destinationPath,
+            })
+        );
+    }
+
+    private async exportRepositoryDirectoryAt(repositoryPath: string): Promise<void> {
+        const targetUrl = buildRepositoryUrl(this.info.repositoryRoot, repositoryPath);
+        const destinationPath = await this.promptRepositoryBrowserTransferDestination(
+            "export",
+            repositoryPath,
+            targetUrl
+        );
+        if (!destinationPath) {
+            return;
+        }
+
+        await this.runNotificationProgress(
+            this.i18n.t("repositoryBrowserExportDirectoryProgress", {
+                path: repositoryPath,
+            }),
+            async () => {
+                await this.svnService.export(targetUrl, "HEAD", destinationPath);
+            }
+        );
+
+        await this.revealCreatedPath(
+            destinationPath,
+            this.i18n.t("repositoryBrowserExportedDirectoryInfo", {
+                path: repositoryPath,
+                destination: destinationPath,
             })
         );
     }
@@ -2389,6 +2468,12 @@ export class SvnRepository implements vscode.Disposable {
         url: string
     ): Promise<string | undefined> {
         switch (action) {
+            case "checkout-directory":
+                await this.checkoutRepositoryDirectoryAt(repositoryPath);
+                return undefined;
+            case "export-directory":
+                await this.exportRepositoryDirectoryAt(repositoryPath);
+                return undefined;
             case "show-history":
                 await this.showHistoryForRepositoryPath(repositoryPath);
                 return undefined;
@@ -3758,6 +3843,78 @@ export class SvnRepository implements vscode.Disposable {
         }
 
         return resolveRepositoryBrowserChildPath(repositoryPath, trimmedValue);
+    }
+
+    private async promptRepositoryBrowserTransferDestination(
+        operation: "checkout" | "export",
+        repositoryPath: string,
+        targetUrl: string
+    ): Promise<string | undefined> {
+        const selectParentTitleKey =
+            operation === "checkout"
+                ? "repositoryBrowserSelectCheckoutParentFolderTitle"
+                : "repositoryBrowserSelectExportParentFolderTitle";
+        const folderNamePromptKey =
+            operation === "checkout"
+                ? "repositoryBrowserCheckoutFolderNamePrompt"
+                : "repositoryBrowserExportFolderNamePrompt";
+        const titleKey =
+            operation === "checkout"
+                ? "repositoryBrowserCheckoutDirectoryActionLabel"
+                : "repositoryBrowserExportDirectoryActionLabel";
+        const defaultName =
+            operation === "checkout"
+                ? deriveCheckoutDestinationName(targetUrl, "HEAD")
+                : `${deriveCheckoutDestinationName(targetUrl, "HEAD")}-export`;
+        const selectedFolders = await vscode.window.showOpenDialog({
+            canSelectFiles: false,
+            canSelectFolders: true,
+            canSelectMany: false,
+            openLabel: this.i18n.t("selectParentFolderLabel"),
+            title: this.i18n.t(selectParentTitleKey, {
+                path: repositoryPath,
+            }),
+        });
+        const parentFolder = selectedFolders?.[0];
+        if (!parentFolder) {
+            return undefined;
+        }
+
+        const folderName = await vscode.window.showInputBox({
+            title: this.i18n.t(titleKey),
+            prompt: this.i18n.t(folderNamePromptKey, {
+                path: repositoryPath,
+            }),
+            value: defaultName,
+            validateInput: (value) => {
+                const trimmed = value.trim();
+                if (!trimmed) {
+                    return this.i18n.t("folderNameRequired");
+                }
+
+                if (trimmed.includes("/") || trimmed.includes("\\")) {
+                    return this.i18n.t("folderNamePathWarning");
+                }
+
+                return undefined;
+            },
+        });
+        const trimmedFolderName = folderName?.trim();
+        if (!trimmedFolderName) {
+            return undefined;
+        }
+
+        const destinationPath = nodePath.join(parentFolder.fsPath, trimmedFolderName);
+        if (await this.pathExists(destinationPath)) {
+            void vscode.window.showWarningMessage(
+                this.i18n.t("destinationExistsWarning", {
+                    destination: destinationPath,
+                })
+            );
+            return undefined;
+        }
+
+        return destinationPath;
     }
 
     private async promptRepositoryBrowserDirectoryDestination(

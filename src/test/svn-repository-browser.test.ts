@@ -36,6 +36,8 @@ test("repository browser helpers build actions and sorted entries", () => {
             actionsSeparator: "actions",
             openHistoryActionLabel: "history",
             showPropertiesActionLabel: "properties",
+            checkoutDirectoryActionLabel: "checkout-dir",
+            exportDirectoryActionLabel: "export-dir",
             createDirectoryActionLabel: "create-dir",
             copyDirectoryActionLabel: "copy-dir",
             moveDirectoryActionLabel: "move-dir",
@@ -54,6 +56,8 @@ test("repository browser helpers build actions and sorted entries", () => {
 
     assert.equal(items.some((item) => item.action === "switch-here"), true);
     assert.equal(items.some((item) => item.action === "delete-reference"), true);
+    assert.equal(items.some((item) => item.action === "checkout-directory"), true);
+    assert.equal(items.some((item) => item.action === "export-directory"), true);
     assert.equal(items.some((item) => item.action === "create-directory"), true);
     assert.equal(items.some((item) => item.action === "copy-directory"), true);
     assert.equal(items.some((item) => item.action === "move-directory"), true);
@@ -75,6 +79,8 @@ test("repository browser helpers gate destructive current-directory actions", ()
             actionsSeparator: "actions",
             openHistoryActionLabel: "history",
             showPropertiesActionLabel: "properties",
+            checkoutDirectoryActionLabel: "checkout-dir",
+            exportDirectoryActionLabel: "export-dir",
             createDirectoryActionLabel: "create-dir",
             copyDirectoryActionLabel: "copy-dir",
             moveDirectoryActionLabel: "move-dir",
@@ -93,6 +99,8 @@ test("repository browser helpers gate destructive current-directory actions", ()
 
     assert.equal(items.some((item) => item.action === "move-directory"), false);
     assert.equal(items.some((item) => item.action === "delete-directory"), false);
+    assert.equal(items.some((item) => item.action === "checkout-directory"), true);
+    assert.equal(items.some((item) => item.action === "export-directory"), true);
     assert.equal(items.some((item) => item.action === "copy-directory"), true);
 });
 
@@ -170,6 +178,8 @@ test("repository browser helpers build webview view model", () => {
             openDirectoryActionLabel: "open-dir",
             openHistoryActionLabel: "history",
             showPropertiesActionLabel: "properties",
+            checkoutDirectoryActionLabel: "checkout-dir",
+            exportDirectoryActionLabel: "export-dir",
             showBlameActionLabel: "blame",
             showBlameOutputActionLabel: "blame-output",
             copyBlameLineActionLabel: "copy-line",
@@ -193,8 +203,18 @@ test("repository browser helpers build webview view model", () => {
         ["repo", "project", "branches", "release-1.0"]
     );
     assert.equal(model.currentActions.some((item) => item.id === "switch-here"), true);
+    assert.equal(model.currentActions.some((item) => item.id === "checkout-directory"), true);
+    assert.equal(model.currentActions.some((item) => item.id === "export-directory"), true);
     assert.equal(model.entries[0]?.name, "assets");
     assert.equal(model.entries[0]?.actions[0]?.id, "open-directory");
+    assert.equal(
+        model.entries[0]?.actions.some((item) => item.id === "checkout-directory"),
+        true
+    );
+    assert.equal(
+        model.entries[0]?.actions.some((item) => item.id === "export-directory"),
+        true
+    );
     assert.equal(model.entries[1]?.name, "b.ts");
     assert.equal(model.entries[1]?.actions.some((item) => item.id === "show-blame"), true);
 });

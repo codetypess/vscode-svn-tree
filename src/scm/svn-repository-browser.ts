@@ -11,6 +11,8 @@ import {
 export type RepositoryBrowserAction =
     | "show-history"
     | "show-properties"
+    | "checkout-directory"
+    | "export-directory"
     | "create-directory"
     | "copy-directory"
     | "move-directory"
@@ -45,12 +47,16 @@ export interface RepositoryBrowserFileActionQuickPickItem extends vscode.QuickPi
 
 export type RepositoryBrowserEntryAction =
     | "open-directory"
+    | "checkout-directory"
+    | "export-directory"
     | RepositoryBrowserFileAction;
 
 interface RepositoryBrowserStrings {
     readonly actionsSeparator: string;
     readonly openHistoryActionLabel: string;
     readonly showPropertiesActionLabel: string;
+    readonly checkoutDirectoryActionLabel: string;
+    readonly exportDirectoryActionLabel: string;
     readonly createDirectoryActionLabel: string;
     readonly copyDirectoryActionLabel: string;
     readonly moveDirectoryActionLabel: string;
@@ -113,6 +119,8 @@ export interface RepositoryBrowserViewStrings {
     readonly openDirectoryActionLabel: string;
     readonly openHistoryActionLabel: string;
     readonly showPropertiesActionLabel: string;
+    readonly checkoutDirectoryActionLabel: string;
+    readonly exportDirectoryActionLabel: string;
     readonly showBlameActionLabel: string;
     readonly showBlameOutputActionLabel: string;
     readonly copyBlameLineActionLabel: string;
@@ -181,6 +189,22 @@ export function buildRepositoryBrowserItems(options: {
             description: options.currentRepositoryPath,
             itemType: "action",
             action: "show-properties",
+            repositoryPath: options.currentRepositoryPath,
+            url: options.currentUrl,
+        },
+        {
+            label: options.strings.checkoutDirectoryActionLabel,
+            description: options.currentRepositoryPath,
+            itemType: "action",
+            action: "checkout-directory",
+            repositoryPath: options.currentRepositoryPath,
+            url: options.currentUrl,
+        },
+        {
+            label: options.strings.exportDirectoryActionLabel,
+            description: options.currentRepositoryPath,
+            itemType: "action",
+            action: "export-directory",
             repositoryPath: options.currentRepositoryPath,
             url: options.currentUrl,
         },
@@ -544,6 +568,16 @@ function buildRepositoryBrowserCurrentActions(options: {
         createAction("show-history", options.strings.openHistoryActionLabel, "history"),
         createAction("show-properties", options.strings.showPropertiesActionLabel, "symbol-property"),
         createAction(
+            "checkout-directory",
+            options.strings.checkoutDirectoryActionLabel,
+            "repo-clone"
+        ),
+        createAction(
+            "export-directory",
+            options.strings.exportDirectoryActionLabel,
+            "export"
+        ),
+        createAction(
             "create-directory",
             options.strings.createDirectoryActionLabel,
             "new-folder"
@@ -651,6 +685,16 @@ function buildDirectoryEntryActions(
 ): RepositoryBrowserViewActionItem<RepositoryBrowserEntryAction>[] {
     return [
         createAction("open-directory", strings.openDirectoryActionLabel, "folder-opened"),
+        createAction(
+            "checkout-directory",
+            strings.checkoutDirectoryActionLabel,
+            "repo-clone"
+        ),
+        createAction(
+            "export-directory",
+            strings.exportDirectoryActionLabel,
+            "export"
+        ),
         createAction("show-history", strings.openHistoryActionLabel, "history"),
         createAction("show-properties", strings.showPropertiesActionLabel, "symbol-property"),
         createAction("copy-url", strings.copyRepositoryUrlActionLabel, "link"),

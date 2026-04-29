@@ -73,6 +73,8 @@ const englishMessages = {
     repositoryBrowserSelectEntryHint:
         "Select a repository entry to see available actions.",
     repositoryBrowserOpenDirectoryActionLabel: "Open Directory",
+    repositoryBrowserCheckoutDirectoryActionLabel: "Checkout This Repository Directory",
+    repositoryBrowserExportDirectoryActionLabel: "Export To Directory",
     repositoryBrowserOpenEntryColumnLabel: "Open",
     repositoryBrowserCreateDirectoryActionLabel: "Create Remote Directory Here",
     repositoryBrowserCopyDirectoryActionLabel: "Copy This Directory",
@@ -337,6 +339,12 @@ const englishMessages = {
     repositoryBrowserEmptyLabel: "(empty directory)",
     repositoryBrowserSwitchHereLabel: "Switch Working Copy Here",
     repositoryBrowserFileActionsPlaceholder: "Actions for {path}",
+    repositoryBrowserSelectCheckoutParentFolderTitle:
+        "Select parent folder for a new checkout of {path}",
+    repositoryBrowserCheckoutFolderNamePrompt: "Folder name for the new checkout of {path}",
+    repositoryBrowserSelectExportParentFolderTitle:
+        "Select parent folder for a new export of {path}",
+    repositoryBrowserExportFolderNamePrompt: "Folder name for the new export of {path}",
     repositoryBrowserCreateDirectoryPrompt: "New directory path under {path}",
     repositoryBrowserCreateDirectoryPlaceholder: "docs, release/1.0, or assets/images",
     repositoryBrowserCopyDirectoryPrompt:
@@ -364,6 +372,14 @@ const englishMessages = {
     repositoryBrowserDeleteDirectoryDetail:
         "This immediately deletes the remote directory {target} by creating an SVN commit.",
     repositoryBrowserDeleteDirectoryCommitMessage: "Delete {target}",
+    repositoryBrowserCheckoutDirectoryProgress:
+        "Checking out repository directory {path}...",
+    repositoryBrowserCheckedOutDirectoryInfo:
+        "Checked out repository directory {path} to {destination}.",
+    repositoryBrowserExportDirectoryProgress:
+        "Exporting repository directory {path}...",
+    repositoryBrowserExportedDirectoryInfo:
+        "Exported repository directory {path} to {destination}.",
     repositoryBrowserDeleteDirectoryProgress: "Deleting directory {target}...",
     repositoryBrowserDeletedDirectoryInfo: "Deleted directory {target}.",
     infoPathLabel: "Path",
@@ -725,6 +741,8 @@ const messages: Record<SupportedLocale, MessageCatalog> = {
         repositoryBrowserSelectedEntrySectionTitle: "当前选中条目",
         repositoryBrowserSelectEntryHint: "选择一个仓库条目以查看可用操作。",
         repositoryBrowserOpenDirectoryActionLabel: "打开目录",
+        repositoryBrowserCheckoutDirectoryActionLabel: "检出到新目录",
+        repositoryBrowserExportDirectoryActionLabel: "导出到目录",
         repositoryBrowserOpenEntryColumnLabel: "打开",
         repositoryBrowserCreateDirectoryActionLabel: "在这里创建远端目录",
         repositoryBrowserCopyDirectoryActionLabel: "复制当前目录",
@@ -980,6 +998,10 @@ const messages: Record<SupportedLocale, MessageCatalog> = {
         repositoryBrowserEmptyLabel: "（空目录）",
         repositoryBrowserSwitchHereLabel: "切换工作副本到这里",
         repositoryBrowserFileActionsPlaceholder: "{path} 的操作",
+        repositoryBrowserSelectCheckoutParentFolderTitle: "选择用于新检出 {path} 的父文件夹",
+        repositoryBrowserCheckoutFolderNamePrompt: "输入 {path} 新检出的文件夹名称",
+        repositoryBrowserSelectExportParentFolderTitle: "选择用于导出 {path} 的父文件夹",
+        repositoryBrowserExportFolderNamePrompt: "输入 {path} 导出的文件夹名称",
         repositoryBrowserCreateDirectoryPrompt: "输入要在 {path} 下创建的新目录路径",
         repositoryBrowserCreateDirectoryPlaceholder: "docs、release/1.0 或 assets/images",
         repositoryBrowserCopyDirectoryPrompt:
@@ -1007,6 +1029,12 @@ const messages: Record<SupportedLocale, MessageCatalog> = {
         repositoryBrowserDeleteDirectoryDetail:
             "这会通过一次 SVN 提交立即删除远端目录 {target}。",
         repositoryBrowserDeleteDirectoryCommitMessage: "删除 {target}",
+        repositoryBrowserCheckoutDirectoryProgress: "正在检出仓库目录 {path}...",
+        repositoryBrowserCheckedOutDirectoryInfo:
+            "已将仓库目录 {path} 检出到 {destination}。",
+        repositoryBrowserExportDirectoryProgress: "正在导出仓库目录 {path}...",
+        repositoryBrowserExportedDirectoryInfo:
+            "已将仓库目录 {path} 导出到 {destination}。",
         repositoryBrowserDeleteDirectoryProgress: "正在删除目录 {target}...",
         repositoryBrowserDeletedDirectoryInfo: "已删除目录 {target}。",
         infoPathLabel: "路径",
