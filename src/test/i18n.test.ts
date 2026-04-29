@@ -49,10 +49,6 @@ test("createI18n returns repository action prompts", () => {
         "Repository Browser: /project/trunk"
     );
     assert.equal(
-        english.t("repositoryBrowserCurrentDirectorySectionTitle"),
-        "Current Directory"
-    );
-    assert.equal(
         english.t("repositoryBrowserOpenDirectoryActionLabel"),
         "Open Directory"
     );
@@ -174,7 +170,6 @@ test("createI18n returns repository action prompts", () => {
         chinese.t("repositoryBrowserPanelTitle", { path: "/project/trunk" }),
         "仓库浏览器：/project/trunk"
     );
-    assert.equal(chinese.t("repositoryBrowserCurrentDirectorySectionTitle"), "当前目录");
     assert.equal(chinese.t("repositoryBrowserOpenDirectoryActionLabel"), "打开目录");
     assert.equal(
         chinese.t("repositoryBrowserCheckoutDirectoryActionLabel"),

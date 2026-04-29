@@ -13,6 +13,7 @@ export interface RepositoryBrowserBootstrap {
     repositoryLabel: string;
     rootPath: string;
     initialRepositoryPath: string;
+    currentWorkingCopyRepositoryPath: string;
     locale: SupportedLocale;
 }
 

@@ -49,6 +49,14 @@ export type RepositoryBrowserEntryAction =
     | "open-directory"
     | "checkout-directory"
     | "export-directory"
+    | "create-directory"
+    | "copy-directory"
+    | "move-directory"
+    | "delete-directory"
+    | "switch-here"
+    | "create-branch-from-working-copy"
+    | "create-tag-from-working-copy"
+    | "delete-reference"
     | RepositoryBrowserFileAction;
 
 interface RepositoryBrowserStrings {
@@ -108,6 +116,7 @@ export interface RepositoryBrowserEntryItem {
 export interface RepositoryBrowserViewModel {
     readonly currentRepositoryPath: string;
     readonly currentUrl: string;
+    readonly currentWorkingCopyRepositoryPath: string;
     readonly parentRepositoryPath?: string;
     readonly breadcrumbs: readonly RepositoryBrowserBreadcrumbItem[];
     readonly currentActions: readonly RepositoryBrowserViewActionItem<RepositoryBrowserAction>[];
@@ -425,17 +434,21 @@ export function buildRepositoryBrowserViewModel(options: {
     readonly strings: RepositoryBrowserViewStrings;
 }): RepositoryBrowserViewModel {
     const currentRepositoryPath = normalizeRepositoryPath(options.currentRepositoryPath);
+    const currentWorkingCopyRepositoryPath = normalizeRepositoryPath(
+        options.currentWorkingCopyRepositoryPath
+    );
     const currentUrl = options.currentUrl;
     const currentActions = buildRepositoryBrowserCurrentActions({
         currentRepositoryPath,
         currentUrl,
-        currentWorkingCopyRepositoryPath: options.currentWorkingCopyRepositoryPath,
+        currentWorkingCopyRepositoryPath,
         strings: options.strings,
     });
 
     return {
         currentRepositoryPath,
         currentUrl,
+        currentWorkingCopyRepositoryPath,
         parentRepositoryPath:
             currentRepositoryPath !== "/" ? getParentRepositoryPath(currentRepositoryPath) : undefined,
         breadcrumbs: buildRepositoryBrowserBreadcrumbs(
@@ -446,6 +459,7 @@ export function buildRepositoryBrowserViewModel(options: {
         entries: buildRepositoryBrowserEntryItems({
             currentRepositoryPath,
             repositoryRoot: options.repositoryRoot,
+            currentWorkingCopyRepositoryPath,
             entries: options.entries,
             formatNodeKind: options.formatNodeKind,
             strings: options.strings,
@@ -645,6 +659,7 @@ function buildRepositoryBrowserCurrentActions(options: {
 function buildRepositoryBrowserEntryItems(options: {
     readonly currentRepositoryPath: string;
     readonly repositoryRoot: string;
+    readonly currentWorkingCopyRepositoryPath: string;
     readonly entries: readonly SvnRepositoryListEntry[];
     readonly formatNodeKind: (kind: SvnNodeKind) => string;
     readonly strings: RepositoryBrowserViewStrings;
@@ -674,32 +689,116 @@ function buildRepositoryBrowserEntryItems(options: {
             author: entry.author,
             actions:
                 entry.kind === "dir"
-                    ? buildDirectoryEntryActions(options.strings)
+                    ? buildDirectoryEntryActions({
+                          repositoryPath,
+                          currentWorkingCopyRepositoryPath:
+                              options.currentWorkingCopyRepositoryPath,
+                          strings: options.strings,
+                      })
                     : buildFileEntryActions(options.strings),
         };
     });
 }
 
-function buildDirectoryEntryActions(
-    strings: RepositoryBrowserViewStrings
-): RepositoryBrowserViewActionItem<RepositoryBrowserEntryAction>[] {
-    return [
-        createAction("open-directory", strings.openDirectoryActionLabel, "folder-opened"),
+function buildDirectoryEntryActions(options: {
+    readonly repositoryPath: string;
+    readonly currentWorkingCopyRepositoryPath: string;
+    readonly strings: RepositoryBrowserViewStrings;
+}): RepositoryBrowserViewActionItem<RepositoryBrowserEntryAction>[] {
+    const actions: RepositoryBrowserViewActionItem<RepositoryBrowserEntryAction>[] = [
+        createAction(
+            "open-directory",
+            options.strings.openDirectoryActionLabel,
+            "folder-opened"
+        ),
+        createAction(
+            "show-history",
+            options.strings.openHistoryActionLabel,
+            "history"
+        ),
+        createAction(
+            "show-properties",
+            options.strings.showPropertiesActionLabel,
+            "symbol-property"
+        ),
         createAction(
             "checkout-directory",
-            strings.checkoutDirectoryActionLabel,
+            options.strings.checkoutDirectoryActionLabel,
             "repo-clone"
         ),
         createAction(
             "export-directory",
-            strings.exportDirectoryActionLabel,
+            options.strings.exportDirectoryActionLabel,
             "export"
         ),
-        createAction("show-history", strings.openHistoryActionLabel, "history"),
-        createAction("show-properties", strings.showPropertiesActionLabel, "symbol-property"),
-        createAction("copy-url", strings.copyRepositoryUrlActionLabel, "link"),
-        createAction("copy-path", strings.copyRepositoryPathActionLabel, "copy"),
+        createAction(
+            "create-directory",
+            options.strings.createDirectoryActionLabel,
+            "new-folder"
+        ),
+        createAction(
+            "create-branch-from-working-copy",
+            options.strings.createBranchFromWorkingCopyActionLabel,
+            "git-branch"
+        ),
+        createAction(
+            "create-tag-from-working-copy",
+            options.strings.createTagFromWorkingCopyActionLabel,
+            "tag"
+        ),
     ];
+
+    const canCopyDirectory = normalizeRepositoryPath(options.repositoryPath) !== "/";
+    const canMoveOrDeleteDirectory = canMutateCurrentRepositoryPath(
+        options.repositoryPath,
+        options.currentWorkingCopyRepositoryPath
+    );
+
+    if (canCopyDirectory) {
+        actions.push(
+            createAction("copy-directory", options.strings.copyDirectoryActionLabel, "copy")
+        );
+    }
+
+    if (canMoveOrDeleteDirectory) {
+        actions.push(
+            createAction("move-directory", options.strings.moveDirectoryActionLabel, "move")
+        );
+    }
+
+    if (
+        normalizeRepositoryPath(options.repositoryPath) !==
+        normalizeRepositoryPath(options.currentWorkingCopyRepositoryPath)
+    ) {
+        actions.push(
+            createAction("switch-here", options.strings.switchHereLabel, "git-branch")
+        );
+    }
+
+    actions.push(
+        createAction("copy-url", options.strings.copyRepositoryUrlActionLabel, "link"),
+        createAction("copy-path", options.strings.copyRepositoryPathActionLabel, "copy")
+    );
+
+    if (getReferenceKindForRepositoryPath(options.repositoryPath)) {
+        actions.push(
+            createAction(
+                "delete-reference",
+                options.strings.deleteReferenceActionLabel,
+                "trash"
+            )
+        );
+    } else if (canMoveOrDeleteDirectory) {
+        actions.push(
+            createAction(
+                "delete-directory",
+                options.strings.deleteDirectoryActionLabel,
+                "trash"
+            )
+        );
+    }
+
+    return actions;
 }
 
 function buildFileEntryActions(

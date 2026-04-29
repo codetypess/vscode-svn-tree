@@ -195,6 +195,11 @@ export class RepositoryBrowserPanel implements vscode.Disposable {
                     if (message.action === "open-directory" && nextRepositoryPath) {
                         state.currentRepositoryPath = nextRepositoryPath;
                         await this.pushData(state, repository);
+                        return;
+                    }
+
+                    if (shouldRefreshAfterEntryAction(message.action)) {
+                        await this.pushData(state, repository);
                     }
                     return;
                 }
@@ -302,6 +307,9 @@ export class RepositoryBrowserPanel implements vscode.Disposable {
         repositoryLabel: ${JSON.stringify(repository.label)},
         rootPath: ${JSON.stringify(repository.rootPath)},
         initialRepositoryPath: ${JSON.stringify(repositoryPath)},
+        currentWorkingCopyRepositoryPath: ${JSON.stringify(
+            repository.info.repositoryRelativePath
+        )},
         locale: ${JSON.stringify(locale as SupportedLocale)}
       };
     </script>
@@ -312,6 +320,22 @@ export class RepositoryBrowserPanel implements vscode.Disposable {
 }
 
 function shouldRefreshAfterCurrentAction(action: RepositoryBrowserAction): boolean {
+    switch (action) {
+        case "create-directory":
+        case "copy-directory":
+        case "move-directory":
+        case "delete-directory":
+        case "switch-here":
+        case "create-branch-from-working-copy":
+        case "create-tag-from-working-copy":
+        case "delete-reference":
+            return true;
+        default:
+            return false;
+    }
+}
+
+function shouldRefreshAfterEntryAction(action: RepositoryBrowserEntryAction): boolean {
     switch (action) {
         case "create-directory":
         case "copy-directory":

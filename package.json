@@ -2,7 +2,7 @@
   "name": "svn-tree",
   "displayName": "%displayName%",
   "description": "%description%",
-  "version": "1.3.0",
+  "version": "1.4.0",
   "publisher": "codetypess",
   "license": "MIT",
   "icon": "media/icon.png",

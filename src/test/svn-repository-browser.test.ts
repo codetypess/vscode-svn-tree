@@ -202,17 +202,29 @@ test("repository browser helpers build webview view model", () => {
         model.breadcrumbs.map((item) => item.label),
         ["repo", "project", "branches", "release-1.0"]
     );
+    assert.equal(model.currentWorkingCopyRepositoryPath, "/project/trunk");
     assert.equal(model.currentActions.some((item) => item.id === "switch-here"), true);
     assert.equal(model.currentActions.some((item) => item.id === "checkout-directory"), true);
     assert.equal(model.currentActions.some((item) => item.id === "export-directory"), true);
     assert.equal(model.entries[0]?.name, "assets");
     assert.equal(model.entries[0]?.actions[0]?.id, "open-directory");
     assert.equal(
+        model.entries[0]?.actions.some((item) => item.id === "create-directory"),
+        true
+    );
+    assert.equal(
         model.entries[0]?.actions.some((item) => item.id === "checkout-directory"),
         true
     );
     assert.equal(
         model.entries[0]?.actions.some((item) => item.id === "export-directory"),
+        true
+    );
+    assert.equal(model.entries[0]?.actions.some((item) => item.id === "copy-directory"), true);
+    assert.equal(model.entries[0]?.actions.some((item) => item.id === "move-directory"), true);
+    assert.equal(model.entries[0]?.actions.some((item) => item.id === "switch-here"), true);
+    assert.equal(
+        model.entries[0]?.actions.some((item) => item.id === "delete-reference"),
         true
     );
     assert.equal(model.entries[1]?.name, "b.ts");

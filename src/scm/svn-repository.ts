@@ -1817,12 +1817,18 @@ export class SvnRepository implements vscode.Disposable {
             );
         }
 
-        if (action === "checkout-directory") {
-            return undefined;
-        }
-
-        if (action === "export-directory") {
-            return undefined;
+        switch (action) {
+            case "checkout-directory":
+            case "export-directory":
+            case "create-directory":
+            case "copy-directory":
+            case "move-directory":
+            case "delete-directory":
+            case "switch-here":
+            case "create-branch-from-working-copy":
+            case "create-tag-from-working-copy":
+            case "delete-reference":
+                return undefined;
         }
 
         await this.runRepositoryBrowserFileAction(action, normalizedRepositoryPath, url);
@@ -2468,29 +2474,13 @@ export class SvnRepository implements vscode.Disposable {
         url: string
     ): Promise<string | undefined> {
         switch (action) {
-            case "checkout-directory":
-                await this.checkoutRepositoryDirectoryAt(repositoryPath);
-                return undefined;
-            case "export-directory":
-                await this.exportRepositoryDirectoryAt(repositoryPath);
-                return undefined;
-            case "show-history":
-                await this.showHistoryForRepositoryPath(repositoryPath);
-                return undefined;
-            case "show-properties":
-                await this.showRepositoryPathProperties(repositoryPath, url);
-                return undefined;
-            case "copy-url":
-                await this.copyValueToClipboard(url, this.i18n.t("copiedRepositoryUrlStatus"));
-                return undefined;
-            case "copy-path":
-                await this.copyValueToClipboard(
-                    repositoryPath,
-                    this.i18n.t("copiedRepositoryPathStatus")
-                );
+            case "show-blame":
+            case "show-blame-output":
+            case "copy-blame-line":
+            case "open-file":
                 return undefined;
             default:
-                return undefined;
+                return this.runRepositoryBrowserAction(action, repositoryPath, url);
         }
     }
 
