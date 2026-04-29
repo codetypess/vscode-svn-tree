@@ -11,12 +11,14 @@
     ],
     "jsx": "react-jsx",
     "types": [
+      "node",
       "react",
       "react-dom"
     ]
   },
   "include": [
     "src/history/history-panel-webview.tsx",
+    "src/repository-browser/repository-browser-webview.tsx",
     "src/revision-graph/revision-graph-webview.tsx"
   ]
 }

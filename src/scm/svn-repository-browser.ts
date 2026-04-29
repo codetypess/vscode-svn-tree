@@ -43,6 +43,10 @@ export interface RepositoryBrowserFileActionQuickPickItem extends vscode.QuickPi
     readonly action: RepositoryBrowserFileAction;
 }
 
+export type RepositoryBrowserEntryAction =
+    | "open-directory"
+    | RepositoryBrowserFileAction;
+
 interface RepositoryBrowserStrings {
     readonly actionsSeparator: string;
     readonly openHistoryActionLabel: string;
@@ -71,6 +75,58 @@ interface RepositoryBrowserFileActionStrings {
     readonly openFileLabel: string;
     readonly copyRepositoryUrlActionLabel: string;
     readonly copyRepositoryPathActionLabel: string;
+}
+
+export interface RepositoryBrowserViewActionItem<TAction extends string = string> {
+    readonly id: TAction;
+    readonly label: string;
+    readonly icon: string;
+}
+
+export interface RepositoryBrowserBreadcrumbItem {
+    readonly label: string;
+    readonly repositoryPath: string;
+}
+
+export interface RepositoryBrowserEntryItem {
+    readonly repositoryPath: string;
+    readonly url: string;
+    readonly name: string;
+    readonly kind: SvnNodeKind;
+    readonly kindLabel: string;
+    readonly revision?: string;
+    readonly author?: string;
+    readonly actions: readonly RepositoryBrowserViewActionItem<RepositoryBrowserEntryAction>[];
+}
+
+export interface RepositoryBrowserViewModel {
+    readonly currentRepositoryPath: string;
+    readonly currentUrl: string;
+    readonly parentRepositoryPath?: string;
+    readonly breadcrumbs: readonly RepositoryBrowserBreadcrumbItem[];
+    readonly currentActions: readonly RepositoryBrowserViewActionItem<RepositoryBrowserAction>[];
+    readonly entries: readonly RepositoryBrowserEntryItem[];
+}
+
+export interface RepositoryBrowserViewStrings {
+    readonly rootBreadcrumbLabel: string;
+    readonly openDirectoryActionLabel: string;
+    readonly openHistoryActionLabel: string;
+    readonly showPropertiesActionLabel: string;
+    readonly showBlameActionLabel: string;
+    readonly showBlameOutputActionLabel: string;
+    readonly copyBlameLineActionLabel: string;
+    readonly openFileLabel: string;
+    readonly createDirectoryActionLabel: string;
+    readonly copyDirectoryActionLabel: string;
+    readonly moveDirectoryActionLabel: string;
+    readonly deleteDirectoryActionLabel: string;
+    readonly createBranchFromWorkingCopyActionLabel: string;
+    readonly createTagFromWorkingCopyActionLabel: string;
+    readonly copyRepositoryUrlActionLabel: string;
+    readonly copyRepositoryPathActionLabel: string;
+    readonly switchHereLabel: string;
+    readonly deleteReferenceActionLabel: string;
 }
 
 export type RepositoryBrowserPathInputMode = "child-relative" | "sibling-or-absolute";
@@ -335,6 +391,44 @@ export function buildRepositoryBrowserFileActionItems(options: {
     ];
 }
 
+export function buildRepositoryBrowserViewModel(options: {
+    readonly currentRepositoryPath: string;
+    readonly currentUrl: string;
+    readonly repositoryRoot: string;
+    readonly currentWorkingCopyRepositoryPath: string;
+    readonly entries: readonly SvnRepositoryListEntry[];
+    readonly formatNodeKind: (kind: SvnNodeKind) => string;
+    readonly strings: RepositoryBrowserViewStrings;
+}): RepositoryBrowserViewModel {
+    const currentRepositoryPath = normalizeRepositoryPath(options.currentRepositoryPath);
+    const currentUrl = options.currentUrl;
+    const currentActions = buildRepositoryBrowserCurrentActions({
+        currentRepositoryPath,
+        currentUrl,
+        currentWorkingCopyRepositoryPath: options.currentWorkingCopyRepositoryPath,
+        strings: options.strings,
+    });
+
+    return {
+        currentRepositoryPath,
+        currentUrl,
+        parentRepositoryPath:
+            currentRepositoryPath !== "/" ? getParentRepositoryPath(currentRepositoryPath) : undefined,
+        breadcrumbs: buildRepositoryBrowserBreadcrumbs(
+            currentRepositoryPath,
+            options.strings.rootBreadcrumbLabel
+        ),
+        currentActions,
+        entries: buildRepositoryBrowserEntryItems({
+            currentRepositoryPath,
+            repositoryRoot: options.repositoryRoot,
+            entries: options.entries,
+            formatNodeKind: options.formatNodeKind,
+            strings: options.strings,
+        }),
+    };
+}
+
 export function canMutateCurrentRepositoryPath(
     currentRepositoryPath: string,
     currentWorkingCopyRepositoryPath: string
@@ -415,4 +509,178 @@ export function getRepositoryBrowserMutationTargetValidationError(
     }
 
     return undefined;
+}
+
+export function buildRepositoryBrowserBreadcrumbs(
+    currentRepositoryPath: string,
+    rootLabel: string
+): RepositoryBrowserBreadcrumbItem[] {
+    const normalizedPath = normalizeRepositoryPath(currentRepositoryPath);
+    const segments = splitRepositoryPath(normalizedPath);
+    const breadcrumbs: RepositoryBrowserBreadcrumbItem[] = [
+        {
+            label: rootLabel,
+            repositoryPath: "/",
+        },
+    ];
+
+    for (let index = 0; index < segments.length; index += 1) {
+        breadcrumbs.push({
+            label: segments[index] ?? "",
+            repositoryPath: normalizeRepositoryPath(segments.slice(0, index + 1).join("/")),
+        });
+    }
+
+    return breadcrumbs;
+}
+
+function buildRepositoryBrowserCurrentActions(options: {
+    readonly currentRepositoryPath: string;
+    readonly currentUrl: string;
+    readonly currentWorkingCopyRepositoryPath: string;
+    readonly strings: RepositoryBrowserViewStrings;
+}): RepositoryBrowserViewActionItem<RepositoryBrowserAction>[] {
+    const actions: RepositoryBrowserViewActionItem<RepositoryBrowserAction>[] = [
+        createAction("show-history", options.strings.openHistoryActionLabel, "history"),
+        createAction("show-properties", options.strings.showPropertiesActionLabel, "symbol-property"),
+        createAction(
+            "create-directory",
+            options.strings.createDirectoryActionLabel,
+            "new-folder"
+        ),
+        createAction(
+            "create-branch-from-working-copy",
+            options.strings.createBranchFromWorkingCopyActionLabel,
+            "git-branch"
+        ),
+        createAction(
+            "create-tag-from-working-copy",
+            options.strings.createTagFromWorkingCopyActionLabel,
+            "tag"
+        ),
+    ];
+    const canCopyCurrentDirectory = normalizeRepositoryPath(options.currentRepositoryPath) !== "/";
+    const canMoveOrDeleteCurrentDirectory = canMutateCurrentRepositoryPath(
+        options.currentRepositoryPath,
+        options.currentWorkingCopyRepositoryPath
+    );
+
+    if (canCopyCurrentDirectory) {
+        actions.push(
+            createAction("copy-directory", options.strings.copyDirectoryActionLabel, "copy")
+        );
+    }
+
+    if (canMoveOrDeleteCurrentDirectory) {
+        actions.push(
+            createAction("move-directory", options.strings.moveDirectoryActionLabel, "move")
+        );
+    }
+
+    if (
+        normalizeRepositoryPath(options.currentRepositoryPath) !==
+        normalizeRepositoryPath(options.currentWorkingCopyRepositoryPath)
+    ) {
+        actions.push(
+            createAction("switch-here", options.strings.switchHereLabel, "git-branch")
+        );
+    }
+
+    actions.push(
+        createAction("copy-url", options.strings.copyRepositoryUrlActionLabel, "link"),
+        createAction("copy-path", options.strings.copyRepositoryPathActionLabel, "copy")
+    );
+
+    if (getReferenceKindForRepositoryPath(options.currentRepositoryPath)) {
+        actions.push(
+            createAction("delete-reference", options.strings.deleteReferenceActionLabel, "trash")
+        );
+    } else if (canMoveOrDeleteCurrentDirectory) {
+        actions.push(
+            createAction(
+                "delete-directory",
+                options.strings.deleteDirectoryActionLabel,
+                "trash"
+            )
+        );
+    }
+
+    return actions;
+}
+
+function buildRepositoryBrowserEntryItems(options: {
+    readonly currentRepositoryPath: string;
+    readonly repositoryRoot: string;
+    readonly entries: readonly SvnRepositoryListEntry[];
+    readonly formatNodeKind: (kind: SvnNodeKind) => string;
+    readonly strings: RepositoryBrowserViewStrings;
+}): RepositoryBrowserEntryItem[] {
+    const sortedEntries = [...options.entries].sort((left, right) => {
+        if (left.kind !== right.kind) {
+            return left.kind === "dir" ? -1 : 1;
+        }
+
+        return left.name.localeCompare(right.name);
+    });
+
+    return sortedEntries.map((entry) => {
+        const repositoryPath = normalizeRepositoryPath(
+            [options.currentRepositoryPath, entry.name]
+                .filter((segment) => segment !== "/")
+                .join("/")
+        );
+
+        return {
+            repositoryPath,
+            url: buildRepositoryUrl(options.repositoryRoot, repositoryPath),
+            name: entry.name,
+            kind: entry.kind,
+            kindLabel: options.formatNodeKind(entry.kind),
+            revision: entry.revision,
+            author: entry.author,
+            actions:
+                entry.kind === "dir"
+                    ? buildDirectoryEntryActions(options.strings)
+                    : buildFileEntryActions(options.strings),
+        };
+    });
+}
+
+function buildDirectoryEntryActions(
+    strings: RepositoryBrowserViewStrings
+): RepositoryBrowserViewActionItem<RepositoryBrowserEntryAction>[] {
+    return [
+        createAction("open-directory", strings.openDirectoryActionLabel, "folder-opened"),
+        createAction("show-history", strings.openHistoryActionLabel, "history"),
+        createAction("show-properties", strings.showPropertiesActionLabel, "symbol-property"),
+        createAction("copy-url", strings.copyRepositoryUrlActionLabel, "link"),
+        createAction("copy-path", strings.copyRepositoryPathActionLabel, "copy"),
+    ];
+}
+
+function buildFileEntryActions(
+    strings: RepositoryBrowserViewStrings
+): RepositoryBrowserViewActionItem<RepositoryBrowserEntryAction>[] {
+    return [
+        createAction("show-history", strings.openHistoryActionLabel, "history"),
+        createAction("show-properties", strings.showPropertiesActionLabel, "symbol-property"),
+        createAction("show-blame", strings.showBlameActionLabel, "comment-discussion"),
+        createAction("show-blame-output", strings.showBlameOutputActionLabel, "output"),
+        createAction("copy-blame-line", strings.copyBlameLineActionLabel, "copy"),
+        createAction("open-file", strings.openFileLabel, "go-to-file"),
+        createAction("copy-url", strings.copyRepositoryUrlActionLabel, "link"),
+        createAction("copy-path", strings.copyRepositoryPathActionLabel, "copy"),
+    ];
+}
+
+function createAction<TAction extends string>(
+    id: TAction,
+    label: string,
+    icon: string
+): RepositoryBrowserViewActionItem<TAction> {
+    return {
+        id,
+        label,
+        icon,
+    };
 }

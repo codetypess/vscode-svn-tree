@@ -1,0 +1,324 @@
+html,
+body {
+  height: 100%;
+  overflow: hidden;
+}
+
+.page {
+  height: 100vh;
+  overflow: hidden;
+}
+
+.card {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  min-height: 0;
+}
+
+.browser-layout {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+}
+
+.browser-main-panel {
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+}
+
+.browser-toolbar-title {
+  cursor: context-menu;
+}
+
+.browser-table-header,
+.browser-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 90px 90px 132px 44px;
+  gap: 10px;
+  align-items: center;
+}
+
+.browser-table-header {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+}
+
+.browser-entry-list {
+  min-height: 0;
+  overflow: auto;
+}
+
+.browser-virtualized {
+  position: relative;
+  min-height: 100%;
+}
+
+.browser-virtual-item {
+  position: absolute;
+  left: 0;
+  right: 0;
+  width: 100%;
+}
+
+.browser-error-banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  border-bottom: 1px solid color-mix(in srgb, var(--vscode-errorForeground, #f48771) 28%, transparent);
+  color: var(--vscode-errorForeground, #f48771);
+  background: color-mix(in srgb, var(--vscode-errorForeground, #f48771) 10%, transparent);
+}
+
+.browser-error-banner .codicon {
+  font-size: 14px;
+}
+
+.browser-row {
+  min-height: 34px;
+  height: 34px;
+  padding: 0 16px;
+  cursor: pointer;
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 38%, transparent);
+}
+
+.browser-row:hover {
+  background: var(--row-hover);
+}
+
+.browser-row.is-selected {
+  background: var(--row-active);
+}
+
+.browser-tree-entry-row.is-current-directory,
+.browser-tree-path-row.is-current-directory {
+  background: color-mix(in srgb, var(--focus-border) 12%, transparent);
+}
+
+.browser-tree-entry-row.is-current-directory .tree-label,
+.browser-tree-path-row.is-current-directory .tree-label {
+  color: var(--vscode-editor-foreground);
+  font-weight: 600;
+}
+
+.browser-tree-entry-row.is-current-directory .browser-entry-icon,
+.browser-tree-entry-row.is-current-directory .browser-tree-chevron,
+.browser-tree-path-row.is-current-directory .browser-entry-icon,
+.browser-tree-path-row.is-current-directory .browser-tree-chevron {
+  color: color-mix(in srgb, var(--vscode-editor-foreground) 68%, var(--muted));
+}
+
+.browser-entry-name {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.browser-tree-row {
+  user-select: none;
+}
+
+.browser-tree-name {
+  padding-left: calc(var(--tree-depth, 0) * 16px);
+}
+
+.browser-tree-chevron,
+.browser-tree-spacer {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+button.browser-tree-toggle {
+  min-height: 16px;
+  min-width: 16px;
+  padding: 0;
+  border: 0;
+  border-radius: 3px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: inherit;
+  background: transparent;
+}
+
+button.browser-tree-toggle:not(.context-menu-item):not(.rdp-day_button):not(.rdp-button_next):not(.rdp-button_previous):hover {
+  background: transparent;
+}
+
+button.browser-tree-toggle:focus,
+button.browser-tree-toggle:focus-visible,
+button.browser-tree-toggle:active {
+  background: transparent;
+  outline: none;
+}
+
+.browser-tree-chevron {
+  font-size: 12px;
+  line-height: 1;
+  color: var(--muted);
+}
+
+.browser-tree-chevron.is-loading {
+  animation: browser-tree-spin 1s linear infinite;
+  transform-origin: center;
+}
+
+.browser-tree-entry-row.is-loading .tree-label,
+.browser-tree-path-row .browser-tree-chevron.is-loading + .browser-entry-icon + .tree-label {
+  opacity: 0.82;
+}
+
+@keyframes browser-tree-spin {
+  from {
+    transform: rotate(0deg);
+  }
+
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.browser-tree-spacer {
+  display: inline-block;
+}
+
+.browser-entry-icon {
+  flex: none;
+  color: var(--muted);
+}
+
+.browser-open-cell {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.browser-open-button {
+  min-height: 24px;
+  min-width: 24px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.context-menu-root {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+  pointer-events: none;
+}
+
+.context-menu-backdrop {
+  position: absolute;
+  inset: 0;
+  pointer-events: auto;
+}
+
+.context-menu {
+  position: absolute;
+  min-width: 240px;
+  max-width: min(360px, calc(100vw - 16px));
+  max-height: calc(100vh - 16px);
+  overflow: auto;
+  padding: 5px;
+  border: 1px solid var(--details-border);
+  border-radius: 10px;
+  background: var(--vscode-menu-background, var(--details-bg));
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.32);
+  pointer-events: auto;
+}
+
+.context-menu-header {
+  padding: 8px 10px 10px;
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
+}
+
+.context-menu-title {
+  font-size: 12px;
+  font-weight: 700;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  text-align: left;
+}
+
+.context-menu-subtitle {
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.35;
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+}
+
+.context-menu-actions {
+  padding-top: 2px;
+}
+
+.context-menu-item {
+  width: 100%;
+  min-height: 26px;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 10px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+
+.context-menu-item:hover,
+.context-menu-item:focus-visible {
+  background: var(--row-hover);
+  outline: none;
+}
+
+.context-menu-item.danger,
+.context-menu-item.danger .codicon {
+  color: var(--vscode-editorError-foreground);
+}
+
+.context-menu-item .codicon {
+  width: 16px;
+  flex: none;
+  color: var(--muted);
+}
+
+.context-menu-label {
+  flex: 1;
+  min-width: 0;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+@media (max-width: 960px) {
+  .browser-main-panel {
+    height: 100%;
+  }
+}
+
+@media (max-width: 720px) {
+  .browser-table-header,
+  .browser-row {
+    grid-template-columns: minmax(0, 1fr) 72px 72px 96px 40px;
+    gap: 8px;
+  }
+
+  .context-menu {
+    min-width: min(280px, calc(100vw - 16px));
+  }
+}

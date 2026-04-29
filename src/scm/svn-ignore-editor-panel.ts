@@ -159,27 +159,89 @@ export class SvnIgnoreEditorPanel implements vscode.Disposable {
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <style>
         :root {
-            color-scheme: light dark;
+            color-scheme: var(--vscode-color-scheme);
+            --page-bg: var(--vscode-editor-background, #1e1e1e);
+            --surface-bg: var(--vscode-editor-background, #1e1e1e);
+            --details-bg: var(--vscode-editorWidget-background, var(--page-bg));
+            --muted: var(--vscode-descriptionForeground, #8c8c8c);
+            --accent: var(--vscode-button-background, #0e639c);
+            --accent-hover: var(--vscode-button-hoverBackground, #1177bb);
+            --accent-contrast: var(--vscode-button-foreground, #ffffff);
+            --secondary-button-bg: var(--vscode-button-secondaryBackground, transparent);
+            --secondary-button-hover-bg: var(
+                --vscode-button-secondaryHoverBackground,
+                color-mix(in srgb, var(--secondary-button-bg) 82%, white)
+            );
+            --secondary-button-fg: var(
+                --vscode-button-secondaryForeground,
+                var(--vscode-editor-foreground)
+            );
+            --border: var(--vscode-panel-border, rgba(128, 128, 128, 0.35));
+            --input-bg: var(--vscode-input-background, transparent);
+            --input-fg: var(--vscode-input-foreground, var(--vscode-editor-foreground));
+            --input-border: var(--vscode-input-border, var(--border));
+            --focus-border: var(--vscode-focusBorder, var(--accent));
+            --row-hover: var(--vscode-list-hoverBackground, rgba(255, 255, 255, 0.04));
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        html,
+        body {
+            height: 100%;
         }
 
         body {
             margin: 0;
-            padding: 20px;
+            padding: 0 !important;
             font-family: var(--vscode-font-family);
-            font-size: var(--vscode-font-size);
-            color: var(--vscode-foreground);
-            background: var(--vscode-editor-background);
+            font-size: 13px;
+            color: var(--vscode-editor-foreground);
+            background: var(--page-bg);
         }
 
         main {
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .content {
             display: grid;
-            gap: 14px;
+            gap: 18px;
+            padding: 24px;
+        }
+
+        .panel-header {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 10px 16px;
+            border-bottom: 1px solid var(--border);
+            background: var(--surface-bg);
+        }
+
+        .panel-header-copy {
+            display: flex;
+            flex-direction: column;
+            min-width: 0;
         }
 
         h1 {
             margin: 0;
-            font-size: 1.15rem;
-            font-weight: 600;
+            font-size: 15px;
+            font-weight: 700;
+            letter-spacing: 0.02em;
+        }
+
+        #header-path {
+            margin-top: 2px;
+            color: var(--muted);
+            font-size: 12px;
+            line-height: 1.4;
+            word-break: break-word;
         }
 
         p {
@@ -189,15 +251,31 @@ export class SvnIgnoreEditorPanel implements vscode.Disposable {
 
         .meta {
             display: grid;
-            gap: 8px;
-            padding: 12px;
-            border: 1px solid var(--vscode-panel-border);
+            gap: 12px;
+            padding: 16px 18px;
+            border: 1px solid var(--border);
             border-radius: 8px;
-            background: color-mix(in srgb, var(--vscode-editor-background) 88%, var(--vscode-button-background) 12%);
+            background: color-mix(in srgb, var(--details-bg) 78%, var(--surface-bg));
         }
 
         .meta-label {
-            color: var(--vscode-descriptionForeground);
+            color: var(--muted);
+            font-size: 11px;
+            font-weight: 600;
+            letter-spacing: 0.04em;
+            text-transform: uppercase;
+        }
+
+        #directory-value {
+            font-size: 15px;
+            font-weight: 600;
+        }
+
+        #suggestion-row {
+            padding: 8px 10px;
+            border: 1px solid color-mix(in srgb, var(--border) 60%, transparent);
+            border-radius: 8px;
+            background: color-mix(in srgb, var(--surface-bg) 84%, var(--details-bg));
         }
 
         .toolbar {
@@ -208,17 +286,33 @@ export class SvnIgnoreEditorPanel implements vscode.Disposable {
         }
 
         button {
-            border: none;
-            border-radius: 6px;
-            padding: 6px 12px;
+            min-height: 28px;
+            padding: 4px 12px;
+            border: 1px solid transparent;
+            border-radius: 4px;
             cursor: pointer;
-            color: var(--vscode-button-foreground);
-            background: var(--vscode-button-background);
+            font: inherit;
+            color: var(--accent-contrast);
+            background: var(--accent);
         }
 
         button.secondary {
-            color: var(--vscode-button-secondaryForeground);
-            background: var(--vscode-button-secondaryBackground);
+            color: var(--secondary-button-fg);
+            background: var(--secondary-button-bg);
+            border-color: var(--border);
+        }
+
+        button:hover {
+            background: var(--accent-hover);
+        }
+
+        button.secondary:hover {
+            background: var(--secondary-button-hover-bg);
+        }
+
+        button:focus-visible {
+            outline: 1px solid var(--focus-border);
+            outline-offset: 1px;
         }
 
         button:disabled {
@@ -230,48 +324,64 @@ export class SvnIgnoreEditorPanel implements vscode.Disposable {
             width: 100%;
             min-height: 360px;
             resize: vertical;
-            box-sizing: border-box;
-            padding: 12px;
+            padding: 12px 14px;
             line-height: 1.5;
-            color: var(--vscode-input-foreground);
-            background: var(--vscode-input-background);
-            border: 1px solid var(--vscode-input-border, var(--vscode-panel-border));
+            color: var(--input-fg);
+            background: var(--input-bg);
+            border: 1px solid var(--input-border);
             border-radius: 8px;
             font: inherit;
             white-space: pre;
+            outline: none;
+        }
+
+        textarea:hover {
+            border-color: color-mix(in srgb, var(--input-border) 70%, var(--focus-border));
+        }
+
+        textarea:focus {
+            border-color: var(--focus-border);
+            box-shadow: inset 0 0 0 1px var(--focus-border);
         }
 
         .status {
-            color: var(--vscode-descriptionForeground);
+            color: var(--muted);
+            font-size: 12px;
         }
 
         .hint {
-            color: var(--vscode-descriptionForeground);
+            color: var(--muted);
+            font-size: 12px;
         }
     </style>
 </head>
 <body>
     <main>
-        <header>
-            <h1 id="heading"></h1>
+        <header class="panel-header">
+            <div class="panel-header-copy">
+                <h1 id="heading"></h1>
+                <small id="header-path"></small>
+            </div>
         </header>
-        <section class="meta">
-            <div>
-                <div class="meta-label" id="directory-label"></div>
-                <strong id="directory-value"></strong>
-            </div>
-            <p id="rules-hint" class="hint"></p>
-            <div id="suggestion-row" class="toolbar" hidden>
-                <span id="suggestion-label"></span>
-                <button id="add-suggestion" type="button" class="secondary"></button>
-            </div>
-        </section>
-        <section class="toolbar">
-            <button id="save" type="button"></button>
-            <button id="reload" type="button" class="secondary"></button>
-            <span id="status" class="status"></span>
-        </section>
-        <textarea id="editor" spellcheck="false"></textarea>
+        <div class="content">
+            <section class="meta">
+                <div>
+                    <div class="meta-label" id="directory-label"></div>
+                    <strong id="directory-value"></strong>
+                </div>
+                <p id="rules-hint" class="hint"></p>
+                <div id="suggestion-row" class="toolbar" hidden>
+                    <span id="suggestion-label"></span>
+                    <button id="add-suggestion" type="button" class="secondary"></button>
+                </div>
+            </section>
+            <section class="toolbar">
+                <button id="save" type="button"></button>
+                <button id="reload" type="button" class="secondary"></button>
+                <span id="status" class="status"></span>
+            </section>
+            <textarea id="editor" spellcheck="false"></textarea>
+        </div>
     </main>
     <script>
         const vscode = acquireVsCodeApi();
@@ -283,6 +393,7 @@ export class SvnIgnoreEditorPanel implements vscode.Disposable {
         };
 
         const heading = document.getElementById("heading");
+        const headerPath = document.getElementById("header-path");
         const directoryLabel = document.getElementById("directory-label");
         const directoryValue = document.getElementById("directory-value");
         const rulesHint = document.getElementById("rules-hint");
@@ -303,6 +414,7 @@ export class SvnIgnoreEditorPanel implements vscode.Disposable {
 
         function render() {
             heading.textContent = strings.heading;
+            headerPath.textContent = state.directoryDisplayPath;
             directoryLabel.textContent = strings.directoryLabel;
             directoryValue.textContent = state.directoryDisplayPath;
             rulesHint.textContent = strings.rulesHint;

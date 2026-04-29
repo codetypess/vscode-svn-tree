@@ -1,5 +1,11 @@
 import React from "react";
 import { normalizeHistoryFilters } from "./history-utils";
+import {
+    constrainMenuPosition as constrainMenuPositionWithinViewport,
+    contextMenuEstimatedHeightPx,
+    contextMenuMaxWidthPx,
+    contextMenuViewportMarginPx,
+} from "./history-menu-position";
 import type { SvnHistoryFilters } from "../svn/svn-types";
 import type { RuntimeI18n } from "../i18n";
 import type {
@@ -352,31 +358,87 @@ export function buildChangeTree(changes: HistoryChange[]): ChangeTreeNodeModel[]
     return compressDirectories(root);
 }
 
-const contextMenuViewportMarginPx = 8;
-const contextMenuMaxWidthPx = 360;
-const contextMenuEstimatedHeightPx = 196;
 const collapsedCommitHeightEstimatePx = 28;
 const expandedCommitHeightEstimatePx = 320;
 export const historyFooterHeightEstimatePx = 94;
 export const historyOverscanPx = 480;
+
+export function constrainMenuPosition(
+    position: MenuPosition,
+    menuWidth: number,
+    menuHeight: number
+): MenuPosition {
+    return constrainMenuPositionWithinViewport(
+        position,
+        menuWidth,
+        menuHeight,
+        window.innerWidth,
+        window.innerHeight
+    );
+}
 
 export function getMenuPosition(clientX: number, clientY: number): MenuPosition {
     const estimatedMenuWidth = Math.min(
         contextMenuMaxWidthPx,
         Math.max(0, window.innerWidth - contextMenuViewportMarginPx * 2)
     );
+    return constrainMenuPosition(
+        {
+            x: clientX,
+            y: clientY,
+        },
+        estimatedMenuWidth,
+        contextMenuEstimatedHeightPx
+    );
+}
+
+export function useConstrainedMenuPosition(
+    menu: MenuPosition | undefined
+): {
+    menuRef: React.RefObject<HTMLDivElement | null>;
+    position: MenuPosition | undefined;
+} {
+    const menuRef = React.useRef<HTMLDivElement | null>(null);
+    const [position, setPosition] = React.useState<MenuPosition | undefined>(menu);
+
+    React.useLayoutEffect(
+        function () {
+            setPosition(menu);
+        },
+        [menu]
+    );
+
+    React.useLayoutEffect(
+        function () {
+            if (!menu || !position || !menuRef.current) {
+                return;
+            }
+
+            const bounds = menuRef.current.getBoundingClientRect();
+            if (bounds.width === 0 && bounds.height === 0) {
+                return;
+            }
+
+            const nextPosition = constrainMenuPosition(
+                position,
+                bounds.width,
+                bounds.height
+            );
+            if (
+                nextPosition.x === position.x &&
+                nextPosition.y === position.y
+            ) {
+                return;
+            }
+
+            setPosition(nextPosition);
+        },
+        [menu, position]
+    );
+
     return {
-        x: Math.max(
-            contextMenuViewportMarginPx,
-            Math.min(
-                clientX,
-                window.innerWidth - contextMenuViewportMarginPx - estimatedMenuWidth
-            )
-        ),
-        y: Math.max(
-            contextMenuViewportMarginPx,
-            Math.min(clientY, window.innerHeight - contextMenuEstimatedHeightPx)
-        ),
+        menuRef,
+        position,
     };
 }
 

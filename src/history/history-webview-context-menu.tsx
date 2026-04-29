@@ -1,5 +1,10 @@
 import React from "react";
-import { getDisplayChangePath, isIncomingEntry, summarizeMessage } from "./history-webview-utils";
+import {
+    getDisplayChangePath,
+    isIncomingEntry,
+    summarizeMessage,
+    useConstrainedMenuPosition,
+} from "./history-webview-utils";
 import type { ContextMenuProps } from "./history-webview-types";
 
 export function ContextMenu(props: ContextMenuProps): React.ReactElement | null {
@@ -8,6 +13,8 @@ export function ContextMenu(props: ContextMenuProps): React.ReactElement | null 
     }
 
     const entry = props.entry;
+    const { menuRef, position } = useConstrainedMenuPosition(props.menu);
+    const menuPosition = position ?? props.menu;
     if (props.menu.kind === "file") {
         const change = props.menu.change;
         const displayPath = getDisplayChangePath(change.path);
@@ -23,7 +30,11 @@ export function ContextMenu(props: ContextMenuProps): React.ReactElement | null 
                 "div",
                 {
                     className: "context-menu",
-                    style: { left: props.menu.x + "px", top: props.menu.y + "px" },
+                    ref: menuRef,
+                    style: {
+                        left: menuPosition.x + "px",
+                        top: menuPosition.y + "px",
+                    },
                 },
                 React.createElement(
                     "div",
@@ -213,7 +224,11 @@ export function ContextMenu(props: ContextMenuProps): React.ReactElement | null 
             "div",
             {
                 className: "context-menu",
-                style: { left: props.menu.x + "px", top: props.menu.y + "px" },
+                ref: menuRef,
+                style: {
+                    left: menuPosition.x + "px",
+                    top: menuPosition.y + "px",
+                },
             },
             React.createElement(
                 "div",

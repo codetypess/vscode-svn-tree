@@ -1,6 +1,7 @@
 import * as nodePath from "node:path";
 import * as vscode from "vscode";
 import { HistoryPanel } from "../history/history-panel";
+import { RepositoryBrowserPanel } from "../repository-browser/repository-browser-panel";
 import { RevisionGraphPanel } from "../revision-graph/revision-graph-panel";
 import { normalizeFileManagerPlatform, type MessageKey } from "../i18n";
 import type { SvnNodeInfo, SvnWorkingCopyInfo } from "../svn/svn-types";
@@ -145,11 +146,13 @@ export class SvnRepositoryManager implements vscode.Disposable {
     private readonly svnService = new SvnService(this.outputChannel);
     private readonly contentProvider = new SvnContentProvider(this.svnService);
     private readonly historyPanel: HistoryPanel;
+    private readonly repositoryBrowserPanel: RepositoryBrowserPanel;
     private readonly revisionGraphPanel: RevisionGraphPanel;
     private remoteRefreshTimer: NodeJS.Timeout | undefined;
 
     public constructor(context: vscode.ExtensionContext) {
         this.historyPanel = new HistoryPanel(context.extensionUri);
+        this.repositoryBrowserPanel = new RepositoryBrowserPanel(context.extensionUri);
         this.revisionGraphPanel = new RevisionGraphPanel(context.extensionUri);
         this.historyStatusBarItem.text = "$(history)";
         this.historyStatusBarItem.tooltip = getI18n().t("historyStatusTooltip");
@@ -160,6 +163,7 @@ export class SvnRepositoryManager implements vscode.Disposable {
             this.historyStatusBarItem,
             this.outputChannel,
             this.historyPanel,
+            this.repositoryBrowserPanel,
             this.revisionGraphPanel,
             vscode.workspace.registerTextDocumentContentProvider(
                 SvnContentProvider.scheme,
@@ -538,6 +542,7 @@ export class SvnRepositoryManager implements vscode.Disposable {
             info,
             this.svnService,
             this.historyPanel,
+            this.repositoryBrowserPanel,
             this.revisionGraphPanel,
             this.contentProvider,
             this.outputChannel
@@ -1656,6 +1661,7 @@ export class SvnRepositoryManager implements vscode.Disposable {
         for (const repository of this.repositories.values()) {
             repository.refreshLocalization();
             this.historyPanel.refreshLocalization(repository);
+            this.repositoryBrowserPanel.refreshLocalization(repository);
             this.revisionGraphPanel.refreshLocalization(repository);
         }
     }

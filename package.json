@@ -2,7 +2,7 @@
   "name": "svn-tree",
   "displayName": "%displayName%",
   "description": "%description%",
-  "version": "1.2.1",
+  "version": "1.3.0",
   "publisher": "codetypess",
   "license": "MIT",
   "icon": "media/icon.png",
@@ -920,7 +920,7 @@
     "format": "prettier --write src",
     "compile": "tsc -p ./ && npm run compile:webview",
     "typecheck:webview": "tsc -p ./tsconfig.webview.json --noEmit",
-    "compile:webview": "npm run typecheck:webview && esbuild src/history/history-panel-webview.tsx src/revision-graph/revision-graph-webview.tsx --bundle --format=iife --platform=browser --target=es2022 --minify --outdir=media --entry-names=[name]",
+    "compile:webview": "npm run typecheck:webview && esbuild src/history/history-panel-webview.tsx src/repository-browser/repository-browser-webview.tsx src/revision-graph/revision-graph-webview.tsx --bundle --format=iife --platform=browser --target=es2022 --minify --outdir=media --entry-names=[name]",
     "watch": "tsc -watch -p ./",
     "pretest": "npm run compile",
     "test": "node --test ./out/test/**/*.test.js"

@@ -2,8 +2,10 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import type * as vscode from "vscode";
 import {
+    buildRepositoryBrowserBreadcrumbs,
     buildRepositoryBrowserFileActionItems,
     buildRepositoryBrowserItems,
+    buildRepositoryBrowserViewModel,
     canMutateCurrentRepositoryPath,
     getRepositoryBrowserMutationTargetValidationError,
     getRepositoryBrowserPathValidationError,
@@ -123,6 +125,78 @@ test("repository browser helpers build file action items", () => {
             "copy-path",
         ]
     );
+});
+
+test("repository browser helpers build breadcrumbs", () => {
+    assert.deepEqual(buildRepositoryBrowserBreadcrumbs("/", "repo"), [
+        {
+            label: "repo",
+            repositoryPath: "/",
+        },
+    ]);
+    assert.deepEqual(buildRepositoryBrowserBreadcrumbs("/project/trunk/src", "repo"), [
+        {
+            label: "repo",
+            repositoryPath: "/",
+        },
+        {
+            label: "project",
+            repositoryPath: "/project",
+        },
+        {
+            label: "trunk",
+            repositoryPath: "/project/trunk",
+        },
+        {
+            label: "src",
+            repositoryPath: "/project/trunk/src",
+        },
+    ]);
+});
+
+test("repository browser helpers build webview view model", () => {
+    const model = buildRepositoryBrowserViewModel({
+        currentRepositoryPath: "/project/branches/release-1.0",
+        currentUrl: "https://svn.example.com/repos/project/branches/release-1.0",
+        repositoryRoot: "https://svn.example.com/repos",
+        currentWorkingCopyRepositoryPath: "/project/trunk",
+        entries: [
+            { name: "b.ts", kind: "file", revision: "11", author: "bob" },
+            { name: "assets", kind: "dir", revision: "10", author: "alice" },
+        ],
+        formatNodeKind: (kind) => kind,
+        strings: {
+            rootBreadcrumbLabel: "repo",
+            openDirectoryActionLabel: "open-dir",
+            openHistoryActionLabel: "history",
+            showPropertiesActionLabel: "properties",
+            showBlameActionLabel: "blame",
+            showBlameOutputActionLabel: "blame-output",
+            copyBlameLineActionLabel: "copy-line",
+            openFileLabel: "open-file",
+            createDirectoryActionLabel: "create-dir",
+            copyDirectoryActionLabel: "copy-dir",
+            moveDirectoryActionLabel: "move-dir",
+            deleteDirectoryActionLabel: "delete-dir",
+            createBranchFromWorkingCopyActionLabel: "branch",
+            createTagFromWorkingCopyActionLabel: "tag",
+            copyRepositoryUrlActionLabel: "copy-url",
+            copyRepositoryPathActionLabel: "copy-path",
+            switchHereLabel: "switch-here",
+            deleteReferenceActionLabel: "delete-reference",
+        },
+    });
+
+    assert.equal(model.parentRepositoryPath, "/project/branches");
+    assert.deepEqual(
+        model.breadcrumbs.map((item) => item.label),
+        ["repo", "project", "branches", "release-1.0"]
+    );
+    assert.equal(model.currentActions.some((item) => item.id === "switch-here"), true);
+    assert.equal(model.entries[0]?.name, "assets");
+    assert.equal(model.entries[0]?.actions[0]?.id, "open-directory");
+    assert.equal(model.entries[1]?.name, "b.ts");
+    assert.equal(model.entries[1]?.actions.some((item) => item.id === "show-blame"), true);
 });
 
 test("repository browser helpers validate and resolve remote directory targets", () => {

@@ -44,6 +44,18 @@ test("createI18n returns repository action prompts", () => {
     assert.equal(english.t("switchWorkingCopyActionLabel"), "Switch Branch Or Tag");
     assert.equal(english.t("revisionGraphActionLabel"), "Revision Graph");
     assert.equal(english.t("repositoryBrowserActionLabel"), "Repository Browser");
+    assert.equal(
+        english.t("repositoryBrowserPanelTitle", { path: "/project/trunk" }),
+        "Repository Browser: /project/trunk"
+    );
+    assert.equal(
+        english.t("repositoryBrowserCurrentDirectorySectionTitle"),
+        "Current Directory"
+    );
+    assert.equal(
+        english.t("repositoryBrowserOpenDirectoryActionLabel"),
+        "Open Directory"
+    );
     assert.equal(english.t("invalidRevisionError"), "Enter a valid positive revision number.");
     assert.equal(english.t("changelistLabel", { name: "feature-a" }), "Changelist: feature-a");
     assert.equal(english.t("renamePathActionLabel"), "Rename");
@@ -144,6 +156,12 @@ test("createI18n returns repository action prompts", () => {
     assert.equal(chinese.t("copyRepositoryPathActionLabel"), "复制仓库路径");
     assert.equal(chinese.t("revisionGraphActionLabel"), "版本图");
     assert.equal(chinese.t("repositoryBrowserActionLabel"), "仓库浏览器");
+    assert.equal(
+        chinese.t("repositoryBrowserPanelTitle", { path: "/project/trunk" }),
+        "仓库浏览器：/project/trunk"
+    );
+    assert.equal(chinese.t("repositoryBrowserCurrentDirectorySectionTitle"), "当前目录");
+    assert.equal(chinese.t("repositoryBrowserOpenDirectoryActionLabel"), "打开目录");
     assert.equal(chinese.t("editPropertyActionLabel"), "编辑属性");
     assert.equal(chinese.t("showPropertiesActionLabel"), "显示属性");
     assert.equal(chinese.t("showBlameOutputActionLabel"), "在输出中显示 blame");

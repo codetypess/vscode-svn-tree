@@ -7,6 +7,7 @@ import {
     formatHistoryDateValue,
     getMenuPosition,
     parseHistoryDateValue,
+    useConstrainedMenuPosition,
 } from "../history/history-webview-utils";
 import type {
     RevisionGraphBootstrap,
@@ -390,6 +391,10 @@ function buildGraphSummaryText(graph: RevisionGraphData): string {
         const dateFromFieldRef = React.useRef<HTMLLabelElement | null>(null);
         const dateToFieldRef = React.useRef<HTMLLabelElement | null>(null);
         const [edgeLayout, setEdgeLayout] = React.useState<EdgeLayout[]>([]);
+        const {
+            menuRef,
+            position: contextMenuPosition,
+        } = useConstrainedMenuPosition(state.contextMenu);
         const i18n = createI18n(state.locale);
         const graph = state.graph;
         const dayPickerLocale = state.locale === "zh-CN" ? zhCN : enUS;
@@ -1511,10 +1516,11 @@ function buildGraphSummaryText(graph: RevisionGraphData): string {
                             }
                         />
                         <div
+                            ref={menuRef}
                             className="context-menu revision-graph-context-menu"
                             style={{
-                                left: `${state.contextMenu.x}px`,
-                                top: `${state.contextMenu.y}px`,
+                                left: `${contextMenuPosition?.x ?? state.contextMenu.x}px`,
+                                top: `${contextMenuPosition?.y ?? state.contextMenu.y}px`,
                             }}
                             onClick={(event) => event.stopPropagation()}
                             onMouseDown={(event) => event.stopPropagation()}
@@ -1677,10 +1683,11 @@ function buildGraphSummaryText(graph: RevisionGraphData): string {
                             }
                         />
                         <div
+                            ref={menuRef}
                             className="context-menu revision-graph-context-menu"
                             style={{
-                                left: `${state.contextMenu.x}px`,
-                                top: `${state.contextMenu.y}px`,
+                                left: `${contextMenuPosition?.x ?? state.contextMenu.x}px`,
+                                top: `${contextMenuPosition?.y ?? state.contextMenu.y}px`,
                             }}
                             onClick={(event) => event.stopPropagation()}
                             onMouseDown={(event) => event.stopPropagation()}
