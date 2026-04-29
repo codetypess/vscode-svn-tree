@@ -64,6 +64,12 @@ test("createI18n returns repository action prompts", () => {
         english.t("repositoryBrowserExportDirectoryActionLabel"),
         "Export To Directory"
     );
+    assert.equal(english.t("repositoryBrowserPathFieldLabel"), "Path");
+    assert.equal(english.t("repositoryBrowserGoButton"), "Go");
+    assert.equal(
+        english.t("repositoryBrowserNoMatchesState"),
+        "No loaded entries match the current filter."
+    );
     assert.equal(english.t("invalidRevisionError"), "Enter a valid positive revision number.");
     assert.equal(english.t("changelistLabel", { name: "feature-a" }), "Changelist: feature-a");
     assert.equal(english.t("renamePathActionLabel"), "Rename");
@@ -175,6 +181,12 @@ test("createI18n returns repository action prompts", () => {
         "检出到新目录"
     );
     assert.equal(chinese.t("repositoryBrowserExportDirectoryActionLabel"), "导出到目录");
+    assert.equal(chinese.t("repositoryBrowserPathFieldLabel"), "路径");
+    assert.equal(chinese.t("repositoryBrowserGoButton"), "跳转");
+    assert.equal(
+        chinese.t("repositoryBrowserNoMatchesState"),
+        "当前筛选条件下没有匹配的已加载条目。"
+    );
     assert.equal(chinese.t("editPropertyActionLabel"), "编辑属性");
     assert.equal(chinese.t("showPropertiesActionLabel"), "显示属性");
     assert.equal(chinese.t("showBlameOutputActionLabel"), "在输出中显示 blame");

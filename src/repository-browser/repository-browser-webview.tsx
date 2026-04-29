@@ -120,6 +120,11 @@ interface VirtualizedRepositoryBrowserRow {
     row: RepositoryBrowserTreeRow;
 }
 
+interface RepositoryBrowserDetailItem {
+    readonly label: string;
+    readonly value: string;
+}
+
 function normalizeRepositoryPath(value: string): string {
     const normalized = value.replace(/\\/g, "/").replace(/^\/+|\/+$/g, "");
     return normalized ? `/${normalized}` : "/";
@@ -319,6 +324,16 @@ function buildDirectoryPathContextActions(
             icon: "symbol-property",
         },
         {
+            id: "checkout-directory",
+            label: i18n.t("repositoryBrowserCheckoutDirectoryActionLabel"),
+            icon: "repo-clone",
+        },
+        {
+            id: "export-directory",
+            label: i18n.t("repositoryBrowserExportDirectoryActionLabel"),
+            icon: "export",
+        },
+        {
             id: "copy-url",
             label: i18n.t("copyRepositoryUrlActionLabel"),
             icon: "link",
@@ -343,6 +358,93 @@ function isDangerousContextMenuAction(
     action: RepositoryBrowserContextMenuActionItem
 ): boolean {
     return action.id === "delete-directory" || action.id === "delete-reference";
+}
+
+function getTreeRowRepositoryPath(row: RepositoryBrowserTreeRow): string {
+    return row.rowType === "entry" ? row.entry.repositoryPath : row.repositoryPath;
+}
+
+function matchesRepositoryBrowserTreeRow(
+    row: RepositoryBrowserTreeRow,
+    normalizedQuery: string
+): boolean {
+    const searchText =
+        row.rowType === "entry"
+            ? [
+                  row.entry.name,
+                  row.entry.repositoryPath,
+                  row.entry.author,
+                  row.entry.revision,
+              ]
+                  .filter(Boolean)
+                  .join("\n")
+                  .toLowerCase()
+            : [row.name, row.repositoryPath].join("\n").toLowerCase();
+
+    return searchText.includes(normalizedQuery);
+}
+
+function filterRepositoryBrowserTreeRows(
+    rows: readonly RepositoryBrowserTreeRow[],
+    filterValue: string
+): RepositoryBrowserTreeRow[] {
+    const normalizedQuery = filterValue.trim().toLowerCase();
+    if (!normalizedQuery) {
+        return [...rows];
+    }
+
+    const matchingPaths = new Set<string>();
+    for (const row of rows) {
+        if (matchesRepositoryBrowserTreeRow(row, normalizedQuery)) {
+            matchingPaths.add(getTreeRowRepositoryPath(row));
+        }
+    }
+
+    if (matchingPaths.size === 0) {
+        return [];
+    }
+
+    return rows.filter(function (row) {
+        const repositoryPath = getTreeRowRepositoryPath(row);
+        if (matchingPaths.has(repositoryPath)) {
+            return true;
+        }
+
+        for (const matchingPath of matchingPaths) {
+            if (isSameOrChildRepositoryPath(repositoryPath, matchingPath)) {
+                return true;
+            }
+        }
+
+        return false;
+    });
+}
+
+function resolveRepositoryBrowserNavigationPath(value: string): string | undefined {
+    const normalizedValue = value.trim().replace(/\\/g, "/");
+    if (!normalizedValue) {
+        return undefined;
+    }
+
+    const segments = normalizedValue.replace(/^\/+/, "").split("/");
+    if (
+        segments.some(
+            (segment) => segment.trim().length === 0 || segment === "." || segment === ".."
+        )
+    ) {
+        return undefined;
+    }
+
+    return normalizeRepositoryPath(normalizedValue);
+}
+
+function getRepositoryBrowserPathLabel(repositoryPath: string, rootLabel: string): string {
+    if (repositoryPath === "/") {
+        return rootLabel;
+    }
+
+    const segments = repositoryPath.replace(/^\/+|\/+$/g, "").split("/").filter(Boolean);
+    return segments.at(-1) ?? repositoryPath;
 }
 
 (function () {
@@ -376,6 +478,14 @@ function isDangerousContextMenuAction(
             loadingDirectoryPaths: {},
             contextMenu: undefined,
         });
+        const [pathInputValue, setPathInputValue] = React.useState(
+            bootstrap.initialRepositoryPath
+        );
+        const [pathInputError, setPathInputError] = React.useState<string | undefined>(
+            undefined
+        );
+        const [filterValue, setFilterValue] = React.useState("");
+        const deferredFilterValue = React.useDeferredValue(filterValue);
         const [virtualViewport, setVirtualViewport] = React.useState({
             scrollTop: 0,
             viewportHeight: 0,
@@ -402,6 +512,14 @@ function isDangerousContextMenuAction(
                 document.documentElement.lang = state.locale;
             },
             [i18n, state.currentRepositoryPath, state.locale]
+        );
+
+        React.useEffect(
+            function () {
+                setPathInputValue(state.currentRepositoryPath);
+                setPathInputError(undefined);
+            },
+            [state.currentRepositoryPath]
         );
 
         React.useEffect(function () {
@@ -730,6 +848,36 @@ function isDangerousContextMenuAction(
             }
         }
 
+        function navigateToRepositoryPath(value: string): void {
+            const repositoryPath = resolveRepositoryBrowserNavigationPath(value);
+            if (!repositoryPath) {
+                setPathInputError(i18n.t("repositoryBrowserPathInvalid"));
+                return;
+            }
+
+            if (repositoryPath === state.currentRepositoryPath) {
+                setPathInputError(undefined);
+                showCurrentDirectoryDetails();
+                return;
+            }
+
+            closeContextMenu();
+            setPathInputError(undefined);
+            setState(function (previous) {
+                return {
+                    ...previous,
+                    isLoading: true,
+                    error: undefined,
+                    selectedRepositoryPath: undefined,
+                    contextMenu: undefined,
+                };
+            });
+            vscode.postMessage({
+                type: "navigate",
+                repositoryPath,
+            } satisfies RepositoryBrowserRequestMessage);
+        }
+
         function runCurrentAction(action: RepositoryBrowserAction): void {
             closeContextMenu();
             vscode.postMessage({
@@ -999,6 +1147,28 @@ function isDangerousContextMenuAction(
             );
         }
 
+        function renderInlineActionButton(
+            action: RepositoryBrowserContextMenuActionItem,
+            onClick: () => void,
+            keyPrefix: string
+        ): React.ReactElement {
+            const isDangerous = isDangerousContextMenuAction(action);
+
+            return (
+                <button
+                    key={`${keyPrefix}:${String(action.id)}`}
+                    type="button"
+                    className={`secondary browser-action-button${
+                        isDangerous ? " danger" : ""
+                    }`}
+                    onClick={onClick}
+                >
+                    <span className={`codicon codicon-${action.icon}`} aria-hidden="true" />
+                    <span>{action.label}</span>
+                </button>
+            );
+        }
+
         function openEntry(entry: RepositoryBrowserEntryItem): void {
             if (entry.kind === "dir") {
                 toggleDirectory(entry.repositoryPath);
@@ -1008,14 +1178,107 @@ function isDangerousContextMenuAction(
             runEntryAction("open-file", entry);
         }
 
-        const treeRows = buildRepositoryBrowserTreeRows({
+        const currentDirectoryLabel =
+            state.breadcrumbs.at(-1)?.label ??
+            (state.currentRepositoryPath === "/" ? state.repositoryLabel : "/");
+        const selectedEntry = findRepositoryBrowserEntry(
+            state.directoryDataByPath,
+            state.selectedRepositoryPath
+        );
+        const selectedDirectoryData = state.selectedRepositoryPath
+            ? state.directoryDataByPath[state.selectedRepositoryPath]
+            : undefined;
+        const selectedPathLabel = state.selectedRepositoryPath
+            ? getRepositoryBrowserPathLabel(state.selectedRepositoryPath, state.repositoryLabel)
+            : undefined;
+        const currentDirectoryDetails = [
+            {
+                label: i18n.t("infoKindLabel"),
+                value: i18n.formatNodeKind("dir"),
+            },
+            {
+                label: i18n.t("infoRepositoryPathLabel"),
+                value: state.currentRepositoryPath,
+            },
+            state.currentUrl
+                ? {
+                      label: i18n.t("infoUrlLabel"),
+                      value: state.currentUrl,
+                  }
+                : undefined,
+        ].filter(Boolean) as RepositoryBrowserDetailItem[];
+        const selectedDetails = selectedEntry
+            ? [
+                  {
+                      label: i18n.t("infoKindLabel"),
+                      value: selectedEntry.kindLabel,
+                  },
+                  {
+                      label: i18n.t("infoRepositoryPathLabel"),
+                      value: selectedEntry.repositoryPath,
+                  },
+                  selectedEntry.url
+                      ? {
+                            label: i18n.t("infoUrlLabel"),
+                            value: selectedEntry.url,
+                        }
+                      : undefined,
+                  selectedEntry.revision
+                      ? {
+                            label: i18n.t("revisionLabel"),
+                            value: `r${selectedEntry.revision}`,
+                        }
+                      : undefined,
+                  selectedEntry.author
+                      ? {
+                            label: i18n.t("authorDetailLabel"),
+                            value: selectedEntry.author,
+                        }
+                      : undefined,
+              ].filter(Boolean)
+            : state.selectedRepositoryPath
+              ? [
+                    {
+                        label: i18n.t("infoKindLabel"),
+                        value: i18n.formatNodeKind("dir"),
+                    },
+                    {
+                        label: i18n.t("infoRepositoryPathLabel"),
+                        value: state.selectedRepositoryPath,
+                    },
+                    selectedDirectoryData?.currentUrl
+                        ? {
+                              label: i18n.t("infoUrlLabel"),
+                              value: selectedDirectoryData.currentUrl,
+                          }
+                        : undefined,
+                ].filter(Boolean)
+              : [];
+        const selectedDetailItems = selectedDetails as RepositoryBrowserDetailItem[];
+        const selectedActions = selectedEntry
+            ? selectedEntry.actions
+            : state.selectedRepositoryPath
+              ? buildDirectoryPathContextActions(i18n)
+              : [];
+        const allTreeRows = buildRepositoryBrowserTreeRows({
             directoryDataByPath: state.directoryDataByPath,
             expandedDirectoryPaths: state.expandedDirectoryPaths,
             loadingDirectoryPaths: state.loadingDirectoryPaths,
             currentRepositoryPath: state.currentRepositoryPath,
             breadcrumbs: state.breadcrumbs,
         });
-        const shouldShowTreeLoading = treeRows.length === 0 && state.isLoading;
+        const treeRows = filterRepositoryBrowserTreeRows(
+            allTreeRows,
+            deferredFilterValue
+        );
+        const isFilterActive = deferredFilterValue.trim().length > 0;
+        const shouldShowTreeLoading = allTreeRows.length === 0 && state.isLoading;
+        const shouldShowNoMatches =
+            !state.error &&
+            !state.isLoading &&
+            allTreeRows.length > 0 &&
+            isFilterActive &&
+            treeRows.length === 0;
         const viewportTop = Math.max(0, virtualViewport.scrollTop - browserTreeOverscanPx);
         const viewportBottom =
             virtualViewport.scrollTop +
@@ -1056,19 +1319,81 @@ function isDangerousContextMenuAction(
                             <h1>{i18n.t("repositoryBrowserActionLabel")}</h1>
                             <small>{state.currentRepositoryPath}</small>
                         </div>
-                        <div className="toolbar-actions">
-                            <button
-                                type="button"
-                                className="toolbar-button secondary"
-                                onClick={refreshBrowser}
-                            >
-                                <span className="codicon codicon-refresh" aria-hidden="true" />
-                                <span className="toolbar-button-label">
-                                    {i18n.t("refreshButton")}
-                                </span>
-                            </button>
-                        </div>
                     </header>
+
+                    <div className="filter-panel browser-control-panel">
+                        <div className="browser-control-grid">
+                            <label className="filter-field">
+                                <span className="filter-label">
+                                    {i18n.t("repositoryBrowserPathFieldLabel")}
+                                </span>
+                                <div className="browser-control-actions">
+                                    <input
+                                        type="text"
+                                        className="filter-input"
+                                        value={pathInputValue}
+                                        placeholder={i18n.t(
+                                            "repositoryBrowserPathPlaceholder"
+                                        )}
+                                        onChange={function (event) {
+                                            setPathInputValue(event.target.value);
+                                            if (pathInputError) {
+                                                setPathInputError(undefined);
+                                            }
+                                        }}
+                                        onKeyDown={function (event) {
+                                            if (event.key === "Enter") {
+                                                navigateToRepositoryPath(pathInputValue);
+                                            }
+                                        }}
+                                    />
+                                    <button
+                                        type="button"
+                                        className="secondary browser-go-button"
+                                        onClick={function () {
+                                            navigateToRepositoryPath(pathInputValue);
+                                        }}
+                                    >
+                                        {i18n.t("repositoryBrowserGoButton")}
+                                    </button>
+                                </div>
+                            </label>
+                            <label className="filter-field">
+                                <span className="filter-label">
+                                    {i18n.t("repositoryBrowserFilterFieldLabel")}
+                                </span>
+                                <input
+                                    type="text"
+                                    className="filter-input"
+                                    value={filterValue}
+                                    placeholder={i18n.t(
+                                        "repositoryBrowserFilterPlaceholder"
+                                    )}
+                                    onChange={function (event) {
+                                        setFilterValue(event.target.value);
+                                    }}
+                                />
+                            </label>
+                            <div className="toolbar-actions browser-toolbar-actions">
+                                <button
+                                    type="button"
+                                    className="toolbar-button secondary"
+                                    onClick={refreshBrowser}
+                                >
+                                    <span
+                                        className="codicon codicon-refresh"
+                                        aria-hidden="true"
+                                    />
+                                    <span className="toolbar-button-label">
+                                        {i18n.t("refreshButton")}
+                                    </span>
+                                </button>
+                            </div>
+                        </div>
+                        {pathInputError ? (
+                            <div className="browser-control-error">{pathInputError}</div>
+                        ) : null}
+                    </div>
 
                     <div className="browser-layout">
                         <section className="browser-main-panel">
@@ -1121,7 +1446,7 @@ function isDangerousContextMenuAction(
                                     });
                                 }}
                             >
-                                {state.error && treeRows.length > 0 ? (
+                                {state.error && allTreeRows.length > 0 ? (
                                     <div className="browser-error-banner">
                                         <span className="codicon codicon-error" aria-hidden="true" />
                                         <span>{state.error}</span>
@@ -1131,7 +1456,7 @@ function isDangerousContextMenuAction(
                                     <div className="empty-state">
                                         {i18n.t("repositoryBrowserLoadingState")}
                                     </div>
-                                ) : state.error && treeRows.length === 0 ? (
+                                ) : state.error && allTreeRows.length === 0 ? (
                                     <div className="empty-state">
                                         <div>{i18n.t("repositoryBrowserLoadErrorState")}</div>
                                         <div className="empty-state-error">{state.error}</div>
@@ -1144,6 +1469,10 @@ function isDangerousContextMenuAction(
                                                 {i18n.t("refreshButton")}
                                             </button>
                                         </div>
+                                    </div>
+                                ) : shouldShowNoMatches ? (
+                                    <div className="empty-state">
+                                        {i18n.t("repositoryBrowserNoMatchesState")}
                                     </div>
                                 ) : treeRows.length === 0 ? (
                                     <div className="empty-state">
@@ -1364,6 +1693,125 @@ function isDangerousContextMenuAction(
                                 )}
                             </div>
                         </section>
+
+                        <aside className="browser-sidebar">
+                            <section className="browser-details-card">
+                                <div className="section-title">
+                                    {i18n.t(
+                                        "repositoryBrowserCurrentDirectorySectionTitle"
+                                    )}
+                                </div>
+                                <div className="browser-details-body">
+                                    <div className="details-title-row">
+                                        <div className="details-title">
+                                            {currentDirectoryLabel}
+                                        </div>
+                                    </div>
+                                    <div className="browser-detail-grid">
+                                        {currentDirectoryDetails.map(function (detail) {
+                                            return (
+                                                <div
+                                                    key={`current:${detail.label}`}
+                                                    className="browser-detail-row"
+                                                >
+                                                    <span className="browser-detail-label">
+                                                        {detail.label}
+                                                    </span>
+                                                    <span
+                                                        className="browser-detail-value"
+                                                        title={detail.value}
+                                                    >
+                                                        {detail.value}
+                                                    </span>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                    <div className="browser-action-grid">
+                                        {state.currentActions.map(function (action) {
+                                            return renderInlineActionButton(
+                                                action,
+                                                function () {
+                                                    runCurrentAction(action.id);
+                                                },
+                                                "current"
+                                            );
+                                        })}
+                                    </div>
+                                </div>
+                            </section>
+
+                            <section className="browser-details-card">
+                                <div className="section-title">
+                                    {i18n.t(
+                                        "repositoryBrowserSelectedEntrySectionTitle"
+                                    )}
+                                </div>
+                                <div className="browser-details-body">
+                                    {state.selectedRepositoryPath ? (
+                                        <>
+                                            <div className="details-title-row">
+                                                <div className="details-title">
+                                                    {selectedEntry?.name ?? selectedPathLabel}
+                                                </div>
+                                            </div>
+                                            <div className="browser-detail-grid">
+                                                {selectedDetailItems.map(function (detail) {
+                                                    return (
+                                                        <div
+                                                            key={`selected:${detail.label}`}
+                                                            className="browser-detail-row"
+                                                        >
+                                                            <span className="browser-detail-label">
+                                                                {detail.label}
+                                                            </span>
+                                                            <span
+                                                                className="browser-detail-value"
+                                                                title={detail.value}
+                                                            >
+                                                                {detail.value}
+                                                            </span>
+                                                        </div>
+                                                    );
+                                                })}
+                                            </div>
+                                            <div className="browser-action-grid">
+                                                {selectedActions.map(function (action) {
+                                                    return renderInlineActionButton(
+                                                        action,
+                                                        function () {
+                                                            if (selectedEntry) {
+                                                                runEntryAction(
+                                                                    action.id as RepositoryBrowserEntryAction,
+                                                                    selectedEntry
+                                                                );
+                                                                return;
+                                                            }
+
+                                                            if (
+                                                                state.selectedRepositoryPath &&
+                                                                selectedPathLabel
+                                                            ) {
+                                                                runDirectoryPathContextAction(
+                                                                    action.id as RepositoryBrowserEntryAction,
+                                                                    state.selectedRepositoryPath,
+                                                                    selectedPathLabel
+                                                                );
+                                                            }
+                                                        },
+                                                        "selected"
+                                                    );
+                                                })}
+                                            </div>
+                                        </>
+                                    ) : (
+                                        <div className="browser-selection-hint">
+                                            {i18n.t("repositoryBrowserSelectEntryHint")}
+                                        </div>
+                                    )}
+                                </div>
+                            </section>
+                        </aside>
                     </div>
                     {state.contextMenu ? (
                         <div className="context-menu-root">
