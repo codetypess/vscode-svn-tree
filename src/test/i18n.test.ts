@@ -37,10 +37,7 @@ test("createI18n returns repository action prompts", () => {
     const english = createI18n("en");
     const chinese = createI18n("zh-CN");
 
-    assert.equal(
-        english.t("updateToRevisionActionLabel"),
-        "Update Working Copy To Revision"
-    );
+    assert.equal(english.t("updateToRevisionActionLabel"), "Update Working Copy To Revision");
     assert.equal(english.t("switchWorkingCopyActionLabel"), "Switch Branch Or Tag");
     assert.equal(english.t("revisionGraphActionLabel"), "Revision Graph");
     assert.equal(english.t("repositoryBrowserActionLabel"), "Repository Browser");
@@ -48,18 +45,12 @@ test("createI18n returns repository action prompts", () => {
         english.t("repositoryBrowserPanelTitle", { path: "/project/trunk" }),
         "Repository Browser: /project/trunk"
     );
-    assert.equal(
-        english.t("repositoryBrowserOpenDirectoryActionLabel"),
-        "Open Directory"
-    );
+    assert.equal(english.t("repositoryBrowserOpenDirectoryActionLabel"), "Open Directory");
     assert.equal(
         english.t("repositoryBrowserCheckoutDirectoryActionLabel"),
         "Checkout This Repository Directory"
     );
-    assert.equal(
-        english.t("repositoryBrowserExportDirectoryActionLabel"),
-        "Export To Directory"
-    );
+    assert.equal(english.t("repositoryBrowserExportDirectoryActionLabel"), "Export To Directory");
     assert.equal(english.t("repositoryBrowserPathFieldLabel"), "Path");
     assert.equal(english.t("repositoryBrowserGoButton"), "Go");
     assert.equal(
@@ -73,6 +64,8 @@ test("createI18n returns repository action prompts", () => {
     assert.equal(english.t("showPathInfoActionLabel"), "Show SVN Info");
     assert.equal(english.t("showBlameActionLabel"), "Blame / Annotate");
     assert.equal(english.t("showBlameOutputActionLabel"), "Show Blame In Output");
+    assert.equal(english.t("inlineBlameEnabledStatus"), "Inline blame enabled");
+    assert.equal(english.t("inlineBlameOpenFileHistoryLink"), "Open File History");
     assert.equal(
         english.t("showBlameOutputHeader", { path: "src/app.ts" }),
         "SVN Blame: src/app.ts"
@@ -88,23 +81,14 @@ test("createI18n returns repository action prompts", () => {
         english.t("renamePathExistsError", { name: "app.ts" }),
         "app.ts already exists in this folder."
     );
-    assert.equal(
-        english.t("changelistNameRequired"),
-        "Enter a changelist name."
-    );
-    assert.equal(
-        english.t("resolveAllConflictsActionLabel"),
-        "Mark All Conflicts As Resolved"
-    );
+    assert.equal(english.t("changelistNameRequired"), "Enter a changelist name.");
+    assert.equal(english.t("resolveAllConflictsActionLabel"), "Mark All Conflicts As Resolved");
     assert.equal(
         english.t("actionCategoriesPlaceholder", { label: "repo" }),
         "Choose an SVN action category for repo"
     );
     assert.equal(english.t("browseActionsCategoryLabel"), "Browse And History");
-    assert.equal(
-        english.t("acceptBaseAllActionLabel"),
-        "Accept Base Version For All Conflicts"
-    );
+    assert.equal(english.t("acceptBaseAllActionLabel"), "Accept Base Version For All Conflicts");
     assert.equal(
         english.t("acceptMineConflictAllActionLabel"),
         "Accept Local Conflicted Hunks For All Conflicts"
@@ -139,10 +123,7 @@ test("createI18n returns repository action prompts", () => {
         english.t("deleteReferenceInvalid"),
         "Use a valid branch or tag path in this repository, or a full URL to one."
     );
-    assert.equal(
-        english.t("relocateWorkingCopyActionLabel"),
-        "Relocate Working Copy"
-    );
+    assert.equal(english.t("relocateWorkingCopyActionLabel"), "Relocate Working Copy");
     assert.equal(
         english.t("acceptBaseQuestion", { items: "1 item" }),
         "Accept the base version for 1 item?"
@@ -171,10 +152,7 @@ test("createI18n returns repository action prompts", () => {
         "仓库浏览器：/project/trunk"
     );
     assert.equal(chinese.t("repositoryBrowserOpenDirectoryActionLabel"), "打开目录");
-    assert.equal(
-        chinese.t("repositoryBrowserCheckoutDirectoryActionLabel"),
-        "检出到新目录"
-    );
+    assert.equal(chinese.t("repositoryBrowserCheckoutDirectoryActionLabel"), "检出到新目录");
     assert.equal(chinese.t("repositoryBrowserExportDirectoryActionLabel"), "导出到目录");
     assert.equal(chinese.t("repositoryBrowserPathFieldLabel"), "路径");
     assert.equal(chinese.t("repositoryBrowserGoButton"), "跳转");
@@ -186,6 +164,8 @@ test("createI18n returns repository action prompts", () => {
     assert.equal(chinese.t("showPropertiesActionLabel"), "显示属性");
     assert.equal(chinese.t("showBlameOutputActionLabel"), "在输出中显示 blame");
     assert.equal(chinese.t("copyBlameLineActionLabel"), "复制 blame 行信息");
+    assert.equal(chinese.t("inlineBlameDisabledStatus"), "已关闭 inline blame");
+    assert.equal(chinese.t("inlineBlameOpenFileHistoryLink"), "打开文件历史");
     assert.equal(
         chinese.t("actionCategoryPlaceholder", { label: "仓库", category: "浏览与历史" }),
         "仓库的浏览与历史操作"

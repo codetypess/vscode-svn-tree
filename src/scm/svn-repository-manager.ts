@@ -16,6 +16,7 @@ import {
 import { SvnContentProvider } from "../svn/svn-content-provider";
 import { SvnService } from "../svn/svn-service";
 import { ScmResource } from "./scm-resource";
+import { SvnInlineBlameController } from "./svn-inline-blame-controller";
 import { buildPathInfoOutputLines } from "./svn-output-formatters";
 import {
     deriveCheckoutDestinationName,
@@ -39,10 +40,7 @@ interface RepositoryActionCategoryDefinition {
 }
 
 type RepositoryCommandHandler = (repository: SvnRepository) => Promise<void>;
-type ConflictCommandHandler = (
-    repository: SvnRepository,
-    paths: string[]
-) => Promise<void>;
+type ConflictCommandHandler = (repository: SvnRepository, paths: string[]) => Promise<void>;
 type RepositoryActionItem = QuickPickActionItem<SvnRepository>;
 type RepositoryActionCategoryItem = QuickPickActionCategoryItem<SvnRepository>;
 
@@ -79,6 +77,14 @@ interface ResolvedNodeInfoTarget {
     readonly target: ResolvedPathTarget;
     readonly nodeInfo: SvnNodeInfo;
     readonly displayPath: string;
+}
+
+interface SerializedUriLike {
+    readonly scheme: string;
+    readonly path: string;
+    readonly authority?: string;
+    readonly query?: string;
+    readonly fragment?: string;
 }
 
 const conflictActionDefinitions: readonly ConflictActionDefinition[] = [
@@ -148,12 +154,16 @@ export class SvnRepositoryManager implements vscode.Disposable {
     private readonly historyPanel: HistoryPanel;
     private readonly repositoryBrowserPanel: RepositoryBrowserPanel;
     private readonly revisionGraphPanel: RevisionGraphPanel;
+    private readonly inlineBlameController: SvnInlineBlameController;
     private remoteRefreshTimer: NodeJS.Timeout | undefined;
 
     public constructor(context: vscode.ExtensionContext) {
         this.historyPanel = new HistoryPanel(context.extensionUri);
         this.repositoryBrowserPanel = new RepositoryBrowserPanel(context.extensionUri);
         this.revisionGraphPanel = new RevisionGraphPanel(context.extensionUri);
+        this.inlineBlameController = new SvnInlineBlameController((uri) =>
+            this.getRepositoryForUri(uri)
+        );
         this.historyStatusBarItem.text = "$(history)";
         this.historyStatusBarItem.tooltip = getI18n().t("historyStatusTooltip");
         this.historyStatusBarItem.command = "svn-tree.open-history";
@@ -165,6 +175,7 @@ export class SvnRepositoryManager implements vscode.Disposable {
             this.historyPanel,
             this.repositoryBrowserPanel,
             this.revisionGraphPanel,
+            this.inlineBlameController,
             vscode.workspace.registerTextDocumentContentProvider(
                 SvnContentProvider.scheme,
                 this.contentProvider
@@ -262,6 +273,10 @@ export class SvnRepositoryManager implements vscode.Disposable {
             {
                 command: "svn-tree.show-blame",
                 run: (arg) => this.showBlame(arg),
+            },
+            {
+                command: "svn-tree.toggle-inline-blame",
+                run: () => this.inlineBlameController.toggle(),
             },
             {
                 command: "svn-tree.show-properties",
@@ -520,6 +535,7 @@ export class SvnRepositoryManager implements vscode.Disposable {
         this.refreshLocalization();
         this.updateHistoryStatusBarVisibility();
         await this.refreshAll(true);
+        this.inlineBlameController.refresh();
     }
 
     private async ensureSvnAvailable(): Promise<boolean> {
@@ -778,8 +794,7 @@ export class SvnRepositoryManager implements vscode.Disposable {
                     {
                         labelKey: "refreshStatusActionLabel",
                         descriptionKey: "refreshStatusActionDescription",
-                        run: (repository) =>
-                            repository.refreshWithProgress({ forceRemote: true }),
+                        run: (repository) => repository.refreshWithProgress({ forceRemote: true }),
                     },
                     {
                         labelKey: "openHistoryActionLabel",
@@ -898,8 +913,7 @@ export class SvnRepositoryManager implements vscode.Disposable {
                 actions: conflictActionDefinitions.map((definition) => ({
                     labelKey: definition.labelKey,
                     descriptionKey: definition.descriptionKey,
-                    run: (repository) =>
-                        this.runAllConflictAction(repository, definition.run),
+                    run: (repository) => this.runAllConflictAction(repository, definition.run),
                 })),
             },
             {
@@ -1015,11 +1029,7 @@ export class SvnRepositoryManager implements vscode.Disposable {
             }
 
             try {
-                await repository.openHistoryDiff(
-                    payload.revision,
-                    payload.path,
-                    payload.action
-                );
+                await repository.openHistoryDiff(payload.revision, payload.path, payload.action);
             } catch (error) {
                 this.showError(error);
             }
@@ -1220,10 +1230,7 @@ export class SvnRepositoryManager implements vscode.Disposable {
                 return;
             }
 
-            const destinationPath = await this.promptCheckoutDestination(
-                repositoryUrl,
-                revision
-            );
+            const destinationPath = await this.promptCheckoutDestination(repositoryUrl, revision);
             if (!destinationPath) {
                 return;
             }
@@ -1239,11 +1246,7 @@ export class SvnRepositoryManager implements vscode.Disposable {
                     }),
                 },
                 async () => {
-                    await this.svnService.checkout(
-                        repositoryUrl,
-                        revision,
-                        destinationPath
-                    );
+                    await this.svnService.checkout(repositoryUrl, revision, destinationPath);
                 }
             );
 
@@ -1251,11 +1254,7 @@ export class SvnRepositoryManager implements vscode.Disposable {
                 await this.registerRepositoryForPath(destinationPath, false);
             }
 
-            await this.showCheckoutSuccessActions(
-                repositoryUrl,
-                revision,
-                destinationPath
-            );
+            await this.showCheckoutSuccessActions(repositoryUrl, revision, destinationPath);
         } catch (error) {
             this.showError(error);
         }
@@ -1264,20 +1263,14 @@ export class SvnRepositoryManager implements vscode.Disposable {
     private async copyRepositoryUrl(arg: unknown): Promise<void> {
         await this.runForResolvedNodeInfoTarget(arg, async ({ nodeInfo }) => {
             await vscode.env.clipboard.writeText(nodeInfo.url);
-            void vscode.window.setStatusBarMessage(
-                getI18n().t("copiedRepositoryUrlStatus"),
-                2000
-            );
+            void vscode.window.setStatusBarMessage(getI18n().t("copiedRepositoryUrlStatus"), 2000);
         });
     }
 
     private async copyRepositoryPath(arg: unknown): Promise<void> {
         await this.runForResolvedNodeInfoTarget(arg, async ({ nodeInfo }) => {
             await vscode.env.clipboard.writeText(nodeInfo.repositoryRelativePath);
-            void vscode.window.setStatusBarMessage(
-                getI18n().t("copiedRepositoryPathStatus"),
-                2000
-            );
+            void vscode.window.setStatusBarMessage(getI18n().t("copiedRepositoryPathStatus"), 2000);
         });
     }
 
@@ -1377,10 +1370,7 @@ export class SvnRepositoryManager implements vscode.Disposable {
                 target.uri.fsPath,
                 newName
             );
-            await vscode.commands.executeCommand(
-                "revealInExplorer",
-                vscode.Uri.file(renamedPath)
-            );
+            await vscode.commands.executeCommand("revealInExplorer", vscode.Uri.file(renamedPath));
         } catch (error) {
             this.showError(error);
         }
@@ -1425,10 +1415,10 @@ export class SvnRepositoryManager implements vscode.Disposable {
             return;
         }
 
-        const changelistName = await this.promptSelectedChangelistName(
-            arg,
-            ["svn-change", "svn-conflict"]
-        );
+        const changelistName = await this.promptSelectedChangelistName(arg, [
+            "svn-change",
+            "svn-conflict",
+        ]);
         if (!changelistName) {
             return;
         }
@@ -1531,10 +1521,10 @@ export class SvnRepositoryManager implements vscode.Disposable {
     }
 
     private async addToChangelist(arg: unknown): Promise<void> {
-        const changelistName = await this.promptSelectedChangelistName(
-            arg,
-            ["svn-change", "svn-conflict"]
-        );
+        const changelistName = await this.promptSelectedChangelistName(arg, [
+            "svn-change",
+            "svn-conflict",
+        ]);
         if (!changelistName) {
             return;
         }
@@ -1642,13 +1632,11 @@ export class SvnRepositoryManager implements vscode.Disposable {
 
         const message = error instanceof Error ? error.message : String(error);
         const showOutputAction = i18n.t("showOutputActionLabel");
-        void vscode.window
-            .showErrorMessage(message, showOutputAction)
-            .then((selection) => {
-                if (selection === showOutputAction) {
-                    this.outputChannel.show(true);
-                }
-            });
+        void vscode.window.showErrorMessage(message, showOutputAction).then((selection) => {
+            if (selection === showOutputAction) {
+                this.outputChannel.show(true);
+            }
+        });
     }
 
     private showInformationStatus(messageKey: MessageKey): void {
@@ -1706,7 +1694,9 @@ export class SvnRepositoryManager implements vscode.Disposable {
     }
 
     private getCommonChangelistName(resources: readonly ScmResource[]): string | undefined {
-        const names = [...new Set(resources.map((resource) => resource.status.changelist).filter(Boolean))];
+        const names = [
+            ...new Set(resources.map((resource) => resource.status.changelist).filter(Boolean)),
+        ];
         return names.length === 1 ? names[0] : undefined;
     }
 
@@ -1722,16 +1712,13 @@ export class SvnRepositoryManager implements vscode.Disposable {
         return this.promptChangelistName(this.getCommonChangelistName(resources));
     }
 
-    private async promptChangelistName(
-        value?: string
-    ): Promise<string | undefined> {
+    private async promptChangelistName(value?: string): Promise<string | undefined> {
         const i18n = getI18n();
         const selection = await vscode.window.showInputBox({
             prompt: i18n.t("changelistNamePrompt"),
             placeHolder: i18n.t("changelistNamePlaceholder"),
             value,
-            validateInput: (input) =>
-                input.trim() ? undefined : i18n.t("changelistNameRequired"),
+            validateInput: (input) => (input.trim() ? undefined : i18n.t("changelistNameRequired")),
         });
         const trimmedSelection = selection?.trim();
         return trimmedSelection ? trimmedSelection : undefined;
@@ -1758,9 +1745,7 @@ export class SvnRepositoryManager implements vscode.Disposable {
         return normalizeCheckoutRepositoryUrl(selection);
     }
 
-    private async promptCheckoutRevision(
-        repositoryUrl: string
-    ): Promise<string | undefined> {
+    private async promptCheckoutRevision(repositoryUrl: string): Promise<string | undefined> {
         const i18n = getI18n();
         const selection = await vscode.window.showInputBox({
             title: i18n.t("checkoutFromUrlActionLabel"),
@@ -1768,9 +1753,7 @@ export class SvnRepositoryManager implements vscode.Disposable {
             placeHolder: i18n.t("checkoutRevisionPlaceholder"),
             value: "HEAD",
             validateInput: (value) =>
-                normalizeCheckoutRevision(value)
-                    ? undefined
-                    : i18n.t("checkoutRevisionInvalid"),
+                normalizeCheckoutRevision(value) ? undefined : i18n.t("checkoutRevisionInvalid"),
         });
 
         return normalizeCheckoutRevision(selection);
@@ -1913,16 +1896,14 @@ export class SvnRepositoryManager implements vscode.Disposable {
         const i18n = getI18n();
         const currentName = nodePath.basename(targetPath);
         const relativePath =
-            nodePath.relative(repository.rootPath, targetPath).replace(/\\/g, "/") ||
-            currentName;
+            nodePath.relative(repository.rootPath, targetPath).replace(/\\/g, "/") || currentName;
         const parentPath = nodePath.dirname(targetPath);
         const selection = await vscode.window.showInputBox({
             title: i18n.t("renamePathActionLabel"),
             prompt: i18n.t("renamePathPrompt", { path: relativePath }),
             placeHolder: i18n.t("renamePathPlaceholder"),
             value: currentName,
-            validateInput: (value) =>
-                this.validateRenamePathName(parentPath, currentName, value),
+            validateInput: (value) => this.validateRenamePathName(parentPath, currentName, value),
         });
         const trimmedSelection = selection?.trim();
         return trimmedSelection ? trimmedSelection : undefined;
@@ -1966,7 +1947,11 @@ export class SvnRepositoryManager implements vscode.Disposable {
             return arg;
         }
 
-        if (arg instanceof ScmResource) {
+        if (this.isSerializedUriLike(arg)) {
+            return vscode.Uri.from(arg);
+        }
+
+        if (this.isScmResource(arg)) {
             return arg.resourceUri;
         }
 
@@ -1980,6 +1965,26 @@ export class SvnRepositoryManager implements vscode.Disposable {
         }
 
         return undefined;
+    }
+
+    private isSerializedUriLike(arg: unknown): arg is SerializedUriLike {
+        return (
+            typeof arg === "object" &&
+            arg !== null &&
+            "scheme" in arg &&
+            typeof arg.scheme === "string" &&
+            "path" in arg &&
+            typeof arg.path === "string"
+        );
+    }
+
+    private isScmResource(arg: unknown): arg is ScmResource {
+        return (
+            typeof arg === "object" &&
+            arg !== null &&
+            "resourceUri" in arg &&
+            arg.resourceUri instanceof vscode.Uri
+        );
     }
 
     private getUriFromArgOrActiveEditor(arg: unknown): vscode.Uri | undefined {
@@ -2249,10 +2254,7 @@ export class SvnRepositoryManager implements vscode.Disposable {
             const partitioned = partitionDeleteTargets(
                 repositoryResources.map((resource) => ({
                     absolutePath: resource.status.absolutePath,
-                    kind:
-                        resource.contextValue === "svn-unversioned"
-                            ? "unversioned"
-                            : "versioned",
+                    kind: resource.contextValue === "svn-unversioned" ? "unversioned" : "versioned",
                 }))
             );
 
@@ -2367,9 +2369,7 @@ export class SvnRepositoryManager implements vscode.Disposable {
     }
 
     private getTargetDisplayPath(repository: SvnRepository, uri: vscode.Uri): string {
-        const relativePath = nodePath
-            .relative(repository.rootPath, uri.fsPath)
-            .replace(/\\/g, "/");
+        const relativePath = nodePath.relative(repository.rootPath, uri.fsPath).replace(/\\/g, "/");
 
         return relativePath.length > 0 ? relativePath : nodePath.basename(repository.rootPath);
     }

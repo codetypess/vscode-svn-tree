@@ -24,8 +24,7 @@ const englishMessages = {
     revisionGraphPanelTitle: "SVN Revision Graph: {label}",
     revisionGraphLoading: "Loading revision graph...",
     revisionGraphEmpty: "No reference nodes were found in the loaded history.",
-    revisionGraphNoEdges:
-        "No branch or tag copy relationships were found in the loaded history.",
+    revisionGraphNoEdges: "No branch or tag copy relationships were found in the loaded history.",
     revisionGraphLayoutRootLabel: "Layout root: {path}",
     revisionGraphScannedEntriesLabel: "{count} loaded revisions",
     revisionGraphTruncatedNotice: "Showing recent history only",
@@ -55,7 +54,8 @@ const englishMessages = {
     revisionGraphCreateBranchHere: "Create Branch Here",
     revisionGraphCreateTagHere: "Create Tag Here",
     revisionGraphOpenRevisionDetails: "Open Revision Details",
-    revisionGraphInvalidFilters: "Revision Graph filters are invalid. Check the date and revision ranges.",
+    revisionGraphInvalidFilters:
+        "Revision Graph filters are invalid. Check the date and revision ranges.",
     revisionGraphRevisionNotFound: "Revision r{revision} could not be loaded for this graph edge.",
     revisionGraphCompareTitle: "Revision Graph Compare",
     revisionGraphNoDifferences: "No differences were reported.",
@@ -72,11 +72,9 @@ const englishMessages = {
     repositoryBrowserPathPlaceholder: "/project/trunk or project/trunk",
     repositoryBrowserGoButton: "Go",
     repositoryBrowserFilterFieldLabel: "Filter",
-    repositoryBrowserFilterPlaceholder:
-        "Filter loaded entries by name, path, author or revision",
+    repositoryBrowserFilterPlaceholder: "Filter loaded entries by name, path, author or revision",
     repositoryBrowserNoMatchesState: "No loaded entries match the current filter.",
-    repositoryBrowserPathInvalid:
-        "Use a valid repository path without empty, . or .. segments.",
+    repositoryBrowserPathInvalid: "Use a valid repository path without empty, . or .. segments.",
     repositoryBrowserOpenDirectoryActionLabel: "Open Directory",
     repositoryBrowserCheckoutDirectoryActionLabel: "Checkout This Repository Directory",
     repositoryBrowserExportDirectoryActionLabel: "Export To Directory",
@@ -100,7 +98,8 @@ const englishMessages = {
     updateSelectedToRevisionInputPrompt: "Revision number to update the selected paths to",
     updateSelectedToRevisionInputPlaceholder: "Enter a positive SVN revision number",
     switchWorkingCopyActionLabel: "Switch Branch Or Tag",
-    switchWorkingCopyActionDescription: "Switch this working copy to another branch, tag, or repository path",
+    switchWorkingCopyActionDescription:
+        "Switch this working copy to another branch, tag, or repository path",
     mergeWorkingCopyActionLabel: "Merge Into Working Copy",
     mergeWorkingCopyActionDescription:
         "Merge a revision, revision range, or source path into the current working copy",
@@ -109,6 +108,9 @@ const englishMessages = {
     showBlameOutputActionLabel: "Show Blame In Output",
     showBlameTextActionLabel: "Open Blame As Text",
     copyBlameLineActionLabel: "Copy Blame Line Metadata",
+    inlineBlameEnabledStatus: "Inline blame enabled",
+    inlineBlameDisabledStatus: "Inline blame disabled",
+    inlineBlameOpenFileHistoryLink: "Open File History",
     showPropertiesActionLabel: "Show Properties",
     showPropertiesActionDescription: "List SVN properties on a path",
     editPropertyActionLabel: "Edit Properties",
@@ -125,8 +127,7 @@ const englishMessages = {
     deleteReferenceActionDescription: "Delete a branch or tag from the repository",
     checkoutFromUrlActionLabel: "Checkout Repository URL",
     relocateWorkingCopyActionLabel: "Relocate Working Copy",
-    relocateWorkingCopyActionDescription:
-        "Point this working copy at a new repository URL",
+    relocateWorkingCopyActionDescription: "Point this working copy at a new repository URL",
     checkoutRepositoryUrlPrompt: "Repository URL to check out",
     checkoutRepositoryUrlPlaceholder:
         "https://server/project/trunk or svn+ssh://server/project/branches/feature-x",
@@ -141,14 +142,11 @@ const englishMessages = {
     switchTargetInvalid: "Use a valid repository path or URL.",
     mergeModePlaceholder: "Choose what to merge into working copy {label}",
     mergeRevisionModeLabel: "Merge A Revision",
-    mergeRevisionModeDescription:
-        "Merge one revision from a branch, tag, repository path, or URL",
+    mergeRevisionModeDescription: "Merge one revision from a branch, tag, repository path, or URL",
     mergeRangeModeLabel: "Merge A Revision Range",
-    mergeRangeModeDescription:
-        "Merge a revision range from a branch, tag, repository path, or URL",
+    mergeRangeModeDescription: "Merge a revision range from a branch, tag, repository path, or URL",
     reverseMergeRevisionModeLabel: "Reverse-Merge A Revision",
-    reverseMergeRevisionModeDescription:
-        "Undo the effect of one revision in this working copy",
+    reverseMergeRevisionModeDescription: "Undo the effect of one revision in this working copy",
     reverseMergeToRevisionModeLabel: "Reverse-Merge Back To A Revision",
     reverseMergeToRevisionModeDescription:
         "Undo all revisions newer than a chosen revision in this working copy",
@@ -159,8 +157,7 @@ const englishMessages = {
     mergeSourceInvalid: "Use a valid source repository path or URL.",
     mergeRevisionPrompt: "Revision number to merge from {source}",
     reverseMergeRevisionPrompt: "Revision number to reverse-merge from {source}",
-    reverseMergeToRevisionPrompt:
-        "Keep revisions up to and including this revision from {source}",
+    reverseMergeToRevisionPrompt: "Keep revisions up to and including this revision from {source}",
     mergeRangeStartPrompt: "Start revision of the range to merge from {source}",
     mergeRangeEndPrompt: "End revision of the range to merge from {source}",
     mergeRangeOrderInvalid: "Enter an end revision newer than r{revision}.",
@@ -183,8 +180,7 @@ const englishMessages = {
     updateWorkingCopyCompleted: "Working copy update completed for {label}",
     updateWorkingCopyRunningTooltip: "Updating working copy...",
     updateToRevisionQuestion: "Update the current working copy to r{revision}?",
-    updateToRevisionDetail:
-        "This will update the current working copy to r{revision}.",
+    updateToRevisionDetail: "This will update the current working copy to r{revision}.",
     updateToRevisionRecoveryDetail: "You can update back to HEAD later if needed.",
     updateToRevisionProgress: "Updating working copy {label} to r{revision}...",
     updatedToRevisionInfo: "Updated working copy {label} to r{revision}.",
@@ -199,12 +195,10 @@ const englishMessages = {
     cleanupWorkingCopyRunningTooltip: "Cleaning up working copy...",
     switchWorkingCopyRunningTooltip: "Switching working copy...",
     mergeWorkingCopyProgress: "Merging {summary} into working copy {label}...",
-    mergeWorkingCopyDryRunProgress:
-        "Previewing merge of {summary} into working copy {label}...",
+    mergeWorkingCopyDryRunProgress: "Previewing merge of {summary} into working copy {label}...",
     mergedWorkingCopyInfo:
         "Merged {summary} into working copy {label}. Review the result and commit when ready.",
-    mergeWorkingCopyDryRunInfo:
-        "Dry-run completed for {summary}. Review SVN output for details.",
+    mergeWorkingCopyDryRunInfo: "Dry-run completed for {summary}. Review SVN output for details.",
     mergeWorkingCopyRunningTooltip: "Merging into working copy...",
     addAllUnversionedActionLabel: "Add All Unversioned",
     addAllUnversionedActionDescription: "Add all unversioned files in this working copy",
@@ -215,7 +209,8 @@ const englishMessages = {
     commitChangelistActionLabel: "Commit Changelist",
     commitChangelistActionDescription: "Commit only the paths assigned to a changelist",
     resolveAllConflictsActionLabel: "Mark All Conflicts As Resolved",
-    resolveAllConflictsActionDescription: "Mark every conflicted path in this working copy as resolved",
+    resolveAllConflictsActionDescription:
+        "Mark every conflicted path in this working copy as resolved",
     acceptMineAllActionLabel: "Accept Local Version For All Conflicts",
     acceptMineAllActionDescription: "Keep the local version for every conflicted path",
     acceptBaseAllActionLabel: "Accept Base Version For All Conflicts",
@@ -223,15 +218,13 @@ const englishMessages = {
     acceptMineConflictAllActionLabel: "Accept Local Conflicted Hunks For All Conflicts",
     acceptMineConflictAllActionDescription:
         "Keep only the local conflicted hunks for every conflicted path",
-    acceptTheirsConflictAllActionLabel:
-        "Accept Incoming Conflicted Hunks For All Conflicts",
+    acceptTheirsConflictAllActionLabel: "Accept Incoming Conflicted Hunks For All Conflicts",
     acceptTheirsConflictAllActionDescription:
         "Keep only the incoming conflicted hunks for every conflicted path",
     acceptTheirsAllActionLabel: "Accept Incoming Version For All Conflicts",
     acceptTheirsAllActionDescription: "Keep the incoming version for every conflicted path",
     postponeAllConflictsActionLabel: "Postpone Resolution For All Conflicts",
-    postponeAllConflictsActionDescription:
-        "Leave every conflicted path unresolved for now",
+    postponeAllConflictsActionDescription: "Leave every conflicted path unresolved for now",
     showOutputActionLabel: "Show SVN Output",
     showOutputActionDescription: "Open the extension output channel",
     actionsPlaceholder: "SVN actions for {label}",
@@ -240,11 +233,9 @@ const englishMessages = {
     browseActionsCategoryLabel: "Browse And History",
     browseActionsCategoryDescription: "Status refresh, history, repository browser, and info",
     workingCopyActionsCategoryLabel: "Working Copy",
-    workingCopyActionsCategoryDescription:
-        "Update, switch, branch/tag creation, and relocate",
+    workingCopyActionsCategoryDescription: "Update, switch, branch/tag creation, and relocate",
     changeActionsCategoryLabel: "Changes",
-    changeActionsCategoryDescription:
-        "Commit, changelists, add unversioned, delete, and revert",
+    changeActionsCategoryDescription: "Commit, changelists, add unversioned, delete, and revert",
     conflictActionsCategoryLabel: "Conflicts",
     conflictActionsCategoryDescription: "Resolve conflicts and choose accept strategies",
     toolActionsCategoryLabel: "Tools",
@@ -366,23 +357,19 @@ const englishMessages = {
     repositoryBrowserCreateDirectoryProgress: "Creating directory {path}...",
     repositoryBrowserCreatedDirectoryInfo: "Created directory {path}.",
     repositoryBrowserCopyDirectoryCommitMessage: "Copy {source} to {destination}",
-    repositoryBrowserCopyDirectoryProgress:
-        "Copying directory {source} to {destination}...",
+    repositoryBrowserCopyDirectoryProgress: "Copying directory {source} to {destination}...",
     repositoryBrowserCopiedDirectoryInfo: "Copied {source} to {destination}.",
     repositoryBrowserMoveDirectoryCommitMessage: "Move {source} to {destination}",
-    repositoryBrowserMoveDirectoryProgress:
-        "Moving directory {source} to {destination}...",
+    repositoryBrowserMoveDirectoryProgress: "Moving directory {source} to {destination}...",
     repositoryBrowserMovedDirectoryInfo: "Moved {source} to {destination}.",
     repositoryBrowserDeleteDirectoryQuestion: "Delete remote directory {target}?",
     repositoryBrowserDeleteDirectoryDetail:
         "This immediately deletes the remote directory {target} by creating an SVN commit.",
     repositoryBrowserDeleteDirectoryCommitMessage: "Delete {target}",
-    repositoryBrowserCheckoutDirectoryProgress:
-        "Checking out repository directory {path}...",
+    repositoryBrowserCheckoutDirectoryProgress: "Checking out repository directory {path}...",
     repositoryBrowserCheckedOutDirectoryInfo:
         "Checked out repository directory {path} to {destination}.",
-    repositoryBrowserExportDirectoryProgress:
-        "Exporting repository directory {path}...",
+    repositoryBrowserExportDirectoryProgress: "Exporting repository directory {path}...",
     repositoryBrowserExportedDirectoryInfo:
         "Exported repository directory {path} to {destination}.",
     repositoryBrowserDeleteDirectoryProgress: "Deleting directory {target}...",
@@ -485,10 +472,8 @@ const englishMessages = {
         "This creates {destination} on the repository from the current working copy state.",
     createReferenceFromWorkingCopyWithLocalChangesDetail:
         "Local working copy changes will be included in the new branch or tag.",
-    createReferenceFromWorkingCopyCommitMessage:
-        "Create {kind} {destination} from working copy",
-    createReferenceFromWorkingCopyProgress:
-        "Creating {kind} from the current working copy...",
+    createReferenceFromWorkingCopyCommitMessage: "Create {kind} {destination} from working copy",
+    createReferenceFromWorkingCopyProgress: "Creating {kind} from the current working copy...",
     createdReferenceFromWorkingCopyMessage:
         "Created {kind} from the current working copy: {destination}",
     branchNameRequired: "Branch name is required.",
@@ -498,8 +483,7 @@ const englishMessages = {
     deleteReferencePrompt:
         "Branch or tag path under {layoutRoot}, absolute repository path, or full URL to delete",
     deleteReferencePlaceholder: "branches/feature-x, /project/tags/v1, or https://...",
-    deleteReferenceRequired:
-        "Enter a branch, tag, repository path, or URL to delete.",
+    deleteReferenceRequired: "Enter a branch, tag, repository path, or URL to delete.",
     deleteReferenceInvalid:
         "Use a valid branch or tag path in this repository, or a full URL to one.",
     deleteReferenceQuestion: "Delete {target} from the repository?",
@@ -614,7 +598,8 @@ const englishMessages = {
     exportFileSaveLabel: "Export File",
     exportFileProgress: "Exporting {path} from r{revision}...",
     exportedFileMessage: "Exported {path} from r{revision} to {destination}.",
-    historyFileExportUnavailable: "File content for {path} is not available to export from r{revision}.",
+    historyFileExportUnavailable:
+        "File content for {path} is not available to export from r{revision}.",
     copyRevisionNumber: "Copy Revision Number",
     copyCommitMessage: "Copy Commit Message",
     copyChangedPaths: "Copy Changed Paths",
@@ -774,13 +759,15 @@ const messages: Record<SupportedLocale, MessageCatalog> = {
         switchWorkingCopyActionLabel: "切换分支或标签",
         switchWorkingCopyActionDescription: "将当前工作副本切换到其他分支、标签或仓库路径",
         mergeWorkingCopyActionLabel: "合并到工作副本",
-        mergeWorkingCopyActionDescription:
-            "将某个版本、版本区间或来源路径合并到当前工作副本",
+        mergeWorkingCopyActionDescription: "将某个版本、版本区间或来源路径合并到当前工作副本",
         showBlameActionLabel: "Blame / Annotate",
         showBlameActionDescription: "按行查看版本和作者信息",
         showBlameOutputActionLabel: "在输出中显示 blame",
         showBlameTextActionLabel: "以文本方式打开 blame",
         copyBlameLineActionLabel: "复制 blame 行信息",
+        inlineBlameEnabledStatus: "已启用 inline blame",
+        inlineBlameDisabledStatus: "已关闭 inline blame",
+        inlineBlameOpenFileHistoryLink: "打开文件历史",
         showPropertiesActionLabel: "显示属性",
         showPropertiesActionDescription: "列出路径上的 SVN 属性",
         editPropertyActionLabel: "编辑属性",
@@ -788,11 +775,9 @@ const messages: Record<SupportedLocale, MessageCatalog> = {
         editIgnoreActionLabel: "编辑 SVN Ignore 规则",
         editIgnoreActionDescription: "查看并更新目录上的 svn:ignore 规则",
         createBranchFromWorkingCopyActionLabel: "从工作副本创建分支",
-        createBranchFromWorkingCopyActionDescription:
-            "将当前工作副本连同本地修改一起复制到新分支",
+        createBranchFromWorkingCopyActionDescription: "将当前工作副本连同本地修改一起复制到新分支",
         createTagFromWorkingCopyActionLabel: "从工作副本创建标签",
-        createTagFromWorkingCopyActionDescription:
-            "将当前工作副本连同本地修改一起复制到新标签",
+        createTagFromWorkingCopyActionDescription: "将当前工作副本连同本地修改一起复制到新标签",
         deleteReferenceActionLabel: "删除分支 / 标签",
         deleteReferenceActionDescription: "从仓库中删除分支或标签",
         checkoutFromUrlActionLabel: "检出仓库 URL",
@@ -812,21 +797,15 @@ const messages: Record<SupportedLocale, MessageCatalog> = {
         switchTargetInvalid: "请输入有效的仓库路径或 URL。",
         mergeModePlaceholder: "选择要合并到工作副本 {label} 的内容",
         mergeRevisionModeLabel: "合并单个版本",
-        mergeRevisionModeDescription:
-            "从分支、标签、仓库路径或 URL 合并一个版本",
+        mergeRevisionModeDescription: "从分支、标签、仓库路径或 URL 合并一个版本",
         mergeRangeModeLabel: "合并版本区间",
-        mergeRangeModeDescription:
-            "从分支、标签、仓库路径或 URL 合并一个版本区间",
+        mergeRangeModeDescription: "从分支、标签、仓库路径或 URL 合并一个版本区间",
         reverseMergeRevisionModeLabel: "反向合并单个版本",
-        reverseMergeRevisionModeDescription:
-            "在当前工作副本中撤销某一个版本的影响",
+        reverseMergeRevisionModeDescription: "在当前工作副本中撤销某一个版本的影响",
         reverseMergeToRevisionModeLabel: "反向合并回指定版本",
-        reverseMergeToRevisionModeDescription:
-            "在当前工作副本中撤销比指定版本更新的全部版本",
-        mergeSourcePrompt:
-            "输入 {layoutRoot} 下的来源路径、仓库绝对路径，或完整 URL 作为合并来源",
-        mergeSourcePlaceholder:
-            "trunk、branches/feature-x、/project/trunk，或 https://...",
+        reverseMergeToRevisionModeDescription: "在当前工作副本中撤销比指定版本更新的全部版本",
+        mergeSourcePrompt: "输入 {layoutRoot} 下的来源路径、仓库绝对路径，或完整 URL 作为合并来源",
+        mergeSourcePlaceholder: "trunk、branches/feature-x、/project/trunk，或 https://...",
         mergeSourceRequired: "请输入合并来源分支、标签、仓库路径或 URL。",
         mergeSourceInvalid: "请输入有效的合并来源仓库路径或 URL。",
         mergeRevisionPrompt: "输入要从 {source} 合并的版本号",
@@ -867,12 +846,10 @@ const messages: Record<SupportedLocale, MessageCatalog> = {
         cleanupWorkingCopyRunningTooltip: "正在清理工作副本...",
         switchWorkingCopyRunningTooltip: "正在切换工作副本...",
         mergeWorkingCopyProgress: "正在将 {summary} 合并到工作副本 {label}...",
-        mergeWorkingCopyDryRunProgress:
-            "正在预览将 {summary} 合并到工作副本 {label}...",
+        mergeWorkingCopyDryRunProgress: "正在预览将 {summary} 合并到工作副本 {label}...",
         mergedWorkingCopyInfo:
             "已将 {summary} 合并到工作副本 {label}。请检查结果并在准备好后提交。",
-        mergeWorkingCopyDryRunInfo:
-            "已完成 {summary} 的 Dry-run 预览。详情请查看 SVN 输出。",
+        mergeWorkingCopyDryRunInfo: "已完成 {summary} 的 Dry-run 预览。详情请查看 SVN 输出。",
         mergeWorkingCopyRunningTooltip: "正在合并到工作副本...",
         addAllUnversionedActionLabel: "添加全部未纳管项",
         addAllUnversionedActionDescription: "将当前工作副本中的全部未纳管文件加入版本控制",
@@ -889,8 +866,7 @@ const messages: Record<SupportedLocale, MessageCatalog> = {
         acceptBaseAllActionLabel: "对全部冲突接受基础版本",
         acceptBaseAllActionDescription: "对当前工作副本中的全部冲突路径保留基础版本",
         acceptMineConflictAllActionLabel: "对全部冲突接受本地冲突块",
-        acceptMineConflictAllActionDescription:
-            "对当前工作副本中的全部冲突路径只保留本地侧冲突块",
+        acceptMineConflictAllActionDescription: "对当前工作副本中的全部冲突路径只保留本地侧冲突块",
         acceptTheirsConflictAllActionLabel: "对全部冲突接受远端冲突块",
         acceptTheirsConflictAllActionDescription:
             "对当前工作副本中的全部冲突路径只保留远端侧冲突块",
@@ -1027,23 +1003,18 @@ const messages: Record<SupportedLocale, MessageCatalog> = {
         repositoryBrowserCreateDirectoryProgress: "正在创建目录 {path}...",
         repositoryBrowserCreatedDirectoryInfo: "已创建目录 {path}。",
         repositoryBrowserCopyDirectoryCommitMessage: "将 {source} 复制到 {destination}",
-        repositoryBrowserCopyDirectoryProgress:
-            "正在将目录 {source} 复制到 {destination}...",
+        repositoryBrowserCopyDirectoryProgress: "正在将目录 {source} 复制到 {destination}...",
         repositoryBrowserCopiedDirectoryInfo: "已将 {source} 复制到 {destination}。",
         repositoryBrowserMoveDirectoryCommitMessage: "将 {source} 移动到 {destination}",
-        repositoryBrowserMoveDirectoryProgress:
-            "正在将目录 {source} 移动到 {destination}...",
+        repositoryBrowserMoveDirectoryProgress: "正在将目录 {source} 移动到 {destination}...",
         repositoryBrowserMovedDirectoryInfo: "已将 {source} 移动到 {destination}。",
         repositoryBrowserDeleteDirectoryQuestion: "要删除远端目录 {target} 吗？",
-        repositoryBrowserDeleteDirectoryDetail:
-            "这会通过一次 SVN 提交立即删除远端目录 {target}。",
+        repositoryBrowserDeleteDirectoryDetail: "这会通过一次 SVN 提交立即删除远端目录 {target}。",
         repositoryBrowserDeleteDirectoryCommitMessage: "删除 {target}",
         repositoryBrowserCheckoutDirectoryProgress: "正在检出仓库目录 {path}...",
-        repositoryBrowserCheckedOutDirectoryInfo:
-            "已将仓库目录 {path} 检出到 {destination}。",
+        repositoryBrowserCheckedOutDirectoryInfo: "已将仓库目录 {path} 检出到 {destination}。",
         repositoryBrowserExportDirectoryProgress: "正在导出仓库目录 {path}...",
-        repositoryBrowserExportedDirectoryInfo:
-            "已将仓库目录 {path} 导出到 {destination}。",
+        repositoryBrowserExportedDirectoryInfo: "已将仓库目录 {path} 导出到 {destination}。",
         repositoryBrowserDeleteDirectoryProgress: "正在删除目录 {target}...",
         repositoryBrowserDeletedDirectoryInfo: "已删除目录 {target}。",
         infoPathLabel: "路径",
@@ -1080,8 +1051,7 @@ const messages: Record<SupportedLocale, MessageCatalog> = {
         deleteResourceWarning: "要删除 {path} 吗？",
         deleteTrackedResourceDetail: "这会将该路径从工作副本中删除，并在 SVN 中标记为待删除。",
         deleteUnversionedResourceDetail: "这会从磁盘删除该路径，并在支持时移入回收站。",
-        deleteMixedResourcesDetail:
-            "已纳管路径会在 SVN 中标记为待删除；未纳管路径会从磁盘删除。",
+        deleteMixedResourcesDetail: "已纳管路径会在 SVN 中标记为待删除；未纳管路径会从磁盘删除。",
         deleteButton: "删除",
         deleteGroupWarning: "要从磁盘删除 {label} 吗？",
         deleteAllButton: "全部删除",
@@ -1151,11 +1121,9 @@ const messages: Record<SupportedLocale, MessageCatalog> = {
             "输入要删除的 {layoutRoot} 下分支/标签路径、仓库绝对路径，或完整 URL",
         deleteReferencePlaceholder: "branches/feature-x、/project/tags/v1，或 https://...",
         deleteReferenceRequired: "请输入要删除的分支、标签、仓库路径或 URL。",
-        deleteReferenceInvalid:
-            "请输入当前仓库中的有效分支或标签路径，或指向它的完整 URL。",
+        deleteReferenceInvalid: "请输入当前仓库中的有效分支或标签路径，或指向它的完整 URL。",
         deleteReferenceQuestion: "要从仓库中删除 {target} 吗？",
-        deleteReferenceDetail:
-            "这会立即通过一次 SVN 提交删除远端分支或标签 {target}。",
+        deleteReferenceDetail: "这会立即通过一次 SVN 提交删除远端分支或标签 {target}。",
         deleteReferenceCommitMessage: "删除 {target}",
         deleteReferenceProgress: "正在删除 {target}...",
         deletedReferenceInfo: "已删除 {target}。",
@@ -1167,14 +1135,11 @@ const messages: Record<SupportedLocale, MessageCatalog> = {
         relocatedWorkingCopyInfo: "已重定位工作副本 {label}。",
         revertWorkingCopyQuestion: "要将工作副本还原到 r{revision} 吗？",
         revertChangesQuestion: "要还原 r{revision} 引入的更改吗？",
-        revertWorkingCopyDetail:
-            "这会把所有比 r{revision} 更新的版本反向合并到当前工作副本。",
-        revertChangesDetail:
-            "这只会把 r{revision} 这个版本反向合并到当前工作副本。",
+        revertWorkingCopyDetail: "这会把所有比 r{revision} 更新的版本反向合并到当前工作副本。",
+        revertChangesDetail: "这只会把 r{revision} 这个版本反向合并到当前工作副本。",
         cleanWorkingCopyRecommended: "建议在干净且已更新到最新的工作副本上执行此操作。",
         workingCopyOnlyDetail: "此操作只会修改你的工作副本，完成后仍需要手动提交。",
-        localChangesConflictWarning:
-            "当前工作副本已经存在本地修改，发生冲突的概率会更高。",
+        localChangesConflictWarning: "当前工作副本已经存在本地修改，发生冲突的概率会更高。",
         continueButton: "继续",
         resolveConflictsActionLabel: "处理冲突",
         resolveConflictsRunningTooltip: "正在处理冲突...",
@@ -1191,28 +1156,23 @@ const messages: Record<SupportedLocale, MessageCatalog> = {
         acceptBaseProgress: "正在对 {items} 接受基础版本...",
         acceptedBaseInfo: "已对 {items} 接受基础版本。",
         acceptMineConflictQuestion: "要对 {items} 接受本地冲突块吗？",
-        acceptMineConflictDetail:
-            "这会只保留每个冲突块中的本地侧内容，并将冲突标记为已解决。",
+        acceptMineConflictDetail: "这会只保留每个冲突块中的本地侧内容，并将冲突标记为已解决。",
         acceptMineConflictProgress: "正在对 {items} 接受本地冲突块...",
         acceptedMineConflictInfo: "已对 {items} 接受本地冲突块。",
         acceptTheirsQuestion: "要对 {items} 接受远端版本吗？",
-        acceptTheirsDetail:
-            "这会用仓库中的传入版本替换你当前工作副本内容，并将冲突标记为已解决。",
+        acceptTheirsDetail: "这会用仓库中的传入版本替换你当前工作副本内容，并将冲突标记为已解决。",
         acceptTheirsProgress: "正在对 {items} 接受远端版本...",
         acceptedTheirsInfo: "已对 {items} 接受远端版本。",
         acceptTheirsConflictQuestion: "要对 {items} 接受远端冲突块吗？",
-        acceptTheirsConflictDetail:
-            "这会只保留每个冲突块中的远端侧内容，并将冲突标记为已解决。",
+        acceptTheirsConflictDetail: "这会只保留每个冲突块中的远端侧内容，并将冲突标记为已解决。",
         acceptTheirsConflictProgress: "正在对 {items} 接受远端冲突块...",
         acceptedTheirsConflictInfo: "已对 {items} 接受远端冲突块。",
         postponeConflictQuestion: "要暂不处理 {items} 的冲突吗？",
         postponeConflictDetail: "这会保留这些路径为未解决状态，方便你之后再回来继续处理。",
         postponeConflictProgress: "正在暂不处理 {items} 的冲突...",
         postponedConflictInfo: "已将 {items} 的冲突保留为未解决状态。",
-        revertedWorkingCopyInfo:
-            "已将工作副本还原到 r{revision}。请检查变更并在准备好后提交。",
-        revertedChangesInfo:
-            "已还原 r{revision} 引入的更改。请检查变更并在准备好后提交。",
+        revertedWorkingCopyInfo: "已将工作副本还原到 r{revision}。请检查变更并在准备好后提交。",
+        revertedChangesInfo: "已还原 r{revision} 引入的更改。请检查变更并在准备好后提交。",
         revertWorkingCopyProgress: "正在将工作副本还原到 r{revision}...",
         revertChangesProgress: "正在还原 r{revision} 引入的更改...",
         missingDiffMetadata: "缺少 SVN 对比内容元数据。",
@@ -1387,9 +1347,7 @@ export function createI18n(locale: SupportedLocale): RuntimeI18n {
                   ? translate("updateTooltipIncomingOne")
                   : translate("updateTooltipIncomingMany", { count }),
         formatChangedPathCount: (count) =>
-            count === 1
-                ? translate("changedPathOne")
-                : translate("changedPathMany", { count }),
+            count === 1 ? translate("changedPathOne") : translate("changedPathMany", { count }),
         formatItemCount: (count) =>
             count === 1 ? translate("itemCountOne") : translate("itemCountMany", { count }),
         formatSvnStatus: (status) => {
