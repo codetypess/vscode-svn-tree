@@ -2772,9 +2772,26 @@ export class SvnRepository implements vscode.Disposable {
             case "show-properties":
                 await this.showRepositoryPathProperties(repositoryPath, url);
                 return;
-            case "show-blame":
+            case "show-blame": {
+                const workingCopyPath = getWorkingCopyPathForRepositoryPath(
+                    this.rootPath,
+                    this.info.repositoryRelativePath,
+                    repositoryPath
+                );
+                if (workingCopyPath) {
+                    const uri = vscode.Uri.file(workingCopyPath);
+                    try {
+                        await vscode.workspace.fs.stat(uri);
+                        await vscode.commands.executeCommand("svn-tree.show-blame", uri);
+                        return;
+                    } catch {
+                        // Fall back to raw repository blame when the file is not present locally.
+                    }
+                }
+
                 await this.showBlameForRepositoryPath(repositoryPath, url);
                 return;
+            }
             case "show-blame-output":
                 await this.showBlameForRepositoryPath(repositoryPath, url, "output");
                 return;

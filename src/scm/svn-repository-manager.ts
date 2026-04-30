@@ -275,6 +275,10 @@ export class SvnRepositoryManager implements vscode.Disposable {
                 run: (arg) => this.showBlame(arg),
             },
             {
+                command: "svn-tree.show-blame-text",
+                run: (arg) => this.showBlameText(arg),
+            },
+            {
                 command: "svn-tree.toggle-inline-blame",
                 run: () => this.inlineBlameController.toggle(),
             },
@@ -1275,6 +1279,21 @@ export class SvnRepositoryManager implements vscode.Disposable {
     }
 
     private async showBlame(arg: unknown): Promise<void> {
+        await this.runForPathTarget(arg, async (target) => {
+            if (this.shouldUseRepositoryPathTarget(target)) {
+                const repositoryPath = target.repository.resolveRepositoryPath(target.uri.fsPath);
+                await target.repository.showBlameForRepositoryPath(
+                    repositoryPath,
+                    target.repository.resolveRepositoryUrl(target.uri.fsPath)
+                );
+                return;
+            }
+
+            await this.inlineBlameController.toggleFileBlame(target.uri);
+        });
+    }
+
+    private async showBlameText(arg: unknown): Promise<void> {
         await this.runForPathTarget(arg, async (target) => {
             if (this.shouldUseRepositoryPathTarget(target)) {
                 const repositoryPath = target.repository.resolveRepositoryPath(target.uri.fsPath);

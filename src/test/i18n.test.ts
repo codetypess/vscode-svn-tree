@@ -65,6 +65,7 @@ test("createI18n returns repository action prompts", () => {
     assert.equal(english.t("showBlameActionLabel"), "Blame / Annotate");
     assert.equal(english.t("showBlameOutputActionLabel"), "Show Blame In Output");
     assert.equal(english.t("inlineBlameEnabledStatus"), "Inline blame enabled");
+    assert.equal(english.t("fileBlameEnabledStatus"), "File blame annotations enabled");
     assert.equal(english.t("inlineBlameOpenFileHistoryLink"), "Open File History");
     assert.equal(
         english.t("showBlameOutputHeader", { path: "src/app.ts" }),
@@ -165,6 +166,7 @@ test("createI18n returns repository action prompts", () => {
     assert.equal(chinese.t("showBlameOutputActionLabel"), "在输出中显示 blame");
     assert.equal(chinese.t("copyBlameLineActionLabel"), "复制 blame 行信息");
     assert.equal(chinese.t("inlineBlameDisabledStatus"), "已关闭 inline blame");
+    assert.equal(chinese.t("fileBlameDisabledStatus"), "已隐藏文件 blame 注释");
     assert.equal(chinese.t("inlineBlameOpenFileHistoryLink"), "打开文件历史");
     assert.equal(
         chinese.t("actionCategoryPlaceholder", { label: "仓库", category: "浏览与历史" }),

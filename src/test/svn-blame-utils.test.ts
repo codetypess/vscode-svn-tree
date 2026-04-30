@@ -1,8 +1,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
+    formatInlineBlameAnnotation,
     formatInlineBlameHoverTimestamp,
     formatInlineBlameLabel,
+    formatInlineBlameRelativeTime,
     parseBlameLines,
 } from "../scm/svn-blame-utils";
 
@@ -43,6 +45,64 @@ test("blame helpers format compact inline blame labels", () => {
     );
 });
 
+test("blame helpers format inline annotations from log metadata", () => {
+    assert.equal(
+        formatInlineBlameAnnotation(
+            {
+                revision: "42",
+                author: "alice",
+            },
+            {
+                author: "alice",
+                date: "2026-04-28T11:54:00.000Z",
+                message: "Update history panel\n\nDetails",
+            },
+            {
+                locale: "en",
+                noCommitMessage: "(no commit message)",
+                now: new Date("2026-04-29T12:00:00.000Z"),
+            }
+        ),
+        "alice, yesterday • Update history panel"
+    );
+});
+
+test("blame helpers keep inline annotations compact and fall back without log metadata", () => {
+    assert.equal(
+        formatInlineBlameAnnotation(
+            {
+                revision: "42",
+                author: "alice",
+            },
+            undefined,
+            {
+                locale: "en",
+                noCommitMessage: "(no commit message)",
+            }
+        ),
+        "r42 alice"
+    );
+
+    assert.equal(
+        formatInlineBlameAnnotation(
+            {
+                revision: "42",
+                author: "alice",
+            },
+            {
+                author: "alice",
+                message: "A long summary that should be clipped before it overwhelms the editor",
+            },
+            {
+                locale: "en",
+                noCommitMessage: "(no commit message)",
+                maxSummaryLength: 24,
+            }
+        ),
+        "alice • A long summary that..."
+    );
+});
+
 test("blame helpers format hover timestamps with relative and absolute time", () => {
     const english = formatInlineBlameHoverTimestamp(
         "2026-04-28T11:54:00.000Z",
@@ -59,4 +119,23 @@ test("blame helpers format hover timestamps with relative and absolute time", ()
     assert.ok(english?.includes("April 28, 2026"));
     assert.ok(chinese?.startsWith("昨天 ("));
     assert.ok(chinese?.includes("2026年4月28日"));
+});
+
+test("blame helpers format relative blame timestamps", () => {
+    assert.equal(
+        formatInlineBlameRelativeTime(
+            "2026-04-22T11:54:00.000Z",
+            "en",
+            new Date("2026-04-29T12:00:00.000Z")
+        ),
+        "last week"
+    );
+    assert.equal(
+        formatInlineBlameRelativeTime(
+            "2026-04-28T11:54:00.000Z",
+            "zh-CN",
+            new Date("2026-04-29T12:00:00.000Z")
+        ),
+        "昨天"
+    );
 });

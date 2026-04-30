@@ -15,7 +15,7 @@
     "url": "https://github.com/codetypess/vscode-svn-tree/issues"
   },
   "engines": {
-    "vscode": "^1.95.0"
+    "vscode": "^1.105.0"
   },
   "categories": [
     "SCM Providers",
