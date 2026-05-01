@@ -296,6 +296,10 @@ export class SvnRepositoryManager implements vscode.Disposable {
                 run: (arg) => this.editIgnore(arg),
             },
             {
+                command: "svn-tree.edit-externals",
+                run: (arg) => this.editExternals(arg),
+            },
+            {
                 command: "svn-tree.open-repository-browser",
                 run: (arg) => this.openRepositoryBrowser(arg),
             },
@@ -876,6 +880,12 @@ export class SvnRepositoryManager implements vscode.Disposable {
                         descriptionKey: "editIgnoreActionDescription",
                         run: (repository) => repository.editIgnoreRules(repository.rootPath, "dir"),
                     },
+                    {
+                        labelKey: "editExternalsActionLabel",
+                        descriptionKey: "editExternalsActionDescription",
+                        run: (repository) =>
+                            repository.editExternalsDefinitions(repository.rootPath, "dir"),
+                    },
                 ],
             },
             {
@@ -1420,6 +1430,19 @@ export class SvnRepositoryManager implements vscode.Disposable {
                 await target.repository.editIgnoreRules(target.uri, target.resource?.status.kind);
             },
             (repository) => repository.editIgnoreRules(repository.rootPath, "dir")
+        );
+    }
+
+    private async editExternals(arg: unknown): Promise<void> {
+        await this.runForOptionalPathTargetOrRepository(
+            arg,
+            async (target) => {
+                await target.repository.editExternalsDefinitions(
+                    target.uri,
+                    target.resource?.status.kind
+                );
+            },
+            (repository) => repository.editExternalsDefinitions(repository.rootPath, "dir")
         );
     }
 

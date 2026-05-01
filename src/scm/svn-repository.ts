@@ -44,6 +44,11 @@ import { getI18n } from "../vscode-i18n";
 import { appendOutputSection, buildErrorOutputLines } from "./output-channel-utils";
 import { parseBlameLines, type ParsedBlameLine } from "./svn-blame-utils";
 import { isCommittableStatus } from "./commit-utils";
+import {
+    ExternalsEditorPanelState,
+    SvnExternalsEditorPanel,
+} from "./svn-externals-editor-panel";
+import { normalizeExternalsEditorValue } from "./svn-externals-utils";
 import { IgnoreEditorPanelState, SvnIgnoreEditorPanel } from "./svn-ignore-editor-panel";
 import {
     getSuggestedIgnoreEntry,
@@ -129,6 +134,11 @@ interface ResolvedWorkingCopyNodeTarget {
     readonly targetPath: string;
     readonly displayPath: string;
     readonly targetInfo: SvnNodeInfo;
+}
+
+interface DirectoryPropertyEditorTarget {
+    readonly propertyDirectoryPath: string;
+    readonly directoryDisplayPath: string;
 }
 
 interface CommitQuickPickItem extends vscode.QuickPickItem {
@@ -337,6 +347,7 @@ export class SvnRepository implements vscode.Disposable {
     private pendingRefreshOptions: RefreshOptions | undefined;
     private readonly revisionGraphEntryCaches = new Map<string, RevisionGraphEntryCache>();
     private readonly revisionGraphNodeMetadataCache = new Map<string, RevisionGraphNodeMetadata>();
+    private readonly externalsEditorPanel = new SvnExternalsEditorPanel();
     private readonly ignoreEditorPanel = new SvnIgnoreEditorPanel();
 
     public constructor(
@@ -407,6 +418,7 @@ export class SvnRepository implements vscode.Disposable {
         while (this.disposables.length > 0) {
             this.disposables.pop()?.dispose();
         }
+        this.externalsEditorPanel.dispose();
         this.ignoreEditorPanel.dispose();
         this.sourceControl.dispose();
     }
@@ -1325,10 +1337,22 @@ export class SvnRepository implements vscode.Disposable {
     }
 
     public async editPathProperty(target: vscode.Uri | string): Promise<void> {
-        const { targetPath, displayPath } = await this.resolveWorkingCopyNodeTarget(target);
+        const { targetPath, displayPath, targetInfo } = await this.resolveWorkingCopyNodeTarget(
+            target
+        );
 
         const propertyName = await this.promptPropertyName();
         if (!propertyName) {
+            return;
+        }
+
+        if (propertyName === "svn:ignore") {
+            await this.editIgnoreRules(targetPath, targetInfo.kind);
+            return;
+        }
+
+        if (propertyName === "svn:externals") {
+            await this.editExternalsDefinitions(targetPath, targetInfo.kind);
             return;
         }
 
@@ -1442,6 +1466,52 @@ export class SvnRepository implements vscode.Disposable {
                 directoryDisplayPath: ignoreTarget.directoryDisplayPath,
                 suggestedEntry: ignoreTarget.suggestedEntry,
                 value: await this.loadIgnoreEditorValue(ignoreTarget.propertyDirectoryPath),
+            }),
+            handleError: (error) => this.showError(error),
+        });
+    }
+
+    public async editExternalsDefinitions(
+        target: vscode.Uri | string,
+        targetKind?: SvnNodeKind
+    ): Promise<void> {
+        const targetPath = typeof target === "string" ? target : target.fsPath;
+        const externalsTarget = await this.resolveExternalsEditorTarget(targetPath, targetKind);
+        const currentValue = await this.runNotificationProgress(
+            this.i18n.t("editExternalsProgress", {
+                path: externalsTarget.directoryDisplayPath,
+            }),
+            async () => this.loadExternalsEditorValue(externalsTarget.propertyDirectoryPath)
+        );
+
+        this.externalsEditorPanel.show({
+            targetKey: externalsTarget.propertyDirectoryPath,
+            title: this.i18n.t("externalsEditorTitle", {
+                path: externalsTarget.directoryDisplayPath,
+            }),
+            strings: {
+                heading: this.i18n.t("externalsEditorHeading"),
+                directoryLabel: this.i18n.t("externalsEditorDirectoryLabel"),
+                definitionsHint: this.i18n.t("externalsEditorDefinitionsHint"),
+                placeholder: this.i18n.t("externalsEditorPlaceholder"),
+                saveButton: this.i18n.t("externalsEditorSaveButton"),
+                reloadButton: this.i18n.t("externalsEditorReloadButton"),
+                savingStatus: this.i18n.t("externalsEditorSavingStatus"),
+                reloadingStatus: this.i18n.t("externalsEditorReloadingStatus"),
+            },
+            initialState: {
+                directoryDisplayPath: externalsTarget.directoryDisplayPath,
+                value: currentValue,
+            },
+            save: async (value) =>
+                this.saveExternalsEditorState(
+                    externalsTarget.propertyDirectoryPath,
+                    externalsTarget.directoryDisplayPath,
+                    value
+                ),
+            reload: async () => ({
+                directoryDisplayPath: externalsTarget.directoryDisplayPath,
+                value: await this.loadExternalsEditorValue(externalsTarget.propertyDirectoryPath),
             }),
             handleError: (error) => this.showError(error),
         });
@@ -3219,10 +3289,33 @@ export class SvnRepository implements vscode.Disposable {
         suggestedEntry?: string;
     }> {
         const resolvedTargetPath = nodePath.resolve(targetPath);
-        const directoryCandidate = await this.resolveIgnoreDirectoryCandidate(
+        const directoryTarget = await this.resolveDirectoryPropertyEditorTarget(
             resolvedTargetPath,
             targetKind
         );
+
+        return {
+            propertyDirectoryPath: directoryTarget.propertyDirectoryPath,
+            directoryDisplayPath: directoryTarget.directoryDisplayPath,
+            suggestedEntry: getSuggestedIgnoreEntry(
+                directoryTarget.propertyDirectoryPath,
+                resolvedTargetPath
+            ),
+        };
+    }
+
+    private async resolveExternalsEditorTarget(
+        targetPath: string,
+        targetKind?: SvnNodeKind
+    ): Promise<DirectoryPropertyEditorTarget> {
+        return this.resolveDirectoryPropertyEditorTarget(nodePath.resolve(targetPath), targetKind);
+    }
+
+    private async resolveDirectoryPropertyEditorTarget(
+        targetPath: string,
+        targetKind?: SvnNodeKind
+    ): Promise<DirectoryPropertyEditorTarget> {
+        const directoryCandidate = await this.resolvePropertyDirectoryCandidate(targetPath, targetKind);
         const propertyDirectoryPath =
             (await this.findNearestVersionedDirectory(directoryCandidate)) ?? this.rootPath;
 
@@ -3231,11 +3324,10 @@ export class SvnRepository implements vscode.Disposable {
             directoryDisplayPath:
                 nodePath.relative(this.rootPath, propertyDirectoryPath).replace(/\\/g, "/") ||
                 nodePath.basename(this.rootPath),
-            suggestedEntry: getSuggestedIgnoreEntry(propertyDirectoryPath, resolvedTargetPath),
         };
     }
 
-    private async resolveIgnoreDirectoryCandidate(
+    private async resolvePropertyDirectoryCandidate(
         targetPath: string,
         targetKind?: SvnNodeKind
     ): Promise<string> {
@@ -3284,6 +3376,10 @@ export class SvnRepository implements vscode.Disposable {
         return parseIgnoreEntries(currentValue).join("\n");
     }
 
+    private async loadExternalsEditorValue(propertyDirectoryPath: string): Promise<string> {
+        return (await this.svnService.getProperty(propertyDirectoryPath, "svn:externals")) ?? "";
+    }
+
     private async saveIgnoreEditorState(
         propertyDirectoryPath: string,
         directoryDisplayPath: string,
@@ -3325,6 +3421,60 @@ export class SvnRepository implements vscode.Disposable {
             directoryDisplayPath,
             suggestedEntry,
             statusMessage: this.i18n.t("updatedIgnoreInfo", {
+                path: directoryDisplayPath,
+            }),
+            value: nextValue ?? "",
+        };
+    }
+
+    private async saveExternalsEditorState(
+        propertyDirectoryPath: string,
+        directoryDisplayPath: string,
+        value: string
+    ): Promise<ExternalsEditorPanelState> {
+        const nextValue = normalizeExternalsEditorValue(value);
+
+        await this.runNotificationProgress(
+            this.i18n.t("updateExternalsProgress", {
+                path: directoryDisplayPath,
+            }),
+            async () => {
+                if (!nextValue) {
+                    if (
+                        (await this.svnService.getProperty(
+                            propertyDirectoryPath,
+                            "svn:externals"
+                        )) !== undefined
+                    ) {
+                        await this.svnService.deleteProperty(
+                            propertyDirectoryPath,
+                            "svn:externals"
+                        );
+                    }
+                    return;
+                }
+
+                await this.svnService.setProperty(
+                    propertyDirectoryPath,
+                    "svn:externals",
+                    nextValue
+                );
+            }
+        );
+
+        await this.finalizeRepositoryMutation({
+            refreshOptions: { allowWhileBusy: true },
+        });
+        void vscode.window.setStatusBarMessage(
+            this.i18n.t("updatedExternalsInfo", {
+                path: directoryDisplayPath,
+            }),
+            2000
+        );
+
+        return {
+            directoryDisplayPath,
+            statusMessage: this.i18n.t("updatedExternalsInfo", {
                 path: directoryDisplayPath,
             }),
             value: nextValue ?? "",

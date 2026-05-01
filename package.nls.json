@@ -42,6 +42,7 @@
   "command.ignorePath.title": "Ignore Path",
   "command.unignorePath.title": "Unignore Path",
   "command.editIgnore.title": "Edit SVN Ignore Rules",
+  "command.editExternals.title": "Edit SVN Externals",
   "command.showPathInfo.title": "Show SVN Info",
   "command.copyRepositoryUrl.title": "Copy Repository URL",
   "command.copyRepositoryPath.title": "Copy Repository Path",

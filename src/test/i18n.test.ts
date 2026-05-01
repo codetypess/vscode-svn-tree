@@ -78,6 +78,7 @@ test("createI18n returns repository action prompts", () => {
         "SVN Properties: src/app.ts"
     );
     assert.equal(english.t("editPropertyActionLabel"), "Edit Properties");
+    assert.equal(english.t("editExternalsActionLabel"), "Edit SVN Externals");
     assert.equal(
         english.t("renamePathExistsError", { name: "app.ts" }),
         "app.ts already exists in this folder."
@@ -162,6 +163,7 @@ test("createI18n returns repository action prompts", () => {
         "当前筛选条件下没有匹配的已加载条目。"
     );
     assert.equal(chinese.t("editPropertyActionLabel"), "编辑属性");
+    assert.equal(chinese.t("editExternalsActionLabel"), "编辑 SVN Externals");
     assert.equal(chinese.t("showPropertiesActionLabel"), "显示属性");
     assert.equal(chinese.t("showBlameOutputActionLabel"), "在输出中显示 blame");
     assert.equal(chinese.t("copyBlameLineActionLabel"), "复制 blame 行信息");
