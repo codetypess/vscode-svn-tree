@@ -39,6 +39,7 @@ test("repository browser helpers build actions and sorted entries", () => {
             checkoutDirectoryActionLabel: "checkout-dir",
             exportDirectoryActionLabel: "export-dir",
             createDirectoryActionLabel: "create-dir",
+            importLocalFolderHereActionLabel: "import-here",
             copyDirectoryActionLabel: "copy-dir",
             moveDirectoryActionLabel: "move-dir",
             deleteDirectoryActionLabel: "delete-dir",
@@ -59,6 +60,7 @@ test("repository browser helpers build actions and sorted entries", () => {
     assert.equal(items.some((item) => item.action === "checkout-directory"), true);
     assert.equal(items.some((item) => item.action === "export-directory"), true);
     assert.equal(items.some((item) => item.action === "create-directory"), true);
+    assert.equal(items.some((item) => item.action === "import-local-folder-here"), true);
     assert.equal(items.some((item) => item.action === "copy-directory"), true);
     assert.equal(items.some((item) => item.action === "move-directory"), true);
     assert.equal(items.find((item) => item.itemType === "up")?.repositoryPath, "/project/branches");
@@ -82,6 +84,7 @@ test("repository browser helpers gate destructive current-directory actions", ()
             checkoutDirectoryActionLabel: "checkout-dir",
             exportDirectoryActionLabel: "export-dir",
             createDirectoryActionLabel: "create-dir",
+            importLocalFolderHereActionLabel: "import-here",
             copyDirectoryActionLabel: "copy-dir",
             moveDirectoryActionLabel: "move-dir",
             deleteDirectoryActionLabel: "delete-dir",
@@ -101,6 +104,7 @@ test("repository browser helpers gate destructive current-directory actions", ()
     assert.equal(items.some((item) => item.action === "delete-directory"), false);
     assert.equal(items.some((item) => item.action === "checkout-directory"), true);
     assert.equal(items.some((item) => item.action === "export-directory"), true);
+    assert.equal(items.some((item) => item.action === "import-local-folder-here"), true);
     assert.equal(items.some((item) => item.action === "copy-directory"), true);
 });
 
@@ -115,6 +119,10 @@ test("repository browser helpers build file action items", () => {
             showBlameOutputActionLabel: "blame-output",
             copyBlameLineActionLabel: "copy-line",
             openFileLabel: "open-file",
+            exportFileActionLabel: "export-file",
+            copyFileActionLabel: "copy-file",
+            moveFileActionLabel: "move-file",
+            deleteFileActionLabel: "delete-file",
             copyRepositoryUrlActionLabel: "copy-url",
             copyRepositoryPathActionLabel: "copy-path",
         },
@@ -129,6 +137,10 @@ test("repository browser helpers build file action items", () => {
             "show-blame-output",
             "copy-blame-line",
             "open-file",
+            "export-file",
+            "copy-file",
+            "move-file",
+            "delete-file",
             "copy-url",
             "copy-path",
         ]
@@ -185,9 +197,14 @@ test("repository browser helpers build webview view model", () => {
             copyBlameLineActionLabel: "copy-line",
             openFileLabel: "open-file",
             createDirectoryActionLabel: "create-dir",
+            importLocalFolderHereActionLabel: "import-here",
             copyDirectoryActionLabel: "copy-dir",
             moveDirectoryActionLabel: "move-dir",
             deleteDirectoryActionLabel: "delete-dir",
+            exportFileActionLabel: "export-file",
+            copyFileActionLabel: "copy-file",
+            moveFileActionLabel: "move-file",
+            deleteFileActionLabel: "delete-file",
             createBranchFromWorkingCopyActionLabel: "branch",
             createTagFromWorkingCopyActionLabel: "tag",
             copyRepositoryUrlActionLabel: "copy-url",
@@ -206,6 +223,10 @@ test("repository browser helpers build webview view model", () => {
     assert.equal(model.currentActions.some((item) => item.id === "switch-here"), true);
     assert.equal(model.currentActions.some((item) => item.id === "checkout-directory"), true);
     assert.equal(model.currentActions.some((item) => item.id === "export-directory"), true);
+    assert.equal(
+        model.currentActions.some((item) => item.id === "import-local-folder-here"),
+        true
+    );
     assert.equal(model.entries[0]?.name, "assets");
     assert.equal(model.entries[0]?.actions[0]?.id, "open-directory");
     assert.equal(
@@ -229,6 +250,10 @@ test("repository browser helpers build webview view model", () => {
     );
     assert.equal(model.entries[1]?.name, "b.ts");
     assert.equal(model.entries[1]?.actions.some((item) => item.id === "show-blame"), true);
+    assert.equal(model.entries[1]?.actions.some((item) => item.id === "export-file"), true);
+    assert.equal(model.entries[1]?.actions.some((item) => item.id === "copy-file"), true);
+    assert.equal(model.entries[1]?.actions.some((item) => item.id === "move-file"), true);
+    assert.equal(model.entries[1]?.actions.some((item) => item.id === "delete-file"), true);
 });
 
 test("repository browser helpers validate and resolve remote directory targets", () => {

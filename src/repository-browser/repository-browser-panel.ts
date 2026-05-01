@@ -322,6 +322,7 @@ export class RepositoryBrowserPanel implements vscode.Disposable {
 function shouldRefreshAfterCurrentAction(action: RepositoryBrowserAction): boolean {
     switch (action) {
         case "create-directory":
+        case "import-local-folder-here":
         case "copy-directory":
         case "move-directory":
         case "delete-directory":
@@ -341,6 +342,9 @@ function shouldRefreshAfterEntryAction(action: RepositoryBrowserEntryAction): bo
         case "copy-directory":
         case "move-directory":
         case "delete-directory":
+        case "copy-file":
+        case "move-file":
+        case "delete-file":
         case "switch-here":
         case "create-branch-from-working-copy":
         case "create-tag-from-working-copy":

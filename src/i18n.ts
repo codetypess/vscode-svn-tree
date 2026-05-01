@@ -346,6 +346,11 @@ const englishMessages = {
     repositoryBrowserUpLabel: "..",
     repositoryBrowserEmptyLabel: "(empty directory)",
     repositoryBrowserSwitchHereLabel: "Switch Working Copy Here",
+    repositoryBrowserImportLocalFolderHereActionLabel: "Import Local Folder Here",
+    repositoryBrowserExportFileActionLabel: "Export File",
+    repositoryBrowserCopyFileActionLabel: "Copy This File",
+    repositoryBrowserMoveFileActionLabel: "Move / Rename This File",
+    repositoryBrowserDeleteFileActionLabel: "Delete Remote File",
     repositoryBrowserFileActionsPlaceholder: "Actions for {path}",
     repositoryBrowserSelectCheckoutParentFolderTitle:
         "Select parent folder for a new checkout of {path}",
@@ -353,14 +358,26 @@ const englishMessages = {
     repositoryBrowserSelectExportParentFolderTitle:
         "Select parent folder for a new export of {path}",
     repositoryBrowserExportFolderNamePrompt: "Folder name for the new export of {path}",
+    repositoryBrowserSelectFileExportTitle: "Choose where to export {path} at HEAD",
     repositoryBrowserCreateDirectoryPrompt: "New directory path under {path}",
     repositoryBrowserCreateDirectoryPlaceholder: "docs, release/1.0, or assets/images",
+    repositoryBrowserImportLocalFolderPrompt:
+        "New child path under {path} for import of local folder {source}",
+    repositoryBrowserImportLocalFolderPlaceholder:
+        "vendor/lib-a, release/1.0, or assets/images",
+    repositoryBrowserImportLocalFolderDefaultName: "imported-folder",
     repositoryBrowserCopyDirectoryPrompt:
         "Destination path relative to {parent} or absolute repository path for copy of {path}",
     repositoryBrowserMoveDirectoryPrompt:
         "Destination path relative to {parent} or absolute repository path for move of {path}",
     repositoryBrowserDirectoryDestinationPlaceholder:
         "docs-v2, branches/release-1.0, or /project/branches/release-1.0",
+    repositoryBrowserCopyFilePrompt:
+        "Destination path relative to {parent} or absolute repository path for copy of {path}",
+    repositoryBrowserMoveFilePrompt:
+        "Destination path relative to {parent} or absolute repository path for move of {path}",
+    repositoryBrowserFileDestinationPlaceholder:
+        "index-copy.ts, api/index.ts, or /project/branches/release/index.ts",
     repositoryBrowserDirectoryPathRequired: "Enter a repository path.",
     repositoryBrowserPathTraversalNotAllowed: "Do not use . or .. path segments.",
     repositoryBrowserSamePathError: "Enter a different destination path.",
@@ -368,24 +385,46 @@ const englishMessages = {
     repositoryBrowserCreateDirectoryCommitMessage: "Create directory {path}",
     repositoryBrowserCreateDirectoryProgress: "Creating directory {path}...",
     repositoryBrowserCreatedDirectoryInfo: "Created directory {path}.",
+    repositoryBrowserImportLocalFolderQuestion: "Import this local folder here?",
+    repositoryBrowserImportLocalFolderDetail:
+        "Source folder: {source}\nDestination path: {destination}\nRepository URL: {url}\nCommit message: {message}\n\nThis publishes files remotely and does not create a local working copy.",
+    repositoryBrowserImportLocalFolderProgress:
+        "Importing {source} into repository path {destination}...",
+    repositoryBrowserImportedLocalFolderInfo:
+        "Imported a local folder to {destination}. This did not create a local working copy.",
+    repositoryBrowserCheckoutImportedDirectoryActionLabel: "Checkout Imported Directory",
     repositoryBrowserCopyDirectoryCommitMessage: "Copy {source} to {destination}",
     repositoryBrowserCopyDirectoryProgress: "Copying directory {source} to {destination}...",
     repositoryBrowserCopiedDirectoryInfo: "Copied {source} to {destination}.",
     repositoryBrowserMoveDirectoryCommitMessage: "Move {source} to {destination}",
     repositoryBrowserMoveDirectoryProgress: "Moving directory {source} to {destination}...",
     repositoryBrowserMovedDirectoryInfo: "Moved {source} to {destination}.",
+    repositoryBrowserCopyFileCommitMessage: "Copy {source} to {destination}",
+    repositoryBrowserCopyFileProgress: "Copying file {source} to {destination}...",
+    repositoryBrowserCopiedFileInfo: "Copied file {source} to {destination}.",
+    repositoryBrowserMoveFileCommitMessage: "Move {source} to {destination}",
+    repositoryBrowserMoveFileProgress: "Moving file {source} to {destination}...",
+    repositoryBrowserMovedFileInfo: "Moved file {source} to {destination}.",
     repositoryBrowserDeleteDirectoryQuestion: "Delete remote directory {target}?",
     repositoryBrowserDeleteDirectoryDetail:
         "This immediately deletes the remote directory {target} by creating an SVN commit.",
     repositoryBrowserDeleteDirectoryCommitMessage: "Delete {target}",
+    repositoryBrowserDeleteFileQuestion: "Delete remote file {target}?",
+    repositoryBrowserDeleteFileDetail:
+        "This immediately deletes the remote file {target} by creating an SVN commit.",
+    repositoryBrowserDeleteFileCommitMessage: "Delete {target}",
     repositoryBrowserCheckoutDirectoryProgress: "Checking out repository directory {path}...",
     repositoryBrowserCheckedOutDirectoryInfo:
         "Checked out repository directory {path} to {destination}.",
     repositoryBrowserExportDirectoryProgress: "Exporting repository directory {path}...",
     repositoryBrowserExportedDirectoryInfo:
         "Exported repository directory {path} to {destination}.",
+    repositoryBrowserExportFileProgress: "Exporting repository file {path}...",
+    repositoryBrowserExportedFileInfo: "Exported repository file {path} to {destination}.",
     repositoryBrowserDeleteDirectoryProgress: "Deleting directory {target}...",
     repositoryBrowserDeletedDirectoryInfo: "Deleted directory {target}.",
+    repositoryBrowserDeleteFileProgress: "Deleting file {target}...",
+    repositoryBrowserDeletedFileInfo: "Deleted file {target}.",
     infoPathLabel: "Path",
     infoKindLabel: "Kind",
     infoWorkingCopyRootLabel: "Working copy root",
@@ -1020,19 +1059,36 @@ const messages: Record<SupportedLocale, MessageCatalog> = {
         repositoryBrowserUpLabel: "..",
         repositoryBrowserEmptyLabel: "（空目录）",
         repositoryBrowserSwitchHereLabel: "切换工作副本到这里",
+        repositoryBrowserImportLocalFolderHereActionLabel: "将本地文件夹导入到这里",
+        repositoryBrowserExportFileActionLabel: "导出文件",
+        repositoryBrowserCopyFileActionLabel: "复制这个文件",
+        repositoryBrowserMoveFileActionLabel: "移动 / 重命名这个文件",
+        repositoryBrowserDeleteFileActionLabel: "删除远端文件",
         repositoryBrowserFileActionsPlaceholder: "{path} 的操作",
         repositoryBrowserSelectCheckoutParentFolderTitle: "选择用于新检出 {path} 的父文件夹",
         repositoryBrowserCheckoutFolderNamePrompt: "输入 {path} 新检出的文件夹名称",
         repositoryBrowserSelectExportParentFolderTitle: "选择用于导出 {path} 的父文件夹",
         repositoryBrowserExportFolderNamePrompt: "输入 {path} 导出的文件夹名称",
+        repositoryBrowserSelectFileExportTitle: "选择将 HEAD 的 {path} 导出到哪里",
         repositoryBrowserCreateDirectoryPrompt: "输入要在 {path} 下创建的新目录路径",
         repositoryBrowserCreateDirectoryPlaceholder: "docs、release/1.0 或 assets/images",
+        repositoryBrowserImportLocalFolderPrompt:
+            "输入要将本地文件夹 {source} 导入到 {path} 下的新子路径",
+        repositoryBrowserImportLocalFolderPlaceholder:
+            "vendor/lib-a、release/1.0 或 assets/images",
+        repositoryBrowserImportLocalFolderDefaultName: "imported-folder",
         repositoryBrowserCopyDirectoryPrompt:
             "输入 {path} 复制后的目标路径，可相对于 {parent}，也可输入仓库绝对路径",
         repositoryBrowserMoveDirectoryPrompt:
             "输入 {path} 移动后的目标路径，可相对于 {parent}，也可输入仓库绝对路径",
         repositoryBrowserDirectoryDestinationPlaceholder:
             "docs-v2、branches/release-1.0 或 /project/branches/release-1.0",
+        repositoryBrowserCopyFilePrompt:
+            "输入 {path} 复制后的目标路径，可相对于 {parent}，也可输入仓库绝对路径",
+        repositoryBrowserMoveFilePrompt:
+            "输入 {path} 移动后的目标路径，可相对于 {parent}，也可输入仓库绝对路径",
+        repositoryBrowserFileDestinationPlaceholder:
+            "index-copy.ts、api/index.ts 或 /project/branches/release/index.ts",
         repositoryBrowserDirectoryPathRequired: "请输入仓库路径。",
         repositoryBrowserPathTraversalNotAllowed: "请不要使用 . 或 .. 路径段。",
         repositoryBrowserSamePathError: "请输入不同的目标路径。",
@@ -1040,21 +1096,42 @@ const messages: Record<SupportedLocale, MessageCatalog> = {
         repositoryBrowserCreateDirectoryCommitMessage: "创建目录 {path}",
         repositoryBrowserCreateDirectoryProgress: "正在创建目录 {path}...",
         repositoryBrowserCreatedDirectoryInfo: "已创建目录 {path}。",
+        repositoryBrowserImportLocalFolderQuestion: "要把这个本地文件夹导入到这里吗？",
+        repositoryBrowserImportLocalFolderDetail:
+            "源文件夹：{source}\n目标路径：{destination}\n仓库 URL：{url}\n提交说明：{message}\n\n这会把文件发布到远端仓库，但不会创建本地工作副本。",
+        repositoryBrowserImportLocalFolderProgress:
+            "正在将 {source} 导入到仓库路径 {destination}...",
+        repositoryBrowserImportedLocalFolderInfo:
+            "已将本地文件夹导入到 {destination}。这次操作不会创建本地工作副本。",
+        repositoryBrowserCheckoutImportedDirectoryActionLabel: "检出已导入的目录",
         repositoryBrowserCopyDirectoryCommitMessage: "将 {source} 复制到 {destination}",
         repositoryBrowserCopyDirectoryProgress: "正在将目录 {source} 复制到 {destination}...",
         repositoryBrowserCopiedDirectoryInfo: "已将 {source} 复制到 {destination}。",
         repositoryBrowserMoveDirectoryCommitMessage: "将 {source} 移动到 {destination}",
         repositoryBrowserMoveDirectoryProgress: "正在将目录 {source} 移动到 {destination}...",
         repositoryBrowserMovedDirectoryInfo: "已将 {source} 移动到 {destination}。",
+        repositoryBrowserCopyFileCommitMessage: "将 {source} 复制到 {destination}",
+        repositoryBrowserCopyFileProgress: "正在将文件 {source} 复制到 {destination}...",
+        repositoryBrowserCopiedFileInfo: "已将文件 {source} 复制到 {destination}。",
+        repositoryBrowserMoveFileCommitMessage: "将 {source} 移动到 {destination}",
+        repositoryBrowserMoveFileProgress: "正在将文件 {source} 移动到 {destination}...",
+        repositoryBrowserMovedFileInfo: "已将文件 {source} 移动到 {destination}。",
         repositoryBrowserDeleteDirectoryQuestion: "要删除远端目录 {target} 吗？",
         repositoryBrowserDeleteDirectoryDetail: "这会通过一次 SVN 提交立即删除远端目录 {target}。",
         repositoryBrowserDeleteDirectoryCommitMessage: "删除 {target}",
+        repositoryBrowserDeleteFileQuestion: "要删除远端文件 {target} 吗？",
+        repositoryBrowserDeleteFileDetail: "这会通过一次 SVN 提交立即删除远端文件 {target}。",
+        repositoryBrowserDeleteFileCommitMessage: "删除 {target}",
         repositoryBrowserCheckoutDirectoryProgress: "正在检出仓库目录 {path}...",
         repositoryBrowserCheckedOutDirectoryInfo: "已将仓库目录 {path} 检出到 {destination}。",
         repositoryBrowserExportDirectoryProgress: "正在导出仓库目录 {path}...",
         repositoryBrowserExportedDirectoryInfo: "已将仓库目录 {path} 导出到 {destination}。",
+        repositoryBrowserExportFileProgress: "正在导出仓库文件 {path}...",
+        repositoryBrowserExportedFileInfo: "已将仓库文件 {path} 导出到 {destination}。",
         repositoryBrowserDeleteDirectoryProgress: "正在删除目录 {target}...",
         repositoryBrowserDeletedDirectoryInfo: "已删除目录 {target}。",
+        repositoryBrowserDeleteFileProgress: "正在删除文件 {target}...",
+        repositoryBrowserDeletedFileInfo: "已删除文件 {target}。",
         infoPathLabel: "路径",
         infoKindLabel: "类型",
         infoWorkingCopyRootLabel: "工作副本根目录",

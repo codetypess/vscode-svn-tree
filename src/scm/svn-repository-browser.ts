@@ -14,6 +14,7 @@ export type RepositoryBrowserAction =
     | "checkout-directory"
     | "export-directory"
     | "create-directory"
+    | "import-local-folder-here"
     | "copy-directory"
     | "move-directory"
     | "delete-directory"
@@ -38,6 +39,10 @@ export type RepositoryBrowserFileAction =
     | "show-blame-output"
     | "copy-blame-line"
     | "open-file"
+    | "export-file"
+    | "copy-file"
+    | "move-file"
+    | "delete-file"
     | "copy-url"
     | "copy-path";
 
@@ -66,6 +71,7 @@ interface RepositoryBrowserStrings {
     readonly checkoutDirectoryActionLabel: string;
     readonly exportDirectoryActionLabel: string;
     readonly createDirectoryActionLabel: string;
+    readonly importLocalFolderHereActionLabel: string;
     readonly copyDirectoryActionLabel: string;
     readonly moveDirectoryActionLabel: string;
     readonly deleteDirectoryActionLabel: string;
@@ -87,6 +93,10 @@ interface RepositoryBrowserFileActionStrings {
     readonly showBlameOutputActionLabel: string;
     readonly copyBlameLineActionLabel: string;
     readonly openFileLabel: string;
+    readonly exportFileActionLabel: string;
+    readonly copyFileActionLabel: string;
+    readonly moveFileActionLabel: string;
+    readonly deleteFileActionLabel: string;
     readonly copyRepositoryUrlActionLabel: string;
     readonly copyRepositoryPathActionLabel: string;
 }
@@ -135,9 +145,14 @@ export interface RepositoryBrowserViewStrings {
     readonly copyBlameLineActionLabel: string;
     readonly openFileLabel: string;
     readonly createDirectoryActionLabel: string;
+    readonly importLocalFolderHereActionLabel: string;
     readonly copyDirectoryActionLabel: string;
     readonly moveDirectoryActionLabel: string;
     readonly deleteDirectoryActionLabel: string;
+    readonly exportFileActionLabel: string;
+    readonly copyFileActionLabel: string;
+    readonly moveFileActionLabel: string;
+    readonly deleteFileActionLabel: string;
     readonly createBranchFromWorkingCopyActionLabel: string;
     readonly createTagFromWorkingCopyActionLabel: string;
     readonly copyRepositoryUrlActionLabel: string;
@@ -222,6 +237,14 @@ export function buildRepositoryBrowserItems(options: {
             description: options.currentRepositoryPath,
             itemType: "action",
             action: "create-directory",
+            repositoryPath: options.currentRepositoryPath,
+            url: options.currentUrl,
+        },
+        {
+            label: options.strings.importLocalFolderHereActionLabel,
+            description: options.currentRepositoryPath,
+            itemType: "action",
+            action: "import-local-folder-here",
             repositoryPath: options.currentRepositoryPath,
             url: options.currentUrl,
         },
@@ -412,6 +435,26 @@ export function buildRepositoryBrowserFileActionItems(options: {
             action: "open-file",
         },
         {
+            label: options.strings.exportFileActionLabel,
+            description: options.repositoryPath,
+            action: "export-file",
+        },
+        {
+            label: options.strings.copyFileActionLabel,
+            description: options.repositoryPath,
+            action: "copy-file",
+        },
+        {
+            label: options.strings.moveFileActionLabel,
+            description: options.repositoryPath,
+            action: "move-file",
+        },
+        {
+            label: options.strings.deleteFileActionLabel,
+            description: options.repositoryPath,
+            action: "delete-file",
+        },
+        {
             label: options.strings.copyRepositoryUrlActionLabel,
             description: options.url,
             action: "copy-url",
@@ -595,6 +638,11 @@ function buildRepositoryBrowserCurrentActions(options: {
             "create-directory",
             options.strings.createDirectoryActionLabel,
             "new-folder"
+        ),
+        createAction(
+            "import-local-folder-here",
+            options.strings.importLocalFolderHereActionLabel,
+            "cloud-upload"
         ),
         createAction(
             "create-branch-from-working-copy",
@@ -811,6 +859,10 @@ function buildFileEntryActions(
         createAction("show-blame-output", strings.showBlameOutputActionLabel, "output"),
         createAction("copy-blame-line", strings.copyBlameLineActionLabel, "copy"),
         createAction("open-file", strings.openFileLabel, "go-to-file"),
+        createAction("export-file", strings.exportFileActionLabel, "export"),
+        createAction("copy-file", strings.copyFileActionLabel, "copy"),
+        createAction("move-file", strings.moveFileActionLabel, "move"),
+        createAction("delete-file", strings.deleteFileActionLabel, "trash"),
         createAction("copy-url", strings.copyRepositoryUrlActionLabel, "link"),
         createAction("copy-path", strings.copyRepositoryPathActionLabel, "copy"),
     ];

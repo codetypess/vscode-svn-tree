@@ -58,7 +58,9 @@ Users inspect repository or file history and then:
 Users browse repository paths and references, then:
 
 - Open repository browser views.
+- Import a local folder into the current repository path.
 - Create, copy, move, or delete remote directories from the browser when the target path is safe to mutate.
+- Export, copy, move, or delete remote files from the browser.
 - Inspect path info and properties.
 - Open blame output or text previews.
 - Copy repository URLs or paths.
@@ -85,7 +87,7 @@ The extension currently supports:
 - Repository-level and path-level commands contributed through VS Code menus.
 - History webview with incremental loading and filters.
 - Revision graph webview with reference comparison and mergeinfo metadata.
-- Repository browser actions for current-directory remote directory maintenance.
+- Repository browser actions for current-directory local-folder import, remote directory maintenance, and selected-entry file maintenance.
 - Property inspection and editing, including common built-in SVN property names.
 - Specialized editor support for `svn:ignore`.
 - Conflict resolution flows based on SVN accept modes.
@@ -123,7 +125,6 @@ New work should preserve these expectations:
 
 These are useful candidates for future specs:
 
-- Repository-browser support for importing local folders and file-level remote operations.
 - More specialized editors for `svn:externals`.
 - Sparse checkout or depth-aware workflows for large repositories.
 - Patch-oriented workflows.
