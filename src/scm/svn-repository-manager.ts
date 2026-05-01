@@ -20,6 +20,7 @@ import { SvnInlineBlameController } from "./svn-inline-blame-controller";
 import { buildPathInfoOutputLines } from "./svn-output-formatters";
 import {
     deriveCheckoutDestinationName,
+    deriveImportSourceFolderName,
     normalizeCheckoutRepositoryUrl,
     normalizeCheckoutRevision,
 } from "./svn-checkout-utils";
@@ -309,6 +310,10 @@ export class SvnRepositoryManager implements vscode.Disposable {
             {
                 command: "svn-tree.checkout-from-url",
                 run: async () => this.checkoutFromUrl(),
+            },
+            {
+                command: "svn-tree.import-local-folder",
+                run: async () => this.importLocalFolder(),
             },
             {
                 command: "svn-tree.show-output",
@@ -1218,13 +1223,15 @@ export class SvnRepositoryManager implements vscode.Disposable {
         });
     }
 
-    private async checkoutFromUrl(): Promise<void> {
+    private async checkoutFromUrl(prefilledRepositoryUrl?: string): Promise<void> {
         try {
             if (!(await this.ensureSvnAvailable())) {
                 return;
             }
 
-            const repositoryUrl = await this.promptCheckoutRepositoryUrl();
+            const repositoryUrl = prefilledRepositoryUrl
+                ? normalizeCheckoutRepositoryUrl(prefilledRepositoryUrl)
+                : await this.promptCheckoutRepositoryUrl();
             if (!repositoryUrl) {
                 return;
             }
@@ -1259,6 +1266,77 @@ export class SvnRepositoryManager implements vscode.Disposable {
             }
 
             await this.showCheckoutSuccessActions(repositoryUrl, revision, destinationPath);
+        } catch (error) {
+            this.showError(error);
+        }
+    }
+
+    private async importLocalFolder(): Promise<void> {
+        try {
+            if (!(await this.ensureSvnAvailable())) {
+                return;
+            }
+
+            const sourceFolderPath = await this.promptImportSourceFolder();
+            if (!sourceFolderPath) {
+                return;
+            }
+
+            const containingWorkingCopy = await this.findContainingWorkingCopyInfo(
+                sourceFolderPath
+            );
+            if (containingWorkingCopy) {
+                void vscode.window.showWarningMessage(
+                    getI18n().t("importSourceFolderInWorkingCopyWarning", {
+                        source: sourceFolderPath,
+                        workingCopyRoot: containingWorkingCopy.workingCopyRoot,
+                    })
+                );
+                return;
+            }
+
+            const repositoryUrl = await this.promptImportRepositoryUrl();
+            if (!repositoryUrl) {
+                return;
+            }
+
+            const commitMessage = await this.promptImportCommitMessage(sourceFolderPath);
+            if (!commitMessage) {
+                return;
+            }
+
+            const i18n = getI18n();
+            const confirmed = await this.confirmModalAction({
+                message: i18n.t("importLocalFolderQuestion"),
+                buttonLabel: i18n.t("importLocalFolderButton"),
+                detail: i18n.t("importLocalFolderDetail", {
+                    source: sourceFolderPath,
+                    url: repositoryUrl,
+                    message: commitMessage,
+                }),
+            });
+            if (!confirmed) {
+                return;
+            }
+
+            await vscode.window.withProgress(
+                {
+                    location: vscode.ProgressLocation.Notification,
+                    title: i18n.t("importLocalFolderProgress", {
+                        source: this.getImportSourceDisplayLabel(sourceFolderPath),
+                        url: repositoryUrl,
+                    }),
+                },
+                async () => {
+                    await this.svnService.importToUrl(
+                        sourceFolderPath,
+                        repositoryUrl,
+                        commitMessage
+                    );
+                }
+            );
+
+            await this.showImportSuccessActions(sourceFolderPath, repositoryUrl);
         } catch (error) {
             this.showError(error);
         }
@@ -1743,6 +1821,67 @@ export class SvnRepositoryManager implements vscode.Disposable {
         return trimmedSelection ? trimmedSelection : undefined;
     }
 
+    private async promptImportSourceFolder(): Promise<string | undefined> {
+        const i18n = getI18n();
+        const selectedFolders = await vscode.window.showOpenDialog({
+            canSelectFiles: false,
+            canSelectFolders: true,
+            canSelectMany: false,
+            openLabel: i18n.t("selectImportSourceFolderLabel"),
+            title: i18n.t("selectImportSourceFolderTitle"),
+        });
+        const sourceFolder = selectedFolders?.[0];
+        if (!sourceFolder) {
+            return undefined;
+        }
+
+        if (!(await this.isDirectoryPath(sourceFolder.fsPath))) {
+            void vscode.window.showWarningMessage(
+                i18n.t("importSourceFolderUnavailableWarning", {
+                    source: sourceFolder.fsPath,
+                })
+            );
+            return undefined;
+        }
+
+        return sourceFolder.fsPath;
+    }
+
+    private async promptImportRepositoryUrl(): Promise<string | undefined> {
+        const i18n = getI18n();
+        const selection = await vscode.window.showInputBox({
+            title: i18n.t("importLocalFolderActionLabel"),
+            prompt: i18n.t("importRepositoryUrlPrompt"),
+            placeHolder: i18n.t("checkoutRepositoryUrlPlaceholder"),
+            validateInput: (value) => {
+                const normalizedValue = normalizeCheckoutRepositoryUrl(value);
+                if (normalizedValue) {
+                    return undefined;
+                }
+
+                return value.trim()
+                    ? i18n.t("importRepositoryUrlInvalid")
+                    : i18n.t("importRepositoryUrlRequired");
+            },
+        });
+
+        return normalizeCheckoutRepositoryUrl(selection);
+    }
+
+    private async promptImportCommitMessage(sourceFolderPath: string): Promise<string | undefined> {
+        const i18n = getI18n();
+        const selection = await vscode.window.showInputBox({
+            title: i18n.t("importLocalFolderActionLabel"),
+            prompt: i18n.t("importCommitMessagePrompt"),
+            placeHolder: i18n.t("importCommitMessagePlaceholder"),
+            value: this.getDefaultImportCommitMessage(sourceFolderPath),
+            validateInput: (value) =>
+                value.trim() ? undefined : i18n.t("importCommitMessageRequired"),
+        });
+        const trimmedSelection = selection?.trim();
+        return trimmedSelection ? trimmedSelection : undefined;
+    }
+
     private async promptCheckoutRepositoryUrl(): Promise<string | undefined> {
         const i18n = getI18n();
         const selection = await vscode.window.showInputBox({
@@ -1859,8 +1998,53 @@ export class SvnRepositoryManager implements vscode.Disposable {
         }
     }
 
+    private async isDirectoryPath(targetPath: string): Promise<boolean> {
+        try {
+            const stat = await vscode.workspace.fs.stat(vscode.Uri.file(targetPath));
+            return (stat.type & vscode.FileType.Directory) !== 0;
+        } catch {
+            return false;
+        }
+    }
+
+    private async findContainingWorkingCopyInfo(
+        targetPath: string
+    ): Promise<SvnWorkingCopyInfo | undefined> {
+        let currentPath = nodePath.resolve(targetPath);
+        let previousPath = "";
+
+        while (currentPath !== previousPath) {
+            const info = await this.svnService.getWorkingCopyInfo(currentPath);
+            if (info) {
+                return info;
+            }
+
+            previousPath = currentPath;
+            currentPath = nodePath.dirname(currentPath);
+        }
+
+        return undefined;
+    }
+
     private formatCheckoutRevisionLabel(revision: string): string {
         return revision === "HEAD" ? "HEAD" : `r${revision}`;
+    }
+
+    private getDefaultImportCommitMessage(sourceFolderPath: string): string {
+        const sourceFolderName = deriveImportSourceFolderName(sourceFolderPath);
+        const i18n = getI18n();
+
+        if (sourceFolderName) {
+            return i18n.t("importCommitMessageDefault", {
+                folderName: sourceFolderName,
+            });
+        }
+
+        return i18n.t("importCommitMessageFallback");
+    }
+
+    private getImportSourceDisplayLabel(sourceFolderPath: string): string {
+        return deriveImportSourceFolderName(sourceFolderPath) ?? sourceFolderPath;
     }
 
     private isPathWithinWorkspaceFolders(targetPath: string): boolean {
@@ -1905,6 +2089,33 @@ export class SvnRepositoryManager implements vscode.Disposable {
                 "revealFileInOS",
                 vscode.Uri.file(destinationPath)
             );
+        }
+    }
+
+    private async showImportSuccessActions(
+        sourceFolderPath: string,
+        repositoryUrl: string
+    ): Promise<void> {
+        const i18n = getI18n();
+        const checkoutAction = i18n.t("checkoutImportedRepositoryActionLabel");
+        const copyUrlAction = i18n.t("copyRepositoryUrlActionLabel");
+        const selection = await vscode.window.showInformationMessage(
+            i18n.t("importedLocalFolderMessage", {
+                source: sourceFolderPath,
+                url: repositoryUrl,
+            }),
+            checkoutAction,
+            copyUrlAction
+        );
+
+        if (selection === checkoutAction) {
+            await this.checkoutFromUrl(repositoryUrl);
+            return;
+        }
+
+        if (selection === copyUrlAction) {
+            await vscode.env.clipboard.writeText(repositoryUrl);
+            void vscode.window.setStatusBarMessage(i18n.t("copiedRepositoryUrlStatus"), 2000);
         }
     }
 

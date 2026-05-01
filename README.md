@@ -7,6 +7,7 @@ SVN Tree adds a focused Subversion workflow to Visual Studio Code. It integrates
 ## Highlights
 
 - Global checkout command for creating new local working copies from SVN repository URLs.
+- Global import command for publishing an existing local folder to an SVN repository URL.
 - Native SCM integration for SVN working copies in the current workspace.
 - Local, unversioned, conflict, and optional incoming remote change groups with inline actions.
 - Built-in diff flows for working copy changes, incoming changes, file history, revision-to-revision comparison, and revision-to-working-copy comparison.
@@ -26,7 +27,7 @@ If `svn` is unavailable, the extension stays inactive and shows a warning until 
 
 ## Getting Started
 
-1. If you need a local working copy first, run `SVN Tree: Checkout SVN Repository URL` from the command palette.
+1. If you need a local working copy first, run `SVN Tree: Checkout SVN Repository URL` from the command palette. If you need to publish a local unversioned folder first, run `SVN Tree: Import Local Folder Into SVN Repository`.
 2. Open a folder that belongs to an SVN working copy.
 3. Open the Source Control view.
 4. Review the `Changes`, `Unversioned`, `Conflict Artifacts`, and optional `Remote Changes` groups.
@@ -35,7 +36,7 @@ If `svn` is unavailable, the extension stays inactive and shows a warning until 
 
 ## What You Can Do
 
-- Acquire working copies: check out any absolute SVN repository URL to a new local folder at `HEAD` or a specific revision.
+- Acquire and publish repository content: check out any absolute SVN repository URL to a new local folder at `HEAD` or a specific revision, or import an existing local folder into an absolute SVN repository URL without leaving VS Code.
 - Track working copy changes: refresh status, review diffs, update the working copy, commit the whole repository, commit selected paths, update selected paths, and run cleanup after interrupted operations.
 - Inspect history: open repository or file history, filter revisions by author, commit message, changed path, and date range, then compare revisions, copy commit messages, export files, or update and check out to a selected revision.
 - Browse repository structure: open a dedicated repository browser panel, move through repository directories in a tree view, inspect selected directories or files, open repository files, and run current-directory or selected-entry actions from the side panel.
@@ -47,7 +48,7 @@ If `svn` is unavailable, the extension stays inactive and shows a warning until 
 
 Most commands are context-sensitive and are available from the Source Control view, file explorer context menus, or repository action menus.
 
-- Global and repository commands: `Checkout SVN Repository URL`, `Refresh SVN Status`, `Update SVN Working Copy`, `Commit SVN Changes`, `Open SVN History`, `Open SVN Revision Graph`, `More SVN Actions`, `Show SVN Output`, `Cleanup SVN Working Copy`, `Update Working Copy To Revision`, `Switch Branch Or Tag`, `Merge Revision Into Working Copy`, and `Relocate Working Copy`.
+- Global and repository commands: `Checkout SVN Repository URL`, `Import Local Folder Into SVN Repository`, `Refresh SVN Status`, `Update SVN Working Copy`, `Commit SVN Changes`, `Open SVN History`, `Open SVN Revision Graph`, `More SVN Actions`, `Show SVN Output`, `Cleanup SVN Working Copy`, `Update Working Copy To Revision`, `Switch Branch Or Tag`, `Merge Revision Into Working Copy`, and `Relocate Working Copy`.
 - Path and change commands: `Open Diff`, `Open File`, `Open File History`, `Commit Selected Changes`, `Update Selected Paths`, `Update Selected Paths To Revision`, `Add Resource`, `Revert Resource`, `Delete Resource`, `Rename`, `Ignore Path`, `Unignore Path`, `Edit SVN Ignore Rules`, `Lock`, `Unlock`, `Add To Changelist`, `Remove From Changelist`, and `Reveal In File Manager`.
 - Metadata and repository tools: `Blame / Annotate`, `Show Properties`, `Edit Properties`, `Show SVN Info`, `Copy Repository URL`, `Copy Repository Path`, and `Repository Browser` with tree navigation, selected-entry actions, and current-directory remote maintenance actions.
 - Branch, tag, and conflict commands: `Create Branch From Working Copy`, `Create Tag From Working Copy`, `Delete Branch / Tag`, `Mark Conflict As Resolved`, `Accept Local Version`, `Accept Base Version`, `Accept Incoming Version`, and `Postpone Conflict Resolution`.

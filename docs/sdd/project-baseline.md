@@ -2,9 +2,9 @@
 
 ## Summary
 
-`SVN Tree` is a Visual Studio Code extension that integrates Subversion workflows into the Source Control view. It targets users who already work with SVN working copies and want status, history, diff, merge, and repository operations without leaving the editor.
+`SVN Tree` is a Visual Studio Code extension that integrates Subversion workflows into the Source Control view. It targets users who already work with SVN working copies or need to bootstrap SVN repositories from local folders and want status, history, diff, merge, and repository operations without leaving the editor.
 
-The current product supports both initial repository acquisition through checkout-from-url and day-to-day working-copy operations, history inspection, repository navigation, and targeted maintenance tasks.
+The current product supports initial repository bootstrap through checkout-from-url and local-folder import, plus day-to-day working-copy operations, history inspection, repository navigation, and targeted maintenance tasks.
 
 ## Product Goals
 
@@ -17,6 +17,7 @@ The current product supports both initial repository acquisition through checkou
 ## Primary Users
 
 - Developers working in existing SVN working copies.
+- Developers bootstrapping a local project into SVN for the first time.
 - Teams maintaining legacy or enterprise codebases still hosted in SVN.
 - Users who want a more capable SVN workflow than the built-in editor primitives.
 
@@ -24,11 +25,12 @@ The current product supports both initial repository acquisition through checkou
 
 ### 1. Repository Acquisition
 
-Users can start from an arbitrary SVN repository URL and then:
+Users can start from an arbitrary SVN repository URL or a local unversioned folder and then:
 
 - Check out `HEAD` or a specific revision to a new local folder.
+- Import an existing local folder to an explicit SVN repository URL.
 - Keep the current workspace intact unless they explicitly choose to open the new folder.
-- Continue into normal working-copy workflows after checkout succeeds.
+- Continue into normal working-copy workflows after checkout succeeds or by checking out the imported repository after import succeeds.
 
 ### 2. Working Copy Maintenance
 
@@ -77,6 +79,7 @@ Users manage branch and tag style workflows by:
 The extension currently supports:
 
 - Global checkout from an arbitrary absolute repository URL into a new local folder.
+- Global import from an existing local folder into an arbitrary absolute repository URL.
 - SCM integration for SVN working copies inside the active workspace.
 - Status grouping for local changes, unversioned files, conflict artifacts, and optional incoming remote changes.
 - Repository-level and path-level commands contributed through VS Code menus.
@@ -120,7 +123,6 @@ New work should preserve these expectations:
 
 These are useful candidates for future specs:
 
-- Importing a local folder into a repository.
 - Repository-browser support for importing local folders and file-level remote operations.
 - More specialized editors for `svn:externals`.
 - Sparse checkout or depth-aware workflows for large repositories.

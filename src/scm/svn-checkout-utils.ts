@@ -1,3 +1,5 @@
+import * as nodePath from "node:path";
+
 const invalidDestinationNamePattern = /[<>:"/\\|?*\u0000-\u001f]/g;
 
 export function normalizeCheckoutRepositoryUrl(
@@ -84,6 +86,23 @@ export function deriveCheckoutDestinationName(
     }
 
     return `${sanitizedBaseName}-r${revision}`;
+}
+
+export function deriveImportSourceFolderName(sourcePath: string): string | undefined {
+    const trimmedSourcePath = sourcePath.trim();
+    if (!trimmedSourcePath) {
+        return undefined;
+    }
+
+    const resolvedPath = nodePath.resolve(trimmedSourcePath);
+    const parsedPath = nodePath.parse(resolvedPath);
+    const baseName = nodePath.basename(resolvedPath).trim();
+
+    if (!baseName || baseName === parsedPath.root.trim()) {
+        return undefined;
+    }
+
+    return baseName;
 }
 
 function sanitizeDestinationName(value: string): string {

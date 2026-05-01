@@ -343,6 +343,10 @@ export class SvnService {
         await this.runWithoutOutput(args);
     }
 
+    public async importToUrl(sourcePath: string, targetUrl: string, message: string): Promise<void> {
+        await this.runWithoutOutput(["import", sourcePath, targetUrl, "-m", message]);
+    }
+
     public async export(target: string, revision: string, destinationPath: string): Promise<void> {
         const args = ["export", "-r", revision, target, destinationPath];
         await this.runWithoutOutput(args);

@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
     deriveCheckoutDestinationName,
+    deriveImportSourceFolderName,
     normalizeCheckoutRepositoryUrl,
     normalizeCheckoutRevision,
 } from "../scm/svn-checkout-utils";
@@ -74,4 +75,21 @@ test("deriveCheckoutDestinationName sanitizes unsafe names and falls back when n
         deriveCheckoutDestinationName("https://svn.example.com", "HEAD"),
         "svn-checkout"
     );
+});
+
+test("deriveImportSourceFolderName returns the selected folder name", () => {
+    assert.equal(
+        deriveImportSourceFolderName("/Users/example/project/seed-content"),
+        "seed-content"
+    );
+    assert.equal(
+        deriveImportSourceFolderName("/Users/example/project/seed-content/"),
+        "seed-content"
+    );
+});
+
+test("deriveImportSourceFolderName falls back when the basename is not usable", () => {
+    assert.equal(deriveImportSourceFolderName(""), undefined);
+    assert.equal(deriveImportSourceFolderName("/"), undefined);
+    assert.equal(deriveImportSourceFolderName("   /   "), undefined);
 });

@@ -167,6 +167,12 @@
         "icon": "$(repo-clone)"
       },
       {
+        "command": "svn-tree.import-local-folder",
+        "title": "%command.importLocalFolder.title%",
+        "category": "%command.category%",
+        "icon": "$(cloud-upload)"
+      },
+      {
         "command": "svn-tree.show-output",
         "title": "%command.showOutput.title%",
         "category": "%command.category%",
