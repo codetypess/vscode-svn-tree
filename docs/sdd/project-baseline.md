@@ -40,6 +40,7 @@ Users open a folder that already belongs to an SVN working copy and then:
 - Review changed, unversioned, conflict, and optional remote-change entries.
 - Commit all or selected paths.
 - Update the whole working copy or selected paths.
+- Adjust working copy depth on repository roots or selected paths for sparse workflows.
 - Revert, add, delete, rename, ignore, lock, unlock, or clean up paths.
 - Edit `svn:ignore` rules or `svn:externals` definitions through dedicated editors when a generic property prompt is too coarse.
 
@@ -81,6 +82,7 @@ Users manage branch and tag style workflows by:
 The extension currently supports:
 
 - Global checkout from an arbitrary absolute repository URL into a new local folder.
+- Depth-aware checkout and explicit working-copy `--set-depth` adjustments.
 - Global import from an existing local folder into an arbitrary absolute repository URL.
 - SCM integration for SVN working copies inside the active workspace.
 - Status grouping for local changes, unversioned files, conflict artifacts, and optional incoming remote changes.
@@ -89,7 +91,7 @@ The extension currently supports:
 - Revision graph webview with reference comparison and mergeinfo metadata.
 - Repository browser actions for current-directory local-folder import, remote directory maintenance, and selected-entry file maintenance.
 - Property inspection and editing, including common built-in SVN property names.
-- Specialized editor support for `svn:ignore` and `svn:externals`.
+- Specialized editor support for `svn:ignore` and `svn:externals`, including structured editing for common externals definitions.
 - Conflict resolution flows based on SVN accept modes.
 - Output channel logging for SVN commands and troubleshooting.
 - Runtime localization in English and Simplified Chinese.
@@ -125,7 +127,6 @@ New work should preserve these expectations:
 
 These are useful candidates for future specs:
 
-- Sparse checkout or depth-aware workflows for large repositories.
 - Patch-oriented workflows.
 - More visual conflict inspection flows.
 

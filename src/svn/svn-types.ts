@@ -16,6 +16,18 @@ export type SvnWorkingCopyStatus =
     | "unversioned";
 
 export type SvnRepositoryStatus = "added" | "deleted" | "modified" | "none" | "replaced";
+export type SvnDepth = "empty" | "files" | "immediates" | "infinity" | "exclude";
+export type SvnCheckoutDepth = Exclude<SvnDepth, "exclude">;
+
+export interface SvnUpdateOptions {
+    revision?: string;
+    depth?: SvnDepth;
+    setDepth?: boolean;
+}
+
+export interface SvnCheckoutOptions {
+    depth?: SvnCheckoutDepth;
+}
 
 export interface SvnWorkingCopyInfo {
     rootPath: string;

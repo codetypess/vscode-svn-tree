@@ -29,6 +29,8 @@ import type {
 import { SvnContentProvider } from "../svn/svn-content-provider";
 import { SvnService } from "../svn/svn-service";
 import type {
+    SvnCheckoutDepth,
+    SvnDepth,
     SvnHistoryFilters,
     SvnLogEntry,
     SvnLogPage,
@@ -45,10 +47,18 @@ import { appendOutputSection, buildErrorOutputLines } from "./output-channel-uti
 import { parseBlameLines, type ParsedBlameLine } from "./svn-blame-utils";
 import { isCommittableStatus } from "./commit-utils";
 import {
+    getCheckoutDepthOptions,
+    getDepthLabelKey,
+    getWorkingCopyDepthOptions,
+} from "./svn-depth-utils";
+import {
     ExternalsEditorPanelState,
     SvnExternalsEditorPanel,
 } from "./svn-externals-editor-panel";
-import { normalizeExternalsEditorValue } from "./svn-externals-utils";
+import {
+    normalizeExternalsEditorValue,
+    parseExternalsDefinitions,
+} from "./svn-externals-utils";
 import { IgnoreEditorPanelState, SvnIgnoreEditorPanel } from "./svn-ignore-editor-panel";
 import {
     getSuggestedIgnoreEntry,
@@ -152,6 +162,10 @@ interface PropertyNameQuickPickItem extends vscode.QuickPickItem {
 
 interface PropertyActionQuickPickItem extends vscode.QuickPickItem {
     readonly action: "set" | "delete";
+}
+
+interface SvnDepthQuickPickItem<TDepth extends string> extends vscode.QuickPickItem {
+    readonly depth: TDepth;
 }
 
 type MergeWizardMode =
@@ -649,6 +663,40 @@ export class SvnRepository implements vscode.Disposable {
         );
     }
 
+    public async setWorkingCopyDepth(
+        depth: SvnDepth,
+        paths?: string[] | undefined
+    ): Promise<void> {
+        const selectedPaths = paths ? this.normalizeUniquePaths(paths) : undefined;
+        if (selectedPaths && selectedPaths.length === 0) {
+            return;
+        }
+
+        const targetLabel = this.describeDepthTarget(selectedPaths);
+        const depthLabel = this.i18n.t(getDepthLabelKey(depth));
+        await this.runRepositoryOperation(
+            "update",
+            this.i18n.t("setDepthProgress", {
+                label: targetLabel,
+                depth: depthLabel,
+            }),
+            this.i18n.t("setDepthCompleted", {
+                label: targetLabel,
+                depth: depthLabel,
+            }),
+            async () => {
+                await this.svnService.update(this.rootPath, selectedPaths, {
+                    depth,
+                    setDepth: true,
+                });
+                await this.finalizeRepositoryMutation({
+                    refreshOptions: { forceRemote: true, allowWhileBusy: true },
+                    refreshHistory: true,
+                });
+            }
+        );
+    }
+
     public getChangedPaths(): string[] {
         return this.getResourcePaths(this.changesGroup.resourceStates);
     }
@@ -890,7 +938,9 @@ export class SvnRepository implements vscode.Disposable {
                 revision,
             }),
             async () => {
-                await this.svnService.update(this.rootPath, selectedPaths, String(revision));
+                await this.svnService.update(this.rootPath, selectedPaths, {
+                    revision: String(revision),
+                });
                 await this.finalizeRepositoryMutation({
                     refreshOptions: { forceRemote: true, allowWhileBusy: true },
                     refreshHistory: true,
@@ -984,7 +1034,9 @@ export class SvnRepository implements vscode.Disposable {
                 revision,
             }),
             async () => {
-                await this.svnService.update(this.rootPath, undefined, String(revision));
+                await this.svnService.update(this.rootPath, undefined, {
+                    revision: String(revision),
+                });
                 await this.finalizeRepositoryMutation({
                     refreshOptions: { forceRemote: true, allowWhileBusy: true },
                     refreshHistory: true,
@@ -1498,21 +1550,39 @@ export class SvnRepository implements vscode.Disposable {
                 reloadButton: this.i18n.t("externalsEditorReloadButton"),
                 savingStatus: this.i18n.t("externalsEditorSavingStatus"),
                 reloadingStatus: this.i18n.t("externalsEditorReloadingStatus"),
+                rawModeLabel: this.i18n.t("externalsEditorRawModeLabel"),
+                structuredModeLabel: this.i18n.t("externalsEditorStructuredModeLabel"),
+                addDefinitionButton: this.i18n.t("externalsEditorAddDefinitionButton"),
+                removeDefinitionButton: this.i18n.t("externalsEditorRemoveDefinitionButton"),
+                formatFieldLabel: this.i18n.t("externalsEditorFormatFieldLabel"),
+                localPathFieldLabel: this.i18n.t("externalsEditorLocalPathFieldLabel"),
+                sourceFieldLabel: this.i18n.t("externalsEditorSourceFieldLabel"),
+                revisionFieldLabel: this.i18n.t("externalsEditorRevisionFieldLabel"),
+                sourceFirstFormatLabel: this.i18n.t("externalsEditorSourceFirstFormatLabel"),
+                localFirstFormatLabel: this.i18n.t("externalsEditorLocalFirstFormatLabel"),
+                structuredUnavailableLabel: this.i18n.t("externalsEditorStructuredUnavailableLabel"),
+                structuredInvalidLinesLabel: this.i18n.t("externalsEditorStructuredInvalidLinesLabel", {
+                    lines: "{lines}",
+                }),
+                structuredIncompleteLabel: this.i18n.t("externalsEditorStructuredIncompleteLabel"),
+                emptyStructuredStateLabel: this.i18n.t("externalsEditorEmptyStructuredStateLabel"),
             },
-            initialState: {
-                directoryDisplayPath: externalsTarget.directoryDisplayPath,
-                value: currentValue,
-            },
+            initialState: this.buildExternalsEditorState(
+                externalsTarget.directoryDisplayPath,
+                currentValue
+            ),
             save: async (value) =>
                 this.saveExternalsEditorState(
                     externalsTarget.propertyDirectoryPath,
                     externalsTarget.directoryDisplayPath,
                     value
                 ),
-            reload: async () => ({
-                directoryDisplayPath: externalsTarget.directoryDisplayPath,
-                value: await this.loadExternalsEditorValue(externalsTarget.propertyDirectoryPath),
-            }),
+            reload: async () =>
+                this.buildExternalsEditorState(
+                    externalsTarget.directoryDisplayPath,
+                    await this.loadExternalsEditorValue(externalsTarget.propertyDirectoryPath)
+                ),
+            reparseStructured: async (value) => parseExternalsDefinitions(value),
             handleError: (error) => this.showError(error),
         });
     }
@@ -2423,12 +2493,19 @@ export class SvnRepository implements vscode.Disposable {
             return;
         }
 
+        const checkoutDepth = await this.promptCheckoutDepth();
+        if (!checkoutDepth) {
+            return;
+        }
+
         await this.runNotificationProgress(
             this.i18n.t("repositoryBrowserCheckoutDirectoryProgress", {
                 path: repositoryPath,
             }),
             async () => {
-                await this.svnService.checkout(targetUrl, "HEAD", destinationPath);
+                await this.svnService.checkout(targetUrl, "HEAD", destinationPath, {
+                    depth: checkoutDepth,
+                });
             }
         );
 
@@ -3215,11 +3292,19 @@ export class SvnRepository implements vscode.Disposable {
             return;
         }
 
+        const checkoutDepth =
+            operation === "checkout" ? await this.promptCheckoutDepth() : undefined;
+        if (operation === "checkout" && !checkoutDepth) {
+            return;
+        }
+
         const { progressKey, completedKey } = repositoryRevisionTransferMessages[operation];
         const repositoryUrl = this.resolveRepositoryUrl(this.rootPath);
         await this.runNotificationProgress(this.i18n.t(progressKey, { revision }), async () => {
             if (operation === "checkout") {
-                await this.svnService.checkout(repositoryUrl, String(revision), destinationPath);
+                await this.svnService.checkout(repositoryUrl, String(revision), destinationPath, {
+                    depth: checkoutDepth,
+                });
                 return;
             }
 
@@ -3380,6 +3465,19 @@ export class SvnRepository implements vscode.Disposable {
         return (await this.svnService.getProperty(propertyDirectoryPath, "svn:externals")) ?? "";
     }
 
+    private buildExternalsEditorState(
+        directoryDisplayPath: string,
+        value: string,
+        statusMessage?: string
+    ): ExternalsEditorPanelState {
+        return {
+            directoryDisplayPath,
+            structured: parseExternalsDefinitions(value),
+            statusMessage,
+            value,
+        };
+    }
+
     private async saveIgnoreEditorState(
         propertyDirectoryPath: string,
         directoryDisplayPath: string,
@@ -3472,13 +3570,27 @@ export class SvnRepository implements vscode.Disposable {
             2000
         );
 
-        return {
+        return this.buildExternalsEditorState(
             directoryDisplayPath,
-            statusMessage: this.i18n.t("updatedExternalsInfo", {
+            nextValue ?? "",
+            this.i18n.t("updatedExternalsInfo", {
                 path: directoryDisplayPath,
-            }),
-            value: nextValue ?? "",
-        };
+            })
+        );
+    }
+
+    private describeDepthTarget(paths: readonly string[] | undefined): string {
+        if (!paths || paths.length === 0) {
+            return this.label;
+        }
+
+        if (paths.length === 1) {
+            return (
+                nodePath.relative(this.rootPath, paths[0] ?? "").replace(/\\/g, "/") || this.label
+            );
+        }
+
+        return this.i18n.formatItemCount(paths.length);
     }
 
     private async getNearestExistingPath(targetPath: string): Promise<string | undefined> {
@@ -4311,6 +4423,40 @@ export class SvnRepository implements vscode.Disposable {
         }
 
         return destinationPath;
+    }
+
+    private async promptCheckoutDepth(): Promise<SvnCheckoutDepth | undefined> {
+        const selection = await vscode.window.showQuickPick<SvnDepthQuickPickItem<SvnCheckoutDepth>>(
+            getCheckoutDepthOptions().map((option) => ({
+                label: this.i18n.t(option.labelKey),
+                description: this.i18n.t(option.descriptionKey),
+                depth: option.depth,
+            })),
+            {
+                title: this.i18n.t("checkoutDepthTitle"),
+                placeHolder: this.i18n.t("checkoutDepthPlaceholder"),
+            }
+        );
+
+        return selection?.depth;
+    }
+
+    public async promptWorkingCopyDepth(
+        includeExclude: boolean
+    ): Promise<SvnDepth | undefined> {
+        const selection = await vscode.window.showQuickPick<SvnDepthQuickPickItem<SvnDepth>>(
+            getWorkingCopyDepthOptions(includeExclude).map((option) => ({
+                label: this.i18n.t(option.labelKey),
+                description: this.i18n.t(option.descriptionKey),
+                depth: option.depth,
+            })),
+            {
+                title: this.i18n.t("setDepthActionLabel"),
+                placeHolder: this.i18n.t("setDepthPlaceholder"),
+            }
+        );
+
+        return selection?.depth;
     }
 
     private async promptRepositoryBrowserFileExportDestination(

@@ -16,12 +16,14 @@ import {
     parseStatusXml,
 } from "./svn-xml-parser";
 import type {
+    SvnCheckoutOptions,
     SvnHistoryFilters,
     SvnLogEntry,
     SvnNodeInfo,
     SvnPropertyEntry,
     SvnRepositoryListEntry,
     SvnStatusEntry,
+    SvnUpdateOptions,
     SvnWorkingCopyInfo,
 } from "./svn-types";
 
@@ -308,11 +310,19 @@ export class SvnService {
         await this.runWithoutOutput(args, { cwd: rootPath });
     }
 
-    public async update(rootPath: string, paths?: string[], revision?: string): Promise<void> {
+    public async update(
+        rootPath: string,
+        paths?: string[],
+        options: SvnUpdateOptions = {}
+    ): Promise<void> {
         const targets = this.toRelativeTargets(rootPath, paths);
         const args = ["update"];
-        if (revision) {
-            args.push("-r", revision);
+        if (options.revision) {
+            args.push("-r", options.revision);
+        }
+
+        if (options.depth) {
+            args.push(options.setDepth ? "--set-depth" : "--depth", options.depth);
         }
 
         args.push(...targets);
@@ -338,8 +348,18 @@ export class SvnService {
         await this.runWithoutOutput(["relocate", targetUrl, "."], { cwd: rootPath });
     }
 
-    public async checkout(target: string, revision: string, destinationPath: string): Promise<void> {
-        const args = ["checkout", "-r", revision, target, destinationPath];
+    public async checkout(
+        target: string,
+        revision: string,
+        destinationPath: string,
+        options: SvnCheckoutOptions = {}
+    ): Promise<void> {
+        const args = ["checkout", "-r", revision];
+        if (options.depth) {
+            args.push("--depth", options.depth);
+        }
+
+        args.push(target, destinationPath);
         await this.runWithoutOutput(args);
     }
 

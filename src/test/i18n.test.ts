@@ -79,6 +79,8 @@ test("createI18n returns repository action prompts", () => {
     );
     assert.equal(english.t("editPropertyActionLabel"), "Edit Properties");
     assert.equal(english.t("editExternalsActionLabel"), "Edit SVN Externals");
+    assert.equal(english.t("setDepthActionLabel"), "Set SVN Depth");
+    assert.equal(english.t("depthInfinityLabel"), "Fully Recursive");
     assert.equal(
         english.t("renamePathExistsError", { name: "app.ts" }),
         "app.ts already exists in this folder."
@@ -164,6 +166,8 @@ test("createI18n returns repository action prompts", () => {
     );
     assert.equal(chinese.t("editPropertyActionLabel"), "编辑属性");
     assert.equal(chinese.t("editExternalsActionLabel"), "编辑 SVN Externals");
+    assert.equal(chinese.t("setDepthActionLabel"), "设置 SVN Depth");
+    assert.equal(chinese.t("depthInfinityLabel"), "完整递归");
     assert.equal(chinese.t("showPropertiesActionLabel"), "显示属性");
     assert.equal(chinese.t("showBlameOutputActionLabel"), "在输出中显示 blame");
     assert.equal(chinese.t("copyBlameLineActionLabel"), "复制 blame 行信息");

@@ -1,4 +1,8 @@
 import * as vscode from "vscode";
+import type {
+    ParsedSvnExternalDefinitions,
+    SvnExternalDefinition,
+} from "./svn-externals-utils";
 
 interface ExternalsEditorPanelStrings {
     readonly heading: string;
@@ -9,11 +13,26 @@ interface ExternalsEditorPanelStrings {
     readonly reloadButton: string;
     readonly savingStatus: string;
     readonly reloadingStatus: string;
+    readonly rawModeLabel: string;
+    readonly structuredModeLabel: string;
+    readonly addDefinitionButton: string;
+    readonly removeDefinitionButton: string;
+    readonly formatFieldLabel: string;
+    readonly localPathFieldLabel: string;
+    readonly sourceFieldLabel: string;
+    readonly revisionFieldLabel: string;
+    readonly sourceFirstFormatLabel: string;
+    readonly localFirstFormatLabel: string;
+    readonly structuredUnavailableLabel: string;
+    readonly structuredInvalidLinesLabel: string;
+    readonly structuredIncompleteLabel: string;
+    readonly emptyStructuredStateLabel: string;
 }
 
 export interface ExternalsEditorPanelState {
     readonly value: string;
     readonly directoryDisplayPath: string;
+    readonly structured: ParsedSvnExternalDefinitions;
     readonly statusMessage?: string;
 }
 
@@ -24,6 +43,7 @@ export interface ExternalsEditorPanelContext {
     readonly initialState: ExternalsEditorPanelState;
     readonly save: (value: string) => Promise<ExternalsEditorPanelState>;
     readonly reload: () => Promise<ExternalsEditorPanelState>;
+    readonly reparseStructured: (value: string) => Promise<ParsedSvnExternalDefinitions>;
     readonly handleError: (error: unknown) => void;
 }
 
@@ -34,6 +54,10 @@ type ExternalsEditorMessage =
       }
     | {
           readonly type: "reload";
+      }
+    | {
+          readonly type: "reparse-structured";
+          readonly value: string;
       };
 
 export class SvnExternalsEditorPanel implements vscode.Disposable {
@@ -114,13 +138,23 @@ export class SvnExternalsEditorPanel implements vscode.Disposable {
             if (message.type === "reload") {
                 this.postBusy(context.strings.reloadingStatus);
                 this.postState(await context.reload());
+                return;
+            }
+
+            if (message.type === "reparse-structured") {
+                this.postState({
+                    ...(this.latestState ?? context.initialState),
+                    statusMessage: undefined,
+                    value: message.value,
+                    structured: await context.reparseStructured(message.value),
+                });
             }
         } catch (error) {
             context.handleError(error);
             this.postState({
                 ...(this.latestState ?? context.initialState),
                 value:
-                    message.type === "save"
+                    message.type === "save" || message.type === "reparse-structured"
                         ? message.value
                         : (this.latestState ?? context.initialState).value,
             });
@@ -177,6 +211,8 @@ export class SvnExternalsEditorPanel implements vscode.Disposable {
             --input-fg: var(--vscode-input-foreground, var(--vscode-editor-foreground));
             --input-border: var(--vscode-input-border, var(--border));
             --focus-border: var(--vscode-focusBorder, var(--accent));
+            --warning-bg: color-mix(in srgb, var(--vscode-editorWarning-foreground, #cca700) 10%, transparent);
+            --warning-fg: var(--vscode-editorWarning-foreground, #cca700);
         }
 
         * {
@@ -205,7 +241,7 @@ export class SvnExternalsEditorPanel implements vscode.Disposable {
 
         .content {
             display: grid;
-            gap: 18px;
+            gap: 16px;
             padding: 24px;
         }
 
@@ -244,7 +280,8 @@ export class SvnExternalsEditorPanel implements vscode.Disposable {
             line-height: 1.5;
         }
 
-        .meta {
+        .meta,
+        .surface {
             display: grid;
             gap: 12px;
             padding: 16px 18px;
@@ -253,7 +290,8 @@ export class SvnExternalsEditorPanel implements vscode.Disposable {
             background: color-mix(in srgb, var(--details-bg) 78%, var(--surface-bg));
         }
 
-        .meta-label {
+        .meta-label,
+        .field-label {
             color: var(--muted);
             font-size: 11px;
             font-weight: 600;
@@ -266,11 +304,19 @@ export class SvnExternalsEditorPanel implements vscode.Disposable {
             font-weight: 600;
         }
 
-        .toolbar {
+        .toolbar,
+        .mode-toolbar {
             display: flex;
             gap: 8px;
             align-items: center;
             flex-wrap: wrap;
+        }
+
+        button,
+        select,
+        input,
+        textarea {
+            font: inherit;
         }
 
         button {
@@ -279,7 +325,6 @@ export class SvnExternalsEditorPanel implements vscode.Disposable {
             border: 1px solid transparent;
             border-radius: 4px;
             cursor: pointer;
-            font: inherit;
             color: var(--accent-contrast);
             background: var(--accent);
         }
@@ -290,6 +335,14 @@ export class SvnExternalsEditorPanel implements vscode.Disposable {
             border-color: var(--border);
         }
 
+        button.mode-button {
+            min-width: 120px;
+        }
+
+        button.active {
+            box-shadow: inset 0 0 0 1px var(--focus-border);
+        }
+
         button:hover {
             background: var(--accent-hover);
         }
@@ -298,7 +351,10 @@ export class SvnExternalsEditorPanel implements vscode.Disposable {
             background: var(--secondary-button-hover-bg);
         }
 
-        button:focus-visible {
+        button:focus-visible,
+        select:focus-visible,
+        input:focus-visible,
+        textarea:focus-visible {
             outline: 1px solid var(--focus-border);
             outline-offset: 1px;
         }
@@ -308,28 +364,29 @@ export class SvnExternalsEditorPanel implements vscode.Disposable {
             cursor: default;
         }
 
+        textarea,
+        select,
+        input {
+            color: var(--input-fg);
+            background: var(--input-bg);
+            border: 1px solid var(--input-border);
+            border-radius: 6px;
+        }
+
         textarea {
             width: 100%;
             min-height: 360px;
             resize: vertical;
             padding: 12px 14px;
             line-height: 1.5;
-            color: var(--input-fg);
-            background: var(--input-bg);
-            border: 1px solid var(--input-border);
-            border-radius: 8px;
-            font: inherit;
             white-space: pre;
-            outline: none;
         }
 
-        textarea:hover {
-            border-color: color-mix(in srgb, var(--input-border) 70%, var(--focus-border));
-        }
-
-        textarea:focus {
-            border-color: var(--focus-border);
-            box-shadow: inset 0 0 0 1px var(--focus-border);
+        select,
+        input {
+            width: 100%;
+            min-height: 32px;
+            padding: 6px 8px;
         }
 
         .status {
@@ -340,6 +397,67 @@ export class SvnExternalsEditorPanel implements vscode.Disposable {
         .hint {
             color: var(--muted);
             font-size: 12px;
+        }
+
+        .warning {
+            padding: 10px 12px;
+            border: 1px solid color-mix(in srgb, var(--warning-fg) 50%, transparent);
+            border-radius: 6px;
+            color: var(--warning-fg);
+            background: var(--warning-bg);
+            font-size: 12px;
+            line-height: 1.5;
+            white-space: pre-wrap;
+        }
+
+        .rows {
+            display: grid;
+            gap: 12px;
+        }
+
+        .row {
+            display: grid;
+            gap: 10px;
+            padding: 12px;
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            background: color-mix(in srgb, var(--surface-bg) 82%, var(--details-bg));
+        }
+
+        .row-grid {
+            display: grid;
+            gap: 10px;
+            grid-template-columns: minmax(120px, 160px) minmax(160px, 1fr) minmax(220px, 2fr) minmax(100px, 120px) auto;
+            align-items: end;
+        }
+
+        .field {
+            display: grid;
+            gap: 6px;
+        }
+
+        .field-label {
+            font-size: 10px;
+        }
+
+        .row-actions {
+            display: flex;
+            justify-content: flex-end;
+        }
+
+        .empty-state {
+            color: var(--muted);
+            font-size: 12px;
+        }
+
+        @media (max-width: 980px) {
+            .row-grid {
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+            }
+
+            .row-actions {
+                justify-content: flex-start;
+            }
         }
     </style>
 </head>
@@ -364,7 +482,24 @@ export class SvnExternalsEditorPanel implements vscode.Disposable {
                 <button id="reload" type="button" class="secondary"></button>
                 <span id="status" class="status"></span>
             </section>
-            <textarea id="editor" spellcheck="false"></textarea>
+            <section class="surface">
+                <div class="mode-toolbar">
+                    <button id="structured-mode" type="button" class="secondary mode-button"></button>
+                    <button id="raw-mode" type="button" class="secondary mode-button"></button>
+                </div>
+                <div id="structured-warning" class="warning" hidden></div>
+                <div id="structured-incomplete" class="warning" hidden></div>
+                <div id="structured-surface" hidden>
+                    <div class="toolbar">
+                        <button id="add-definition" type="button" class="secondary"></button>
+                    </div>
+                    <div id="empty-structured-state" class="empty-state" hidden></div>
+                    <div id="rows" class="rows"></div>
+                </div>
+                <div id="raw-surface" hidden>
+                    <textarea id="editor" spellcheck="false"></textarea>
+                </div>
+            </section>
         </div>
     </main>
     <script>
@@ -374,6 +509,11 @@ export class SvnExternalsEditorPanel implements vscode.Disposable {
         const state = {
             ...bootstrap.state,
             busy: false,
+            mode:
+                bootstrap.state.structured.invalidLines.length === 0
+                    ? "structured"
+                    : "raw",
+            rows: bootstrap.state.structured.definitions.map(cloneRow),
         };
 
         const heading = document.getElementById("heading");
@@ -384,9 +524,221 @@ export class SvnExternalsEditorPanel implements vscode.Disposable {
         const saveButton = document.getElementById("save");
         const reloadButton = document.getElementById("reload");
         const status = document.getElementById("status");
+        const structuredModeButton = document.getElementById("structured-mode");
+        const rawModeButton = document.getElementById("raw-mode");
+        const structuredWarning = document.getElementById("structured-warning");
+        const structuredIncomplete = document.getElementById("structured-incomplete");
+        const addDefinitionButton = document.getElementById("add-definition");
+        const rowsContainer = document.getElementById("rows");
+        const rawSurface = document.getElementById("raw-surface");
+        const structuredSurface = document.getElementById("structured-surface");
         const editor = document.getElementById("editor");
+        const emptyStructuredState = document.getElementById("empty-structured-state");
 
-        function render() {
+        function cloneRow(row) {
+            return {
+                localPath: row.localPath ?? "",
+                source: row.source ?? "",
+                revision: row.revision ?? "",
+                format: row.format ?? "source-first",
+            };
+        }
+
+        function createBlankRow() {
+            return {
+                localPath: "",
+                source: "",
+                revision: "",
+                format: "source-first",
+            };
+        }
+
+        function hasStructuredParseFailures() {
+            return state.structured.invalidLines.length > 0;
+        }
+
+        function hasIncompleteRows() {
+            return state.rows.some((row) => !row.localPath.trim() || !row.source.trim());
+        }
+
+        function serializeRows() {
+            const lines = state.rows
+                .map((row) => {
+                    const localPath = row.localPath.trim();
+                    const source = row.source.trim();
+                    const revision = row.revision.trim();
+                    if (!localPath || !source) {
+                        return "";
+                    }
+
+                    const parts = revision ? ["-r", revision] : [];
+                    if (row.format === "local-first") {
+                        parts.push(localPath, source);
+                    } else {
+                        parts.push(source, localPath);
+                    }
+
+                    return parts.join(" ");
+                })
+                .filter(Boolean);
+
+            state.value = lines.join("\\n");
+        }
+
+        function updateRawEditor(forceRawSync) {
+            if (state.mode === "structured") {
+                serializeRows();
+                editor.value = state.value;
+                return;
+            }
+
+            if (forceRawSync) {
+                editor.value = state.value;
+            }
+        }
+
+        function renderRows() {
+            rowsContainer.replaceChildren();
+            if (state.rows.length === 0) {
+                emptyStructuredState.hidden = false;
+                emptyStructuredState.textContent = strings.emptyStructuredStateLabel;
+                return;
+            }
+
+            emptyStructuredState.hidden = true;
+            for (const [index, row] of state.rows.entries()) {
+                const rowElement = document.createElement("div");
+                rowElement.className = "row";
+
+                const grid = document.createElement("div");
+                grid.className = "row-grid";
+
+                grid.appendChild(createSelectField(strings.formatFieldLabel, [
+                    {
+                        value: "source-first",
+                        label: strings.sourceFirstFormatLabel,
+                    },
+                    {
+                        value: "local-first",
+                        label: strings.localFirstFormatLabel,
+                    },
+                ], row.format, (value) => {
+                    row.format = value;
+                    state.statusMessage = "";
+                    render();
+                }));
+
+                grid.appendChild(
+                    createInputField(strings.localPathFieldLabel, row.localPath, (value) => {
+                        row.localPath = value;
+                        state.statusMessage = "";
+                        render();
+                    })
+                );
+
+                grid.appendChild(
+                    createInputField(strings.sourceFieldLabel, row.source, (value) => {
+                        row.source = value;
+                        state.statusMessage = "";
+                        render();
+                    })
+                );
+
+                grid.appendChild(
+                    createInputField(strings.revisionFieldLabel, row.revision, (value) => {
+                        row.revision = value;
+                        state.statusMessage = "";
+                        render();
+                    })
+                );
+
+                const removeField = document.createElement("div");
+                removeField.className = "row-actions";
+                const removeButton = document.createElement("button");
+                removeButton.type = "button";
+                removeButton.className = "secondary";
+                removeButton.textContent = strings.removeDefinitionButton;
+                removeButton.disabled = state.busy;
+                removeButton.addEventListener("click", () => {
+                    state.rows.splice(index, 1);
+                    state.statusMessage = "";
+                    render();
+                });
+                removeField.appendChild(removeButton);
+                grid.appendChild(removeField);
+
+                rowElement.appendChild(grid);
+                rowsContainer.appendChild(rowElement);
+            }
+        }
+
+        function createFieldContainer(labelText) {
+            const field = document.createElement("label");
+            field.className = "field";
+            const label = document.createElement("span");
+            label.className = "field-label";
+            label.textContent = labelText;
+            field.appendChild(label);
+            return field;
+        }
+
+        function createInputField(labelText, value, onInput) {
+            const field = createFieldContainer(labelText);
+            const input = document.createElement("input");
+            input.type = "text";
+            input.value = value;
+            input.disabled = state.busy;
+            input.addEventListener("input", (event) => {
+                onInput(event.target.value);
+            });
+            field.appendChild(input);
+            return field;
+        }
+
+        function createSelectField(labelText, options, value, onChange) {
+            const field = createFieldContainer(labelText);
+            const select = document.createElement("select");
+            select.disabled = state.busy;
+            for (const option of options) {
+                const optionElement = document.createElement("option");
+                optionElement.value = option.value;
+                optionElement.textContent = option.label;
+                optionElement.selected = option.value === value;
+                select.appendChild(optionElement);
+            }
+
+            select.addEventListener("change", (event) => {
+                onChange(event.target.value);
+            });
+            field.appendChild(select);
+            return field;
+        }
+
+        function renderWarnings() {
+            if (hasStructuredParseFailures()) {
+                structuredWarning.hidden = false;
+                structuredWarning.textContent = [
+                    strings.structuredUnavailableLabel,
+                    strings.structuredInvalidLinesLabel.replace(
+                        "{lines}",
+                        state.structured.invalidLines.join("\\n")
+                    ),
+                ].join("\\n");
+            } else {
+                structuredWarning.hidden = true;
+                structuredWarning.textContent = "";
+            }
+
+            if (state.mode === "structured" && hasIncompleteRows()) {
+                structuredIncomplete.hidden = false;
+                structuredIncomplete.textContent = strings.structuredIncompleteLabel;
+            } else {
+                structuredIncomplete.hidden = true;
+                structuredIncomplete.textContent = "";
+            }
+        }
+
+        function render(forceRawSync = false) {
             heading.textContent = strings.heading;
             headerPath.textContent = state.directoryDisplayPath;
             directoryLabel.textContent = strings.directoryLabel;
@@ -394,22 +746,43 @@ export class SvnExternalsEditorPanel implements vscode.Disposable {
             definitionsHint.textContent = strings.definitionsHint;
             saveButton.textContent = strings.saveButton;
             reloadButton.textContent = strings.reloadButton;
-            saveButton.disabled = state.busy;
-            reloadButton.disabled = state.busy;
+            structuredModeButton.textContent = strings.structuredModeLabel;
+            rawModeButton.textContent = strings.rawModeLabel;
+            addDefinitionButton.textContent = strings.addDefinitionButton;
             status.textContent = state.statusMessage ?? "";
+            saveButton.disabled = state.busy || (state.mode === "structured" && hasIncompleteRows());
+            reloadButton.disabled = state.busy;
+            addDefinitionButton.disabled = state.busy;
+            structuredModeButton.disabled = state.busy;
+            rawModeButton.disabled = state.busy;
+            structuredModeButton.classList.toggle("active", state.mode === "structured");
+            rawModeButton.classList.toggle("active", state.mode === "raw");
             editor.placeholder = strings.placeholder;
+            editor.disabled = state.busy;
+            rawSurface.hidden = state.mode !== "raw";
+            structuredSurface.hidden = state.mode !== "structured";
+
+            updateRawEditor(forceRawSync);
+            renderRows();
+            renderWarnings();
         }
 
-        editor.value = state.value;
         editor.addEventListener("input", () => {
+            state.value = editor.value;
             state.statusMessage = "";
-            render();
+            render(false);
         });
 
         saveButton.addEventListener("click", () => {
+            if (state.mode === "structured") {
+                serializeRows();
+            } else {
+                state.value = editor.value;
+            }
+
             vscode.postMessage({
                 type: "save",
-                value: editor.value,
+                value: state.value,
             });
         });
 
@@ -417,6 +790,29 @@ export class SvnExternalsEditorPanel implements vscode.Disposable {
             vscode.postMessage({
                 type: "reload",
             });
+        });
+
+        rawModeButton.addEventListener("click", () => {
+            state.mode = "raw";
+            state.statusMessage = "";
+            render(true);
+        });
+
+        structuredModeButton.addEventListener("click", () => {
+            if (state.mode === "structured") {
+                return;
+            }
+
+            vscode.postMessage({
+                type: "reparse-structured",
+                value: editor.value,
+            });
+        });
+
+        addDefinitionButton.addEventListener("click", () => {
+            state.rows.push(createBlankRow());
+            state.statusMessage = "";
+            render();
         });
 
         window.addEventListener("message", (event) => {
@@ -437,13 +833,15 @@ export class SvnExternalsEditorPanel implements vscode.Disposable {
                 state.value = message.state.value ?? "";
                 state.directoryDisplayPath =
                     message.state.directoryDisplayPath ?? state.directoryDisplayPath;
+                state.structured = message.state.structured ?? state.structured;
+                state.rows = state.structured.definitions.map(cloneRow);
                 state.statusMessage = message.state.statusMessage ?? "";
-                editor.value = state.value;
-                render();
+                state.mode = hasStructuredParseFailures() ? "raw" : "structured";
+                render(true);
             }
         });
 
-        render();
+        render(true);
     </script>
 </body>
 </html>`;

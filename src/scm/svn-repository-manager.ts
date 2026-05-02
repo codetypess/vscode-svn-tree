@@ -17,6 +17,7 @@ import { SvnContentProvider } from "../svn/svn-content-provider";
 import { SvnService } from "../svn/svn-service";
 import { ScmResource } from "./scm-resource";
 import { SvnInlineBlameController } from "./svn-inline-blame-controller";
+import { getCheckoutDepthOptions } from "./svn-depth-utils";
 import { buildPathInfoOutputLines } from "./svn-output-formatters";
 import {
     deriveCheckoutDestinationName,
@@ -27,6 +28,7 @@ import {
 import { partitionDeleteTargets } from "./svn-delete-utils";
 import { SvnRepository } from "./svn-repository";
 import { isSameOrChildWorkingCopyPath } from "./svn-repository-paths";
+import type { SvnCheckoutDepth } from "../svn/svn-types";
 
 interface RepositoryActionDefinition {
     readonly labelKey: MessageKey;
@@ -61,6 +63,10 @@ interface ConflictActionDefinition {
     readonly labelKey: MessageKey;
     readonly descriptionKey: MessageKey;
     readonly run: ConflictCommandHandler;
+}
+
+interface SvnDepthQuickPickItem<TDepth extends string> extends vscode.QuickPickItem {
+    readonly depth: TDepth;
 }
 
 interface ResolvedPathTarget {
@@ -298,6 +304,10 @@ export class SvnRepositoryManager implements vscode.Disposable {
             {
                 command: "svn-tree.edit-externals",
                 run: (arg) => this.editExternals(arg),
+            },
+            {
+                command: "svn-tree.set-depth",
+                run: (arg) => this.setDepth(arg),
             },
             {
                 command: "svn-tree.open-repository-browser",
@@ -886,6 +896,18 @@ export class SvnRepositoryManager implements vscode.Disposable {
                         run: (repository) =>
                             repository.editExternalsDefinitions(repository.rootPath, "dir"),
                     },
+                    {
+                        labelKey: "setDepthActionLabel",
+                        descriptionKey: "setDepthActionDescription",
+                        run: async (repository) => {
+                            const depth = await repository.promptWorkingCopyDepth(false);
+                            if (!depth) {
+                                return;
+                            }
+
+                            await repository.setWorkingCopyDepth(depth);
+                        },
+                    },
                 ],
             },
             {
@@ -1251,6 +1273,11 @@ export class SvnRepositoryManager implements vscode.Disposable {
                 return;
             }
 
+            const checkoutDepth = await this.promptCheckoutDepth();
+            if (!checkoutDepth) {
+                return;
+            }
+
             const destinationPath = await this.promptCheckoutDestination(repositoryUrl, revision);
             if (!destinationPath) {
                 return;
@@ -1267,7 +1294,9 @@ export class SvnRepositoryManager implements vscode.Disposable {
                     }),
                 },
                 async () => {
-                    await this.svnService.checkout(repositoryUrl, revision, destinationPath);
+                    await this.svnService.checkout(repositoryUrl, revision, destinationPath, {
+                        depth: checkoutDepth,
+                    });
                 }
             );
 
@@ -1443,6 +1472,49 @@ export class SvnRepositoryManager implements vscode.Disposable {
                 );
             },
             (repository) => repository.editExternalsDefinitions(repository.rootPath, "dir")
+        );
+    }
+
+    private async setDepth(arg: unknown): Promise<void> {
+        const handledSelection = await this.runSelectedResourceAction(
+            arg,
+            ["svn-change", "svn-conflict", "svn-remote-change"],
+            async (repository, paths) => {
+                const depth = await repository.promptWorkingCopyDepth(true);
+                if (!depth) {
+                    return;
+                }
+
+                await repository.setWorkingCopyDepth(depth, paths);
+            }
+        );
+        if (handledSelection) {
+            return;
+        }
+
+        await this.runForOptionalPathTargetOrRepository(
+            arg,
+            async (target) => {
+                const targetPath = nodePath.resolve(target.uri.fsPath);
+                const isRootTarget = targetPath === nodePath.resolve(target.repository.rootPath);
+                const depth = await target.repository.promptWorkingCopyDepth(!isRootTarget);
+                if (!depth) {
+                    return;
+                }
+
+                await target.repository.setWorkingCopyDepth(
+                    depth,
+                    isRootTarget ? undefined : [target.uri.fsPath]
+                );
+            },
+            async (repository) => {
+                const depth = await repository.promptWorkingCopyDepth(false);
+                if (!depth) {
+                    return;
+                }
+
+                await repository.setWorkingCopyDepth(depth);
+            }
         );
     }
 
@@ -1938,6 +2010,23 @@ export class SvnRepositoryManager implements vscode.Disposable {
         });
 
         return normalizeCheckoutRevision(selection);
+    }
+
+    private async promptCheckoutDepth(): Promise<SvnCheckoutDepth | undefined> {
+        const i18n = getI18n();
+        const selection = await vscode.window.showQuickPick<SvnDepthQuickPickItem<SvnCheckoutDepth>>(
+            getCheckoutDepthOptions().map((option) => ({
+                label: i18n.t(option.labelKey),
+                description: i18n.t(option.descriptionKey),
+                depth: option.depth,
+            })),
+            {
+                title: i18n.t("checkoutDepthTitle"),
+                placeHolder: i18n.t("checkoutDepthPlaceholder"),
+            }
+        );
+
+        return selection?.depth;
     }
 
     private async promptCheckoutDestination(
