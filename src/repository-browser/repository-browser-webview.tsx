@@ -1,10 +1,8 @@
 import React from "react";
 import { createRoot } from "react-dom/client";
 import { createI18n } from "../i18n";
-import {
-    getMenuPosition,
-    useConstrainedMenuPosition,
-} from "../history/history-webview-utils";
+import { getMenuPosition, useConstrainedMenuPosition } from "../history/history-webview-utils";
+import type { SvnNodeKind, SvnPropertyEntry } from "../svn/svn-types";
 import type {
     RepositoryBrowserAction,
     RepositoryBrowserEntryAction,
@@ -15,6 +13,8 @@ import type {
     RepositoryBrowserConfigPayload,
     RepositoryBrowserDataPayload,
     RepositoryBrowserErrorPayload,
+    RepositoryBrowserPropertiesErrorPayload,
+    RepositoryBrowserPropertiesPayload,
     RepositoryBrowserRequestMessage,
     RepositoryBrowserResponseMessage,
 } from "./repository-browser-types";
@@ -34,6 +34,7 @@ interface RepositoryBrowserDirectoryCache {
 interface RepositoryBrowserState {
     repositoryLabel: string;
     rootPath: string;
+    repositoryRootUrl: string;
     currentRepositoryPath: string;
     currentUrl: string;
     currentWorkingCopyRepositoryPath: string;
@@ -51,7 +52,14 @@ interface RepositoryBrowserState {
     directoryDataByPath: RepositoryBrowserDirectoryCache;
     expandedDirectoryPaths: Record<string, boolean>;
     loadingDirectoryPaths: Record<string, boolean>;
+    propertyDataByPath: Record<string, RepositoryBrowserPropertyData | undefined>;
     contextMenu?: RepositoryBrowserContextMenuState;
+}
+
+interface RepositoryBrowserPropertyData {
+    readonly isLoading: boolean;
+    readonly properties?: readonly SvnPropertyEntry[];
+    readonly error?: string;
 }
 
 interface RepositoryBrowserContextMenuActionItem {
@@ -111,14 +119,27 @@ interface RepositoryBrowserPathTreeRow {
     isLoading: boolean;
 }
 
-type RepositoryBrowserTreeRow =
-    | RepositoryBrowserPathTreeRow
-    | RepositoryBrowserEntryTreeRow;
+type RepositoryBrowserTreeRow = RepositoryBrowserPathTreeRow | RepositoryBrowserEntryTreeRow;
 
 interface VirtualizedRepositoryBrowserRow {
     index: number;
     offsetTop: number;
     row: RepositoryBrowserTreeRow;
+}
+
+interface RepositoryBrowserDetailsTarget {
+    readonly source: "current-directory" | "entry" | "directory-path";
+    readonly title: string;
+    readonly repositoryPath: string;
+    readonly url: string;
+    readonly kind: SvnNodeKind;
+    readonly kindLabel: string;
+    readonly revision?: string;
+    readonly author?: string;
+    readonly date?: string;
+    readonly actions: readonly RepositoryBrowserContextMenuActionItem[];
+    readonly entry?: RepositoryBrowserEntryItem;
+    readonly isCurrentDirectory: boolean;
 }
 
 function normalizeRepositoryPath(value: string): string {
@@ -137,9 +158,7 @@ function isSameOrChildRepositoryPath(rootPath: string, targetPath: string): bool
     );
 }
 
-function getTreeDepthStyle(
-    depth: number
-): React.CSSProperties & {
+function getTreeDepthStyle(depth: number): React.CSSProperties & {
     "--tree-depth": number;
 } {
     return {
@@ -147,13 +166,8 @@ function getTreeDepthStyle(
     };
 }
 
-function getDirectoryToggleIconClassName(
-    isExpanded: boolean,
-    isLoading: boolean
-): string {
-    return `codicon browser-tree-chevron${
-        isLoading ? " is-loading" : ""
-    } ${
+function getDirectoryToggleIconClassName(isExpanded: boolean, isLoading: boolean): string {
+    return `codicon browser-tree-chevron${isLoading ? " is-loading" : ""} ${
         isLoading
             ? "codicon-refresh codicon-modifier-spin"
             : `codicon-${isExpanded ? "chevron-down" : "chevron-right"}`
@@ -179,6 +193,106 @@ function findRepositoryBrowserEntry(
     }
 
     return undefined;
+}
+
+function buildRepositoryBrowserUrl(repositoryRootUrl: string, repositoryPath: string): string {
+    const normalizedRootUrl = repositoryRootUrl.replace(/\/+$/g, "");
+    const normalizedRepositoryPath = normalizeRepositoryPath(repositoryPath);
+
+    if (!normalizedRootUrl) {
+        return normalizedRepositoryPath;
+    }
+
+    if (normalizedRepositoryPath === "/") {
+        return normalizedRootUrl;
+    }
+
+    return `${normalizedRootUrl}/${normalizedRepositoryPath.replace(/^\/+/, "")}`;
+}
+
+function getRepositoryPathTitle(
+    repositoryPath: string,
+    repositoryLabel: string,
+    breadcrumbs: readonly {
+        label: string;
+        repositoryPath: string;
+    }[]
+): string {
+    const breadcrumbLabel = breadcrumbs.find(function (breadcrumb) {
+        return breadcrumb.repositoryPath === repositoryPath;
+    })?.label;
+
+    if (breadcrumbLabel) {
+        return breadcrumbLabel;
+    }
+
+    if (repositoryPath === "/") {
+        return repositoryLabel || "/";
+    }
+
+    return repositoryPath.split("/").filter(Boolean).at(-1) ?? repositoryPath;
+}
+
+function formatRepositoryBrowserDate(
+    value: string | undefined,
+    locale: RepositoryBrowserBootstrap["locale"]
+): string | undefined {
+    if (!value) {
+        return undefined;
+    }
+
+    const parsedDate = new Date(value);
+    if (Number.isNaN(parsedDate.valueOf())) {
+        return value;
+    }
+
+    return new Intl.DateTimeFormat(locale, {
+        dateStyle: "medium",
+        timeStyle: "short",
+    }).format(parsedDate);
+}
+
+function buildRepositoryBrowserDetailsTarget(options: {
+    readonly state: RepositoryBrowserState;
+    readonly i18n: ReturnType<typeof createI18n>;
+}): RepositoryBrowserDetailsTarget | undefined {
+    const repositoryPath =
+        options.state.selectedRepositoryPath ?? options.state.currentRepositoryPath;
+    const entry = findRepositoryBrowserEntry(options.state.directoryDataByPath, repositoryPath);
+    const isCurrentDirectory = repositoryPath === options.state.currentRepositoryPath;
+    const kind = entry?.kind ?? "dir";
+
+    return {
+        source: isCurrentDirectory ? "current-directory" : entry ? "entry" : "directory-path",
+        title: entry?.name
+            ? entry.name
+            : getRepositoryPathTitle(
+                  repositoryPath,
+                  options.state.repositoryLabel,
+                  options.state.breadcrumbs
+              ),
+        repositoryPath,
+        url:
+            repositoryPath === options.state.currentRepositoryPath
+                ? options.state.currentUrl
+                : (entry?.url ??
+                  buildRepositoryBrowserUrl(options.state.repositoryRootUrl, repositoryPath)),
+        kind,
+        kindLabel: entry?.kindLabel ?? options.i18n.formatNodeKind(kind),
+        revision: entry?.revision,
+        author: entry?.author,
+        date: entry?.date,
+        actions: isCurrentDirectory
+            ? options.state.currentActions
+            : (entry?.actions ??
+              buildDirectoryPathContextActions(
+                  options.i18n,
+                  repositoryPath,
+                  options.state.currentWorkingCopyRepositoryPath
+              )),
+        entry,
+        isCurrentDirectory,
+    };
 }
 
 function buildRepositoryBrowserTreeRows(options: {
@@ -217,8 +331,7 @@ function buildRepositoryBrowserTreeRows(options: {
                 depth,
                 isExpanded,
                 isLoadingChildren,
-                isCurrentDirectory:
-                    entry.repositoryPath === options.currentRepositoryPath,
+                isCurrentDirectory: entry.repositoryPath === options.currentRepositoryPath,
             });
 
             if (!isDirectory || !isExpanded) {
@@ -237,8 +350,7 @@ function buildRepositoryBrowserTreeRows(options: {
             return;
         }
 
-        const isExpanded =
-            options.expandedDirectoryPaths[breadcrumb.repositoryPath] === true;
+        const isExpanded = options.expandedDirectoryPaths[breadcrumb.repositoryPath] === true;
         const hasLoadedDirectory =
             options.directoryDataByPath[breadcrumb.repositoryPath] !== undefined;
 
@@ -268,8 +380,7 @@ function buildRepositoryBrowserTreeRows(options: {
     }
 
     if (!rootDirectoryData) {
-        const currentDirectoryData =
-            options.directoryDataByPath[options.currentRepositoryPath];
+        const currentDirectoryData = options.directoryDataByPath[options.currentRepositoryPath];
         if (!currentDirectoryData) {
             return [];
         }
@@ -288,10 +399,7 @@ function buildRepositoryBrowserTreeRows(options: {
     return rows;
 }
 
-function logRepositoryBrowserDebug(
-    message: string,
-    details?: Record<string, unknown>
-): void {
+function logRepositoryBrowserDebug(message: string, details?: Record<string, unknown>): void {
     if (details && Object.keys(details).length > 0) {
         console.debug(repositoryBrowserDebugPrefix, message, details);
         return;
@@ -309,15 +417,10 @@ function canMutateDirectoryContextPath(
         return false;
     }
 
-    return !isSameOrChildRepositoryPath(
-        normalizedRepositoryPath,
-        currentWorkingCopyRepositoryPath
-    );
+    return !isSameOrChildRepositoryPath(normalizedRepositoryPath, currentWorkingCopyRepositoryPath);
 }
 
-function getRepositoryReferenceKind(
-    repositoryPath: string
-): "branch" | "tag" | undefined {
+function getRepositoryReferenceKind(repositoryPath: string): "branch" | "tag" | undefined {
     const segments = normalizeRepositoryPath(repositoryPath)
         .replace(/^\/+/, "")
         .split("/")
@@ -453,9 +556,7 @@ function formatEntryContextSubtitle(entry: RepositoryBrowserEntryItem): string {
     return metadata ? `${entry.repositoryPath}\n${metadata}` : entry.repositoryPath;
 }
 
-function isDangerousContextMenuAction(
-    action: RepositoryBrowserContextMenuActionItem
-): boolean {
+function isDangerousContextMenuAction(action: RepositoryBrowserContextMenuActionItem): boolean {
     return action.id === "delete-directory" || action.id === "delete-reference";
 }
 
@@ -469,12 +570,7 @@ function matchesRepositoryBrowserTreeRow(
 ): boolean {
     const searchText =
         row.rowType === "entry"
-            ? [
-                  row.entry.name,
-                  row.entry.repositoryPath,
-                  row.entry.author,
-                  row.entry.revision,
-              ]
+            ? [row.entry.name, row.entry.repositoryPath, row.entry.author, row.entry.revision]
                   .filter(Boolean)
                   .join("\n")
                   .toLowerCase()
@@ -539,21 +635,22 @@ function resolveRepositoryBrowserNavigationPath(value: string): string | undefin
 
 (function () {
     const vscode = acquireVsCodeApi() as VsCodeApi;
-    const bootstrap: RepositoryBrowserBootstrap =
-        window.__SVN_REPOSITORY_BROWSER_BOOTSTRAP__ ?? {
-            repositoryLabel: "",
-            rootPath: "",
-            initialRepositoryPath: "/",
-            currentWorkingCopyRepositoryPath: "/",
-            locale: "en",
-        };
+    const bootstrap: RepositoryBrowserBootstrap = window.__SVN_REPOSITORY_BROWSER_BOOTSTRAP__ ?? {
+        repositoryLabel: "",
+        rootPath: "",
+        initialRepositoryPath: "/",
+        currentWorkingCopyRepositoryPath: "/",
+        locale: "en",
+    };
 
     function RepositoryBrowserApp(): React.ReactElement {
         const entryListRef = React.useRef<HTMLDivElement | null>(null);
         const pendingDirectoryLoadPathsRef = React.useRef<Record<string, boolean>>({});
+        const pendingPropertyLoadPathsRef = React.useRef<Record<string, boolean>>({});
         const [state, setState] = React.useState<RepositoryBrowserState>({
             repositoryLabel: bootstrap.repositoryLabel,
             rootPath: bootstrap.rootPath,
+            repositoryRootUrl: "",
             currentRepositoryPath: bootstrap.initialRepositoryPath,
             currentUrl: "",
             currentWorkingCopyRepositoryPath: bootstrap.currentWorkingCopyRepositoryPath,
@@ -568,14 +665,11 @@ function resolveRepositoryBrowserNavigationPath(value: string): string | undefin
             directoryDataByPath: {},
             expandedDirectoryPaths: {},
             loadingDirectoryPaths: {},
+            propertyDataByPath: {},
             contextMenu: undefined,
         });
-        const [pathInputValue, setPathInputValue] = React.useState(
-            bootstrap.initialRepositoryPath
-        );
-        const [pathInputError, setPathInputError] = React.useState<string | undefined>(
-            undefined
-        );
+        const [pathInputValue, setPathInputValue] = React.useState(bootstrap.initialRepositoryPath);
+        const [pathInputError, setPathInputError] = React.useState<string | undefined>(undefined);
         const [filterValue, setFilterValue] = React.useState("");
         const deferredFilterValue = React.useDeferredValue(filterValue);
         const [virtualViewport, setVirtualViewport] = React.useState({
@@ -586,6 +680,13 @@ function resolveRepositoryBrowserNavigationPath(value: string): string | undefin
             state.contextMenu
         );
         const i18n = createI18n(state.locale);
+        const detailsTarget = buildRepositoryBrowserDetailsTarget({
+            state,
+            i18n,
+        });
+        const detailsPropertyState = detailsTarget
+            ? state.propertyDataByPath[detailsTarget.repositoryPath]
+            : undefined;
 
         React.useEffect(function () {
             vscode.postMessage({
@@ -715,6 +816,16 @@ function resolveRepositoryBrowserNavigationPath(value: string): string | undefin
                     return;
                 }
 
+                if (message.type === "properties-data") {
+                    applyPropertiesData(message.payload);
+                    return;
+                }
+
+                if (message.type === "properties-error") {
+                    applyPropertiesError(message.payload);
+                    return;
+                }
+
                 if (message.type === "browser-config") {
                     applyBrowserConfig(message.payload);
                 }
@@ -746,11 +857,23 @@ function resolveRepositoryBrowserNavigationPath(value: string): string | undefin
                     postDirectoryLoad(repositoryPath);
                 }
             },
-            [
-                state.directoryDataByPath,
-                state.expandedDirectoryPaths,
-                state.loadingDirectoryPaths,
-            ]
+            [state.directoryDataByPath, state.expandedDirectoryPaths, state.loadingDirectoryPaths]
+        );
+
+        React.useEffect(
+            function () {
+                if (
+                    !detailsTarget ||
+                    !detailsTarget.url ||
+                    state.propertyDataByPath[detailsTarget.repositoryPath] ||
+                    pendingPropertyLoadPathsRef.current[detailsTarget.repositoryPath] === true
+                ) {
+                    return;
+                }
+
+                requestPropertyLoad(detailsTarget.repositoryPath);
+            },
+            [detailsTarget, state.propertyDataByPath]
         );
 
         function postDirectoryLoad(repositoryPath: string): void {
@@ -759,6 +882,35 @@ function resolveRepositoryBrowserNavigationPath(value: string): string | undefin
             });
             vscode.postMessage({
                 type: "load-directory",
+                repositoryPath,
+            } satisfies RepositoryBrowserRequestMessage);
+        }
+
+        function requestPropertyLoad(repositoryPath: string, force = false): void {
+            if (!force && pendingPropertyLoadPathsRef.current[repositoryPath] === true) {
+                return;
+            }
+
+            pendingPropertyLoadPathsRef.current[repositoryPath] = true;
+            setState(function (previous) {
+                const existingPropertyData = previous.propertyDataByPath[repositoryPath];
+                return {
+                    ...previous,
+                    propertyDataByPath: {
+                        ...previous.propertyDataByPath,
+                        [repositoryPath]: {
+                            isLoading: true,
+                            properties: force ? undefined : existingPropertyData?.properties,
+                            error: undefined,
+                        },
+                    },
+                };
+            });
+            logRepositoryBrowserDebug("Posting properties load request.", {
+                repositoryPath,
+            });
+            vscode.postMessage({
+                type: "load-properties",
                 repositoryPath,
             } satisfies RepositoryBrowserRequestMessage);
         }
@@ -812,10 +964,10 @@ function resolveRepositoryBrowserNavigationPath(value: string): string | undefin
                     ...previous,
                     repositoryLabel: payload.repositoryLabel,
                     rootPath: payload.rootPath,
+                    repositoryRootUrl: payload.repositoryRootUrl,
                     currentRepositoryPath: payload.currentRepositoryPath,
                     currentUrl: payload.currentUrl,
-                    currentWorkingCopyRepositoryPath:
-                        payload.currentWorkingCopyRepositoryPath,
+                    currentWorkingCopyRepositoryPath: payload.currentWorkingCopyRepositoryPath,
                     parentRepositoryPath: payload.parentRepositoryPath,
                     breadcrumbs: payload.breadcrumbs,
                     currentActions: payload.currentActions,
@@ -845,8 +997,8 @@ function resolveRepositoryBrowserNavigationPath(value: string): string | undefin
                     ...previous,
                     repositoryLabel: payload.repositoryLabel,
                     rootPath: payload.rootPath,
-                    currentWorkingCopyRepositoryPath:
-                        payload.currentWorkingCopyRepositoryPath,
+                    repositoryRootUrl: payload.repositoryRootUrl,
+                    currentWorkingCopyRepositoryPath: payload.currentWorkingCopyRepositoryPath,
                     error: undefined,
                     directoryDataByPath: {
                         ...previous.directoryDataByPath,
@@ -857,6 +1009,49 @@ function resolveRepositoryBrowserNavigationPath(value: string): string | undefin
                         [payload.currentRepositoryPath]: false,
                     },
                     contextMenu: undefined,
+                };
+            });
+        }
+
+        function applyPropertiesData(payload: RepositoryBrowserPropertiesPayload): void {
+            delete pendingPropertyLoadPathsRef.current[payload.repositoryPath];
+            logRepositoryBrowserDebug("Applying properties data.", {
+                repositoryPath: payload.repositoryPath,
+                propertyCount: payload.properties.length,
+            });
+            setState(function (previous) {
+                return {
+                    ...previous,
+                    propertyDataByPath: {
+                        ...previous.propertyDataByPath,
+                        [payload.repositoryPath]: {
+                            isLoading: false,
+                            properties: payload.properties,
+                            error: undefined,
+                        },
+                    },
+                };
+            });
+        }
+
+        function applyPropertiesError(payload: RepositoryBrowserPropertiesErrorPayload): void {
+            delete pendingPropertyLoadPathsRef.current[payload.repositoryPath];
+            logRepositoryBrowserDebug("Applying properties error.", {
+                repositoryPath: payload.repositoryPath,
+                message: payload.message,
+            });
+            setState(function (previous) {
+                return {
+                    ...previous,
+                    propertyDataByPath: {
+                        ...previous.propertyDataByPath,
+                        [payload.repositoryPath]: {
+                            isLoading: false,
+                            properties:
+                                previous.propertyDataByPath[payload.repositoryPath]?.properties,
+                            error: payload.message,
+                        },
+                    },
                 };
             });
         }
@@ -916,6 +1111,7 @@ function resolveRepositoryBrowserNavigationPath(value: string): string | undefin
                 currentRepositoryPath: state.currentRepositoryPath,
                 expandedLoadedDirectoryPaths,
             });
+            pendingPropertyLoadPathsRef.current = {};
 
             setState(function (previous) {
                 const nextLoadingDirectoryPaths = {
@@ -932,6 +1128,7 @@ function resolveRepositoryBrowserNavigationPath(value: string): string | undefin
                     isLoading: true,
                     error: undefined,
                     loadingDirectoryPaths: nextLoadingDirectoryPaths,
+                    propertyDataByPath: {},
                 };
             });
 
@@ -1001,6 +1198,27 @@ function resolveRepositoryBrowserNavigationPath(value: string): string | undefin
             } satisfies RepositoryBrowserRequestMessage);
         }
 
+        function runDetailsAction(
+            target: RepositoryBrowserDetailsTarget,
+            action: RepositoryBrowserContextMenuActionItem["id"]
+        ): void {
+            if (target.source === "current-directory") {
+                runCurrentAction(action as RepositoryBrowserAction);
+                return;
+            }
+
+            if (target.entry) {
+                runEntryAction(action as RepositoryBrowserEntryAction, target.entry);
+                return;
+            }
+
+            runDirectoryPathContextAction(
+                action as RepositoryBrowserEntryAction,
+                target.repositoryPath,
+                target.title
+            );
+        }
+
         function selectEntry(entry: RepositoryBrowserEntryItem): void {
             if (entry.repositoryPath === state.currentRepositoryPath) {
                 showCurrentDirectoryDetails();
@@ -1038,8 +1256,7 @@ function resolveRepositoryBrowserNavigationPath(value: string): string | undefin
             });
 
             setState(function (previous) {
-                const wasExpanded =
-                    previous.expandedDirectoryPaths[repositoryPath] === true;
+                const wasExpanded = previous.expandedDirectoryPaths[repositoryPath] === true;
                 const nextIsExpanded = !wasExpanded;
                 const nextExpandedDirectoryPaths = {
                     ...previous.expandedDirectoryPaths,
@@ -1112,14 +1329,11 @@ function resolveRepositoryBrowserNavigationPath(value: string): string | undefin
 
             setState(function (previous) {
                 const isCurrentDirectory =
-                    entry.kind === "dir" &&
-                    entry.repositoryPath === previous.currentRepositoryPath;
+                    entry.kind === "dir" && entry.repositoryPath === previous.currentRepositoryPath;
 
                 return {
                     ...previous,
-                    selectedRepositoryPath: isCurrentDirectory
-                        ? undefined
-                        : entry.repositoryPath,
+                    selectedRepositoryPath: isCurrentDirectory ? undefined : entry.repositoryPath,
                     contextMenu: {
                         x: position.x,
                         y: position.y,
@@ -1165,9 +1379,7 @@ function resolveRepositoryBrowserNavigationPath(value: string): string | undefin
             setState(function (previous) {
                 return {
                     ...previous,
-                    selectedRepositoryPath: pathRow.isCurrent
-                        ? undefined
-                        : pathRow.repositoryPath,
+                    selectedRepositoryPath: pathRow.isCurrent ? undefined : pathRow.repositoryPath,
                     contextMenu: {
                         x: position.x,
                         y: position.y,
@@ -1247,6 +1459,25 @@ function resolveRepositoryBrowserNavigationPath(value: string): string | undefin
             );
         }
 
+        function renderDetailsAction(
+            target: RepositoryBrowserDetailsTarget,
+            action: RepositoryBrowserContextMenuActionItem
+        ): React.ReactElement {
+            return (
+                <button
+                    key={`details-action:${target.repositoryPath}:${String(action.id)}`}
+                    type="button"
+                    className="secondary browser-details-action"
+                    onClick={function () {
+                        runDetailsAction(target, action.id);
+                    }}
+                >
+                    <span className={`codicon codicon-${action.icon}`} aria-hidden="true" />
+                    <span>{action.label}</span>
+                </button>
+            );
+        }
+
         function openEntry(entry: RepositoryBrowserEntryItem): void {
             if (entry.kind === "dir") {
                 toggleDirectory(entry.repositoryPath);
@@ -1263,10 +1494,7 @@ function resolveRepositoryBrowserNavigationPath(value: string): string | undefin
             currentRepositoryPath: state.currentRepositoryPath,
             breadcrumbs: state.breadcrumbs,
         });
-        const treeRows = filterRepositoryBrowserTreeRows(
-            allTreeRows,
-            deferredFilterValue
-        );
+        const treeRows = filterRepositoryBrowserTreeRows(allTreeRows, deferredFilterValue);
         const isFilterActive = deferredFilterValue.trim().length > 0;
         const shouldShowTreeLoading = allTreeRows.length === 0 && state.isLoading;
         const shouldShowNoMatches =
@@ -1298,6 +1526,18 @@ function resolveRepositoryBrowserNavigationPath(value: string): string | undefin
             });
         }
 
+        const detailActionIds = new Set<RepositoryBrowserContextMenuActionItem["id"]>([
+            "show-history",
+            "show-properties",
+            "copy-path",
+            "copy-url",
+        ]);
+        const detailsActions = detailsTarget
+            ? detailsTarget.actions.filter(function (action) {
+                  return detailActionIds.has(action.id);
+              })
+            : [];
+
         return (
             <div className="page">
                 <div className="card">
@@ -1306,10 +1546,7 @@ function resolveRepositoryBrowserNavigationPath(value: string): string | undefin
                             className="browser-toolbar-title"
                             onContextMenu={function (event) {
                                 event.preventDefault();
-                                openCurrentDirectoryContextMenu(
-                                    event.clientX,
-                                    event.clientY
-                                );
+                                openCurrentDirectoryContextMenu(event.clientX, event.clientY);
                             }}
                         >
                             <h1>{i18n.t("repositoryBrowserActionLabel")}</h1>
@@ -1328,9 +1565,7 @@ function resolveRepositoryBrowserNavigationPath(value: string): string | undefin
                                         type="text"
                                         className="filter-input"
                                         value={pathInputValue}
-                                        placeholder={i18n.t(
-                                            "repositoryBrowserPathPlaceholder"
-                                        )}
+                                        placeholder={i18n.t("repositoryBrowserPathPlaceholder")}
                                         onChange={function (event) {
                                             setPathInputValue(event.target.value);
                                             if (pathInputError) {
@@ -1362,9 +1597,7 @@ function resolveRepositoryBrowserNavigationPath(value: string): string | undefin
                                     type="text"
                                     className="filter-input"
                                     value={filterValue}
-                                    placeholder={i18n.t(
-                                        "repositoryBrowserFilterPlaceholder"
-                                    )}
+                                    placeholder={i18n.t("repositoryBrowserFilterPlaceholder")}
                                     onChange={function (event) {
                                         setFilterValue(event.target.value);
                                     }}
@@ -1376,10 +1609,7 @@ function resolveRepositoryBrowserNavigationPath(value: string): string | undefin
                                     className="toolbar-button secondary"
                                     onClick={refreshBrowser}
                                 >
-                                    <span
-                                        className="codicon codicon-refresh"
-                                        aria-hidden="true"
-                                    />
+                                    <span className="codicon codicon-refresh" aria-hidden="true" />
                                     <span className="toolbar-button-label">
                                         {i18n.t("refreshButton")}
                                     </span>
@@ -1398,7 +1628,6 @@ function resolveRepositoryBrowserNavigationPath(value: string): string | undefin
                                 <div>{i18n.t("infoKindLabel")}</div>
                                 <div>{i18n.t("revisionLabel")}</div>
                                 <div>{i18n.t("authorDetailLabel")}</div>
-                                <div>{i18n.t("repositoryBrowserOpenEntryColumnLabel")}</div>
                             </div>
 
                             <div
@@ -1414,18 +1643,14 @@ function resolveRepositoryBrowserNavigationPath(value: string): string | undefin
                                     }
 
                                     event.preventDefault();
-                                    openCurrentDirectoryContextMenu(
-                                        event.clientX,
-                                        event.clientY
-                                    );
+                                    openCurrentDirectoryContextMenu(event.clientX, event.clientY);
                                 }}
                                 onScroll={function (event) {
                                     if (state.contextMenu) {
                                         closeContextMenu();
                                     }
                                     const nextScrollTop = event.currentTarget.scrollTop;
-                                    const nextViewportHeight =
-                                        event.currentTarget.clientHeight;
+                                    const nextViewportHeight = event.currentTarget.clientHeight;
 
                                     setVirtualViewport(function (previous) {
                                         if (
@@ -1444,7 +1669,10 @@ function resolveRepositoryBrowserNavigationPath(value: string): string | undefin
                             >
                                 {state.error && allTreeRows.length > 0 ? (
                                     <div className="browser-error-banner">
-                                        <span className="codicon codicon-error" aria-hidden="true" />
+                                        <span
+                                            className="codicon codicon-error"
+                                            aria-hidden="true"
+                                        />
                                         <span>{state.error}</span>
                                     </div>
                                 ) : null}
@@ -1515,9 +1743,7 @@ function resolveRepositoryBrowserNavigationPath(value: string): string | undefin
                                                             }
                                                         }}
                                                         onDoubleClick={function () {
-                                                            toggleDirectory(
-                                                                pathRow.repositoryPath
-                                                            );
+                                                            toggleDirectory(pathRow.repositoryPath);
                                                         }}
                                                         onContextMenu={function (event) {
                                                             event.preventDefault();
@@ -1569,7 +1795,6 @@ function resolveRepositoryBrowserNavigationPath(value: string): string | undefin
                                                         </div>
                                                         <div className="cell-text muted" />
                                                         <div className="cell-text muted" />
-                                                        <div className="browser-open-cell" />
                                                     </div>
                                                 );
                                             }
@@ -1585,9 +1810,7 @@ function resolveRepositoryBrowserNavigationPath(value: string): string | undefin
                                                     key={row.key}
                                                     className={`browser-row browser-tree-row browser-tree-entry-row browser-virtual-item${
                                                         isSelected ? " is-selected" : ""
-                                                    }${
-                                                        row.isLoadingChildren ? " is-loading" : ""
-                                                    }${
+                                                    }${row.isLoadingChildren ? " is-loading" : ""}${
                                                         row.isCurrentDirectory
                                                             ? " is-current-directory"
                                                             : ""
@@ -1663,25 +1886,6 @@ function resolveRepositoryBrowserNavigationPath(value: string): string | undefin
                                                     <div className="cell-text muted">
                                                         {entry.author ?? ""}
                                                     </div>
-                                                    <div className="browser-open-cell">
-                                                        <button
-                                                            type="button"
-                                                            className="secondary browser-open-button"
-                                                            onClick={function (event) {
-                                                                event.stopPropagation();
-                                                                openEntry(entry);
-                                                            }}
-                                                        >
-                                                            <span
-                                                                className={`codicon codicon-${
-                                                                    entry.kind === "dir"
-                                                                        ? "folder-opened"
-                                                                        : "go-to-file"
-                                                                }`}
-                                                                aria-hidden="true"
-                                                            />
-                                                        </button>
-                                                    </div>
                                                 </div>
                                             );
                                         })}
@@ -1690,6 +1894,196 @@ function resolveRepositoryBrowserNavigationPath(value: string): string | undefin
                             </div>
                         </section>
 
+                        <aside className="browser-details-panel">
+                            {detailsTarget ? (
+                                <div className="browser-details-scroll">
+                                    <div className="browser-details-header">
+                                        <div className="browser-details-title-row">
+                                            <h2>{detailsTarget.title}</h2>
+                                            {detailsTarget.isCurrentDirectory ? (
+                                                <span className="browser-details-badge">
+                                                    {i18n.t("revisionGraphCurrentBadge")}
+                                                </span>
+                                            ) : null}
+                                        </div>
+                                        <div className="browser-details-subtitle">
+                                            {detailsTarget.repositoryPath}
+                                        </div>
+                                    </div>
+
+                                    <section className="browser-details-section">
+                                        <div className="browser-details-section-title">
+                                            {i18n.t("repositoryBrowserDetailsPanelTitle")}
+                                        </div>
+                                        <div className="browser-details-grid">
+                                            <div className="browser-details-row is-compact">
+                                                <div className="browser-details-field">
+                                                    <span className="browser-details-label">
+                                                        {i18n.t("infoKindLabel")}
+                                                    </span>
+                                                    <span className="browser-details-value">
+                                                        {detailsTarget.kindLabel}
+                                                    </span>
+                                                </div>
+                                                {detailsTarget.date ? (
+                                                    <div className="browser-details-field">
+                                                        <span className="browser-details-label">
+                                                            {i18n.t("dateLabel")}
+                                                        </span>
+                                                        <span className="browser-details-value">
+                                                            {formatRepositoryBrowserDate(
+                                                                detailsTarget.date,
+                                                                state.locale
+                                                            ) ?? detailsTarget.date}
+                                                        </span>
+                                                    </div>
+                                                ) : null}
+                                            </div>
+                                            {detailsTarget.revision || detailsTarget.author ? (
+                                                <div className="browser-details-row is-compact">
+                                                    {detailsTarget.revision ? (
+                                                        <div className="browser-details-field">
+                                                            <span className="browser-details-label">
+                                                                {i18n.t("revisionLabel")}
+                                                            </span>
+                                                            <span className="browser-details-value">
+                                                                {`r${detailsTarget.revision}`}
+                                                            </span>
+                                                        </div>
+                                                    ) : null}
+                                                    {detailsTarget.author ? (
+                                                        <div className="browser-details-field">
+                                                            <span className="browser-details-label">
+                                                                {i18n.t("authorDetailLabel")}
+                                                            </span>
+                                                            <span className="browser-details-value">
+                                                                {detailsTarget.author}
+                                                            </span>
+                                                        </div>
+                                                    ) : null}
+                                                </div>
+                                            ) : null}
+                                            <div className="browser-details-row">
+                                                <div className="browser-details-field">
+                                                    <span className="browser-details-label">
+                                                        {i18n.t("infoRepositoryPathLabel")}
+                                                    </span>
+                                                    <span
+                                                        className="browser-details-value is-breakable"
+                                                        title={detailsTarget.repositoryPath}
+                                                    >
+                                                        {detailsTarget.repositoryPath}
+                                                    </span>
+                                                </div>
+                                            </div>
+                                            <div className="browser-details-row">
+                                                <div className="browser-details-field">
+                                                    <span className="browser-details-label">
+                                                        {i18n.t("infoUrlLabel")}
+                                                    </span>
+                                                    <span
+                                                        className="browser-details-value is-breakable"
+                                                        title={detailsTarget.url}
+                                                    >
+                                                        {detailsTarget.url}
+                                                    </span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </section>
+
+                                    {detailsActions.length > 0 ? (
+                                        <section className="browser-details-section">
+                                            <div className="browser-details-section-title">
+                                                {i18n.t("repositoryBrowserDetailsActionsLabel")}
+                                            </div>
+                                            <div className="browser-details-actions">
+                                                {detailsActions.map(function (action) {
+                                                    return renderDetailsAction(
+                                                        detailsTarget,
+                                                        action
+                                                    );
+                                                })}
+                                            </div>
+                                        </section>
+                                    ) : null}
+
+                                    <section className="browser-details-section">
+                                        <div className="browser-details-section-header">
+                                            <div className="browser-details-section-title">
+                                                {i18n.t("repositoryBrowserPropertiesSectionLabel")}
+                                            </div>
+                                            <button
+                                                type="button"
+                                                className="secondary browser-details-refresh"
+                                                disabled={detailsPropertyState?.isLoading === true}
+                                                onClick={function () {
+                                                    requestPropertyLoad(
+                                                        detailsTarget.repositoryPath,
+                                                        true
+                                                    );
+                                                }}
+                                            >
+                                                <span
+                                                    className={`codicon ${
+                                                        detailsPropertyState?.isLoading
+                                                            ? "codicon-loading codicon-modifier-spin"
+                                                            : "codicon-refresh"
+                                                    }`}
+                                                    aria-hidden="true"
+                                                />
+                                            </button>
+                                        </div>
+
+                                        {!detailsPropertyState || detailsPropertyState.isLoading ? (
+                                            <div className="browser-details-empty">
+                                                {i18n.t("repositoryBrowserPropertiesLoadingState")}
+                                            </div>
+                                        ) : detailsPropertyState?.error ? (
+                                            <div className="browser-details-error">
+                                                <div>
+                                                    {i18n.t(
+                                                        "repositoryBrowserPropertiesLoadErrorState"
+                                                    )}
+                                                </div>
+                                                <div className="browser-details-error-message">
+                                                    {detailsPropertyState.error}
+                                                </div>
+                                            </div>
+                                        ) : detailsPropertyState?.properties &&
+                                          detailsPropertyState.properties.length > 0 ? (
+                                            <div className="browser-property-list">
+                                                {detailsPropertyState.properties.map(
+                                                    function (property) {
+                                                        return (
+                                                            <div
+                                                                key={`${detailsTarget.repositoryPath}:${property.name}`}
+                                                                className="browser-property-item"
+                                                            >
+                                                                <div className="browser-property-name">
+                                                                    {property.name}
+                                                                </div>
+                                                                <pre className="browser-property-value">
+                                                                    {property.value}
+                                                                </pre>
+                                                            </div>
+                                                        );
+                                                    }
+                                                )}
+                                            </div>
+                                        ) : (
+                                            <div className="browser-details-empty">
+                                                {i18n.t("noPropertiesFoundLabel")}
+                                            </div>
+                                        )}
+                                    </section>
+                                </div>
+                            ) : (
+                                <div className="browser-details-empty browser-details-empty-panel">
+                                    {i18n.t("repositoryBrowserDetailsEmptyState")}
+                                </div>
+                            )}
+                        </aside>
                     </div>
                     {state.contextMenu ? (
                         <div className="context-menu-root">
@@ -1730,9 +2124,7 @@ function resolveRepositoryBrowserNavigationPath(value: string): string | undefin
                                     </div>
                                 </div>
                                 <div className="context-menu-actions">
-                                    {state.contextMenu.target.actions.map(
-                                        renderContextMenuAction
-                                    )}
+                                    {state.contextMenu.target.actions.map(renderContextMenuAction)}
                                 </div>
                             </div>
                         </div>

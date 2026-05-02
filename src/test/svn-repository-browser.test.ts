@@ -27,8 +27,21 @@ test("repository browser helpers build actions and sorted entries", () => {
         repositoryRoot: "https://svn.example.com/repos",
         currentWorkingCopyRepositoryPath: "/project/trunk",
         entries: [
-            { name: "b.ts", kind: "file", revision: "11", author: "bob" },
-            { name: "assets", kind: "dir", revision: "10", author: "alice" },
+            {
+                name: "b.ts",
+                kind: "file",
+                revision: "11",
+                author: "bob",
+                size: 42,
+                date: "2026-05-02T10:00:00.000Z",
+            },
+            {
+                name: "assets",
+                kind: "dir",
+                revision: "10",
+                author: "alice",
+                date: "2026-05-01T10:00:00.000Z",
+            },
         ],
         formatNodeKind: (kind) => kind,
         separatorKind: -1 as vscode.QuickPickItemKind,
@@ -55,14 +68,38 @@ test("repository browser helpers build actions and sorted entries", () => {
         },
     });
 
-    assert.equal(items.some((item) => item.action === "switch-here"), true);
-    assert.equal(items.some((item) => item.action === "delete-reference"), true);
-    assert.equal(items.some((item) => item.action === "checkout-directory"), true);
-    assert.equal(items.some((item) => item.action === "export-directory"), true);
-    assert.equal(items.some((item) => item.action === "create-directory"), true);
-    assert.equal(items.some((item) => item.action === "import-local-folder-here"), true);
-    assert.equal(items.some((item) => item.action === "copy-directory"), true);
-    assert.equal(items.some((item) => item.action === "move-directory"), true);
+    assert.equal(
+        items.some((item) => item.action === "switch-here"),
+        true
+    );
+    assert.equal(
+        items.some((item) => item.action === "delete-reference"),
+        true
+    );
+    assert.equal(
+        items.some((item) => item.action === "checkout-directory"),
+        true
+    );
+    assert.equal(
+        items.some((item) => item.action === "export-directory"),
+        true
+    );
+    assert.equal(
+        items.some((item) => item.action === "create-directory"),
+        true
+    );
+    assert.equal(
+        items.some((item) => item.action === "import-local-folder-here"),
+        true
+    );
+    assert.equal(
+        items.some((item) => item.action === "copy-directory"),
+        true
+    );
+    assert.equal(
+        items.some((item) => item.action === "move-directory"),
+        true
+    );
     assert.equal(items.find((item) => item.itemType === "up")?.repositoryPath, "/project/branches");
     assert.equal(items.find((item) => item.itemType === "directory")?.label, "assets");
     assert.equal(items.find((item) => item.itemType === "file")?.label, "b.ts");
@@ -100,12 +137,30 @@ test("repository browser helpers gate destructive current-directory actions", ()
         },
     });
 
-    assert.equal(items.some((item) => item.action === "move-directory"), false);
-    assert.equal(items.some((item) => item.action === "delete-directory"), false);
-    assert.equal(items.some((item) => item.action === "checkout-directory"), true);
-    assert.equal(items.some((item) => item.action === "export-directory"), true);
-    assert.equal(items.some((item) => item.action === "import-local-folder-here"), true);
-    assert.equal(items.some((item) => item.action === "copy-directory"), true);
+    assert.equal(
+        items.some((item) => item.action === "move-directory"),
+        false
+    );
+    assert.equal(
+        items.some((item) => item.action === "delete-directory"),
+        false
+    );
+    assert.equal(
+        items.some((item) => item.action === "checkout-directory"),
+        true
+    );
+    assert.equal(
+        items.some((item) => item.action === "export-directory"),
+        true
+    );
+    assert.equal(
+        items.some((item) => item.action === "import-local-folder-here"),
+        true
+    );
+    assert.equal(
+        items.some((item) => item.action === "copy-directory"),
+        true
+    );
 });
 
 test("repository browser helpers build file action items", () => {
@@ -181,8 +236,21 @@ test("repository browser helpers build webview view model", () => {
         repositoryRoot: "https://svn.example.com/repos",
         currentWorkingCopyRepositoryPath: "/project/trunk",
         entries: [
-            { name: "b.ts", kind: "file", revision: "11", author: "bob" },
-            { name: "assets", kind: "dir", revision: "10", author: "alice" },
+            {
+                name: "b.ts",
+                kind: "file",
+                revision: "11",
+                author: "bob",
+                size: 42,
+                date: "2026-05-02T10:00:00.000Z",
+            },
+            {
+                name: "assets",
+                kind: "dir",
+                revision: "10",
+                author: "alice",
+                date: "2026-05-01T10:00:00.000Z",
+            },
         ],
         formatNodeKind: (kind) => kind,
         strings: {
@@ -215,14 +283,24 @@ test("repository browser helpers build webview view model", () => {
     });
 
     assert.equal(model.parentRepositoryPath, "/project/branches");
+    assert.equal(model.repositoryRootUrl, "https://svn.example.com/repos");
     assert.deepEqual(
         model.breadcrumbs.map((item) => item.label),
         ["repo", "project", "branches", "release-1.0"]
     );
     assert.equal(model.currentWorkingCopyRepositoryPath, "/project/trunk");
-    assert.equal(model.currentActions.some((item) => item.id === "switch-here"), true);
-    assert.equal(model.currentActions.some((item) => item.id === "checkout-directory"), true);
-    assert.equal(model.currentActions.some((item) => item.id === "export-directory"), true);
+    assert.equal(
+        model.currentActions.some((item) => item.id === "switch-here"),
+        true
+    );
+    assert.equal(
+        model.currentActions.some((item) => item.id === "checkout-directory"),
+        true
+    );
+    assert.equal(
+        model.currentActions.some((item) => item.id === "export-directory"),
+        true
+    );
     assert.equal(
         model.currentActions.some((item) => item.id === "import-local-folder-here"),
         true
@@ -241,19 +319,45 @@ test("repository browser helpers build webview view model", () => {
         model.entries[0]?.actions.some((item) => item.id === "export-directory"),
         true
     );
-    assert.equal(model.entries[0]?.actions.some((item) => item.id === "copy-directory"), true);
-    assert.equal(model.entries[0]?.actions.some((item) => item.id === "move-directory"), true);
-    assert.equal(model.entries[0]?.actions.some((item) => item.id === "switch-here"), true);
+    assert.equal(
+        model.entries[0]?.actions.some((item) => item.id === "copy-directory"),
+        true
+    );
+    assert.equal(
+        model.entries[0]?.actions.some((item) => item.id === "move-directory"),
+        true
+    );
+    assert.equal(
+        model.entries[0]?.actions.some((item) => item.id === "switch-here"),
+        true
+    );
     assert.equal(
         model.entries[0]?.actions.some((item) => item.id === "delete-reference"),
         true
     );
     assert.equal(model.entries[1]?.name, "b.ts");
-    assert.equal(model.entries[1]?.actions.some((item) => item.id === "show-blame"), true);
-    assert.equal(model.entries[1]?.actions.some((item) => item.id === "export-file"), true);
-    assert.equal(model.entries[1]?.actions.some((item) => item.id === "copy-file"), true);
-    assert.equal(model.entries[1]?.actions.some((item) => item.id === "move-file"), true);
-    assert.equal(model.entries[1]?.actions.some((item) => item.id === "delete-file"), true);
+    assert.equal(model.entries[1]?.size, 42);
+    assert.equal(model.entries[1]?.date, "2026-05-02T10:00:00.000Z");
+    assert.equal(
+        model.entries[1]?.actions.some((item) => item.id === "show-blame"),
+        true
+    );
+    assert.equal(
+        model.entries[1]?.actions.some((item) => item.id === "export-file"),
+        true
+    );
+    assert.equal(
+        model.entries[1]?.actions.some((item) => item.id === "copy-file"),
+        true
+    );
+    assert.equal(
+        model.entries[1]?.actions.some((item) => item.id === "move-file"),
+        true
+    );
+    assert.equal(
+        model.entries[1]?.actions.some((item) => item.id === "delete-file"),
+        true
+    );
 });
 
 test("repository browser helpers validate and resolve remote directory targets", () => {
@@ -269,7 +373,10 @@ test("repository browser helpers validate and resolve remote directory targets",
         getRepositoryBrowserPathValidationError("../release", "sibling-or-absolute"),
         "relative-navigation"
     );
-    assert.equal(resolveRepositoryBrowserChildPath("/project/trunk", "docs/api"), "/project/trunk/docs/api");
+    assert.equal(
+        resolveRepositoryBrowserChildPath("/project/trunk", "docs/api"),
+        "/project/trunk/docs/api"
+    );
     assert.equal(
         resolveRepositoryBrowserSiblingOrAbsolutePath("/project/trunk/docs", "docs-v2"),
         "/project/trunk/docs-v2"

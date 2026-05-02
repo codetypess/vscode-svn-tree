@@ -75,6 +75,12 @@ const englishMessages = {
     repositoryBrowserFilterPlaceholder: "Filter loaded entries by name, path, author or revision",
     repositoryBrowserNoMatchesState: "No loaded entries match the current filter.",
     repositoryBrowserPathInvalid: "Use a valid repository path without empty, . or .. segments.",
+    repositoryBrowserDetailsPanelTitle: "Details",
+    repositoryBrowserDetailsActionsLabel: "Actions",
+    repositoryBrowserDetailsEmptyState: "Select a repository path to inspect its details.",
+    repositoryBrowserPropertiesSectionLabel: "SVN Properties",
+    repositoryBrowserPropertiesLoadingState: "Loading SVN properties...",
+    repositoryBrowserPropertiesLoadErrorState: "Could not load SVN properties.",
     repositoryBrowserOpenDirectoryActionLabel: "Open Directory",
     repositoryBrowserCheckoutDirectoryActionLabel: "Checkout This Repository Directory",
     repositoryBrowserExportDirectoryActionLabel: "Export To Directory",
@@ -363,8 +369,7 @@ const englishMessages = {
     externalsEditorStructuredUnavailableLabel:
         "Structured mode is unavailable for the current raw text.",
     externalsEditorStructuredInvalidLinesLabel: "Unparsed lines:\n{lines}",
-    externalsEditorStructuredIncompleteLabel:
-        "Complete every structured definition before saving.",
+    externalsEditorStructuredIncompleteLabel: "Complete every structured definition before saving.",
     externalsEditorEmptyStructuredStateLabel: "No structured definitions yet.",
     depthInfinityLabel: "Fully Recursive",
     depthInfinityDescription: "Fetch the whole tree below the target",
@@ -409,8 +414,7 @@ const englishMessages = {
     repositoryBrowserCreateDirectoryPlaceholder: "docs, release/1.0, or assets/images",
     repositoryBrowserImportLocalFolderPrompt:
         "New child path under {path} for import of local folder {source}",
-    repositoryBrowserImportLocalFolderPlaceholder:
-        "vendor/lib-a, release/1.0, or assets/images",
+    repositoryBrowserImportLocalFolderPlaceholder: "vendor/lib-a, release/1.0, or assets/images",
     repositoryBrowserImportLocalFolderDefaultName: "imported-folder",
     repositoryBrowserCopyDirectoryPrompt:
         "Destination path relative to {parent} or absolute repository path for copy of {path}",
@@ -848,6 +852,12 @@ const messages: Record<SupportedLocale, MessageCatalog> = {
         repositoryBrowserFilterPlaceholder: "按名称、路径、作者或版本筛选已加载条目",
         repositoryBrowserNoMatchesState: "当前筛选条件下没有匹配的已加载条目。",
         repositoryBrowserPathInvalid: "请输入有效的仓库路径，不要包含空路径段、. 或 ..。",
+        repositoryBrowserDetailsPanelTitle: "详情",
+        repositoryBrowserDetailsActionsLabel: "操作",
+        repositoryBrowserDetailsEmptyState: "选择一个仓库路径后，可在这里查看详情。",
+        repositoryBrowserPropertiesSectionLabel: "SVN 属性",
+        repositoryBrowserPropertiesLoadingState: "正在加载 SVN 属性...",
+        repositoryBrowserPropertiesLoadErrorState: "无法加载 SVN 属性。",
         repositoryBrowserOpenDirectoryActionLabel: "打开目录",
         repositoryBrowserCheckoutDirectoryActionLabel: "检出到新目录",
         repositoryBrowserExportDirectoryActionLabel: "导出到目录",
@@ -1167,8 +1177,7 @@ const messages: Record<SupportedLocale, MessageCatalog> = {
         repositoryBrowserCreateDirectoryPlaceholder: "docs、release/1.0 或 assets/images",
         repositoryBrowserImportLocalFolderPrompt:
             "输入要将本地文件夹 {source} 导入到 {path} 下的新子路径",
-        repositoryBrowserImportLocalFolderPlaceholder:
-            "vendor/lib-a、release/1.0 或 assets/images",
+        repositoryBrowserImportLocalFolderPlaceholder: "vendor/lib-a、release/1.0 或 assets/images",
         repositoryBrowserImportLocalFolderDefaultName: "imported-folder",
         repositoryBrowserCopyDirectoryPrompt:
             "输入 {path} 复制后的目标路径，可相对于 {parent}，也可输入仓库绝对路径",
@@ -1310,8 +1319,7 @@ const messages: Record<SupportedLocale, MessageCatalog> = {
             "源文件夹：{source}\n仓库 URL：{url}\n提交说明：{message}\n\n这会把文件发布到远端仓库，但不会创建本地工作副本。",
         importLocalFolderButton: "导入",
         importLocalFolderProgress: "正在将 {source} 导入到 {url}...",
-        importedLocalFolderMessage:
-            "已将 {source} 导入到 {url}。这次操作不会创建本地工作副本。",
+        importedLocalFolderMessage: "已将 {source} 导入到 {url}。这次操作不会创建本地工作副本。",
         checkoutImportedRepositoryActionLabel: "检出已导入的仓库",
         openFolder: "打开文件夹",
         revealButton: "显示",

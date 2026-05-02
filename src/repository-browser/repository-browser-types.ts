@@ -1,5 +1,5 @@
 import type { SupportedLocale } from "../i18n";
-import type { SvnNodeKind } from "../svn/svn-types";
+import type { SvnNodeKind, SvnPropertyEntry } from "../svn/svn-types";
 import type {
     RepositoryBrowserAction,
     RepositoryBrowserBreadcrumbItem,
@@ -27,6 +27,16 @@ export interface RepositoryBrowserErrorPayload {
     message: string;
 }
 
+export interface RepositoryBrowserPropertiesPayload {
+    repositoryPath: string;
+    properties: readonly SvnPropertyEntry[];
+}
+
+export interface RepositoryBrowserPropertiesErrorPayload {
+    repositoryPath: string;
+    message: string;
+}
+
 export interface RepositoryBrowserConfigPayload {
     locale: SupportedLocale;
 }
@@ -43,6 +53,14 @@ export type RepositoryBrowserResponseMessage =
     | {
           type: "browser-error";
           payload: RepositoryBrowserErrorPayload;
+      }
+    | {
+          type: "properties-data";
+          payload: RepositoryBrowserPropertiesPayload;
+      }
+    | {
+          type: "properties-error";
+          payload: RepositoryBrowserPropertiesErrorPayload;
       }
     | {
           type: "browser-config";
@@ -62,6 +80,10 @@ export type RepositoryBrowserRequestMessage =
       }
     | {
           type: "load-directory";
+          repositoryPath: string;
+      }
+    | {
+          type: "load-properties";
           repositoryPath: string;
       }
     | {

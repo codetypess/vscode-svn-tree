@@ -53,20 +53,13 @@ export class RepositoryBrowserPanel implements vscode.Disposable {
         this.panels.clear();
     }
 
-    public async show(
-        repository: SvnRepository,
-        repositoryPath?: string
-    ): Promise<void> {
-        const currentRepositoryPath =
-            repositoryPath ?? repository.info.repositoryRelativePath;
+    public async show(repository: SvnRepository, repositoryPath?: string): Promise<void> {
+        const currentRepositoryPath = repositoryPath ?? repository.info.repositoryRelativePath;
         const existingState = this.panels.get(repository.rootPath);
 
         if (existingState) {
             existingState.currentRepositoryPath = currentRepositoryPath;
-            this.updatePanelTitle(
-                existingState.panel,
-                currentRepositoryPath
-            );
+            this.updatePanelTitle(existingState.panel, currentRepositoryPath);
             existingState.panel.reveal(vscode.ViewColumn.Active);
             await this.pushData(existingState, repository);
             return;
@@ -170,28 +163,29 @@ export class RepositoryBrowserPanel implements vscode.Disposable {
                     errorRepositoryPath = message.repositoryPath;
                     await this.pushDirectoryData(state, repository, message.repositoryPath);
                     return;
+                case "load-properties":
+                    errorRepositoryPath = message.repositoryPath;
+                    await this.pushPropertiesData(state, repository, message.repositoryPath);
+                    return;
                 case "run-current-action": {
                     errorRepositoryPath = message.repositoryPath;
-                    const nextRepositoryPath =
-                        await repository.runRepositoryBrowserCurrentAction(
-                            message.action,
-                            message.repositoryPath
-                        );
+                    const nextRepositoryPath = await repository.runRepositoryBrowserCurrentAction(
+                        message.action,
+                        message.repositoryPath
+                    );
                     if (shouldRefreshAfterCurrentAction(message.action)) {
-                        state.currentRepositoryPath =
-                            nextRepositoryPath ?? message.repositoryPath;
+                        state.currentRepositoryPath = nextRepositoryPath ?? message.repositoryPath;
                         await this.pushData(state, repository);
                     }
                     return;
                 }
                 case "run-entry-action": {
                     errorRepositoryPath = message.repositoryPath;
-                    const nextRepositoryPath =
-                        await repository.runRepositoryBrowserEntryAction(
-                            message.action,
-                            message.repositoryPath,
-                            message.kind
-                        );
+                    const nextRepositoryPath = await repository.runRepositoryBrowserEntryAction(
+                        message.action,
+                        message.repositoryPath,
+                        message.kind
+                    );
                     if (message.action === "open-directory" && nextRepositoryPath) {
                         state.currentRepositoryPath = nextRepositoryPath;
                         await this.pushData(state, repository);
@@ -223,12 +217,8 @@ export class RepositoryBrowserPanel implements vscode.Disposable {
         state: RepositoryBrowserPanelState,
         repository: SvnRepository
     ): Promise<void> {
-        repository.logRepositoryBrowser(
-            `Pushing browser data for ${state.currentRepositoryPath}.`
-        );
-        const browserData = await repository.loadRepositoryBrowserData(
-            state.currentRepositoryPath
-        );
+        repository.logRepositoryBrowser(`Pushing browser data for ${state.currentRepositoryPath}.`);
+        const browserData = await repository.loadRepositoryBrowserData(state.currentRepositoryPath);
         state.currentRepositoryPath = browserData.currentRepositoryPath;
         this.updatePanelTitle(state.panel, browserData.currentRepositoryPath);
         await state.panel.webview.postMessage({
@@ -248,6 +238,33 @@ export class RepositoryBrowserPanel implements vscode.Disposable {
             type: "directory-data",
             payload: browserData,
         } satisfies RepositoryBrowserResponseMessage);
+    }
+
+    private async pushPropertiesData(
+        state: RepositoryBrowserPanelState,
+        repository: SvnRepository,
+        repositoryPath: string
+    ): Promise<void> {
+        repository.logRepositoryBrowser(`Pushing properties for ${repositoryPath}.`);
+        try {
+            const properties = await repository.loadRepositoryBrowserProperties(repositoryPath);
+            await state.panel.webview.postMessage({
+                type: "properties-data",
+                payload: properties,
+            } satisfies RepositoryBrowserResponseMessage);
+        } catch (error) {
+            const messageText = error instanceof Error ? error.message : String(error);
+            repository.logRepositoryBrowser(
+                `Failed to load properties for ${repositoryPath}: ${messageText}`
+            );
+            await state.panel.webview.postMessage({
+                type: "properties-error",
+                payload: {
+                    repositoryPath,
+                    message: messageText,
+                },
+            } satisfies RepositoryBrowserResponseMessage);
+        }
     }
 
     private updatePanelTitle(panel: vscode.WebviewPanel, repositoryPath: string): void {
@@ -307,9 +324,7 @@ export class RepositoryBrowserPanel implements vscode.Disposable {
         repositoryLabel: ${JSON.stringify(repository.label)},
         rootPath: ${JSON.stringify(repository.rootPath)},
         initialRepositoryPath: ${JSON.stringify(repositoryPath)},
-        currentWorkingCopyRepositoryPath: ${JSON.stringify(
-            repository.info.repositoryRelativePath
-        )},
+        currentWorkingCopyRepositoryPath: ${JSON.stringify(repository.info.repositoryRelativePath)},
         locale: ${JSON.stringify(locale as SupportedLocale)}
       };
     </script>

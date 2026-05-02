@@ -1,7 +1,11 @@
 :root {
     color-scheme: light dark;
     --panel-bg: var(--vscode-editor-background);
-    --surface-bg: color-mix(in srgb, var(--vscode-editor-background) 88%, var(--vscode-sideBar-background));
+    --surface-bg: color-mix(
+        in srgb,
+        var(--vscode-editor-background) 88%,
+        var(--vscode-sideBar-background)
+    );
     --surface-border: color-mix(in srgb, var(--vscode-panel-border) 72%, transparent);
     --details-bg: var(--vscode-editorWidget-background, var(--panel-bg));
     --details-border: var(--vscode-widget-border, var(--surface-border));
@@ -51,7 +55,11 @@ body,
 
 body {
     margin: 0;
-    background: linear-gradient(180deg, color-mix(in srgb, var(--panel-bg) 88%, transparent), var(--panel-bg));
+    background: linear-gradient(
+        180deg,
+        color-mix(in srgb, var(--panel-bg) 88%, transparent),
+        var(--panel-bg)
+    );
     color: var(--text);
     font: 13px/1.5 var(--vscode-font-family);
 }
@@ -72,11 +80,15 @@ button {
     background: var(--accent);
 }
 
-button:not(.context-menu-item):not(.rdp-day_button):not(.rdp-button_next):not(.rdp-button_previous):hover {
+button:not(.context-menu-item):not(.rdp-day_button):not(.rdp-button_next):not(
+        .rdp-button_previous
+    ):hover {
     background: var(--accent-hover);
 }
 
-button:not(.context-menu-item):not(.rdp-day_button):not(.rdp-button_next):not(.rdp-button_previous):focus-visible {
+button:not(.context-menu-item):not(.rdp-day_button):not(.rdp-button_next):not(
+        .rdp-button_previous
+    ):focus-visible {
     outline: 1px solid var(--focus-border);
     outline-offset: 1px;
 }
@@ -316,11 +328,8 @@ button.secondary:hover {
     --rdp-day_button-height: 32px;
     --rdp-day_button-border: 1px solid transparent;
     --rdp-day_button-border-radius: 8px;
-    --rdp-selected-border: 1px solid color-mix(
-        in srgb,
-        var(--vscode-textLink-foreground, #3794ff) 58%,
-        transparent
-    );
+    --rdp-selected-border: 1px solid
+        color-mix(in srgb, var(--vscode-textLink-foreground, #3794ff) 58%, transparent);
     --rdp-nav_button-width: 28px;
     --rdp-nav_button-height: 28px;
     --rdp-nav-height: 32px;
@@ -455,21 +464,13 @@ button.secondary:hover {
 }
 
 .filter-date-popover .rdp-today:not(.rdp-selected):not(.rdp-outside) .rdp-day_button {
-    border-color: color-mix(
-        in srgb,
-        var(--vscode-textLink-foreground, #3794ff) 48%,
-        transparent
-    );
+    border-color: color-mix(in srgb, var(--vscode-textLink-foreground, #3794ff) 48%, transparent);
 }
 
 .filter-date-popover .rdp-selected .rdp-day_button {
     color: var(--accent-contrast);
     background: var(--vscode-textLink-foreground, #3794ff);
-    border-color: color-mix(
-        in srgb,
-        var(--vscode-textLink-foreground, #3794ff) 62%,
-        black 10%
-    );
+    border-color: color-mix(in srgb, var(--vscode-textLink-foreground, #3794ff) 62%, black 10%);
 }
 
 .filter-date-popover .rdp-outside .rdp-day_button {
@@ -583,9 +584,19 @@ button.secondary:hover {
     border-radius: var(--radius-card);
     border: 1px solid var(--surface-border);
     background:
-        linear-gradient(180deg, color-mix(in srgb, var(--surface-bg) 96%, transparent), var(--surface-bg)),
-        linear-gradient(90deg, color-mix(in srgb, var(--surface-border) 42%, transparent) 1px, transparent 1px);
-    background-size: auto, 28px 28px;
+        linear-gradient(
+            180deg,
+            color-mix(in srgb, var(--surface-bg) 96%, transparent),
+            var(--surface-bg)
+        ),
+        linear-gradient(
+            90deg,
+            color-mix(in srgb, var(--surface-border) 42%, transparent) 1px,
+            transparent 1px
+        );
+    background-size:
+        auto,
+        28px 28px;
     box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
 }
 
@@ -868,6 +879,7 @@ button.secondary:hover {
     border-radius: 10px;
     background: var(--vscode-menu-background, var(--details-bg));
     box-shadow: 0 12px 28px rgba(0, 0, 0, 0.32);
+    font: inherit;
 }
 
 .context-menu-header {
@@ -876,8 +888,9 @@ button.secondary:hover {
 }
 
 .context-menu-title {
-    font-size: 12px;
-    font-weight: 700;
+    font-size: inherit;
+    font-weight: 600;
+    line-height: 1.4;
     overflow: hidden;
     white-space: nowrap;
     text-overflow: ellipsis;
@@ -886,8 +899,10 @@ button.secondary:hover {
 .context-menu-subtitle {
     margin-top: 4px;
     color: var(--muted);
-    font-size: 11px;
-    line-height: 1.35;
+    font-size: inherit;
+    line-height: 1.4;
+    white-space: pre-line;
+    overflow-wrap: anywhere;
 }
 
 .context-menu-actions {
@@ -906,6 +921,7 @@ button.secondary:hover {
     background: transparent;
     color: inherit;
     cursor: pointer;
+    font: inherit;
     text-align: left;
 }
 
@@ -929,8 +945,8 @@ button.secondary:hover {
 .context-menu-label {
     flex: 1;
     min-width: 0;
-    font-size: 12px;
-    line-height: 1.35;
+    font-size: inherit;
+    line-height: 1.4;
 }
 
 .context-menu-separator {

@@ -1,5 +1,5 @@
 import type * as vscode from "vscode";
-import type { SvnNodeKind, SvnRepositoryListEntry } from "../svn/svn-types";
+import type { SvnNodeKind, SvnPropertyEntry, SvnRepositoryListEntry } from "../svn/svn-types";
 import {
     buildRepositoryUrl,
     getReferenceKindForRepositoryPath,
@@ -118,12 +118,15 @@ export interface RepositoryBrowserEntryItem {
     readonly name: string;
     readonly kind: SvnNodeKind;
     readonly kindLabel: string;
+    readonly size?: number;
     readonly revision?: string;
     readonly author?: string;
+    readonly date?: string;
     readonly actions: readonly RepositoryBrowserViewActionItem<RepositoryBrowserEntryAction>[];
 }
 
 export interface RepositoryBrowserViewModel {
+    readonly repositoryRootUrl: string;
     readonly currentRepositoryPath: string;
     readonly currentUrl: string;
     readonly currentWorkingCopyRepositoryPath: string;
@@ -131,6 +134,11 @@ export interface RepositoryBrowserViewModel {
     readonly breadcrumbs: readonly RepositoryBrowserBreadcrumbItem[];
     readonly currentActions: readonly RepositoryBrowserViewActionItem<RepositoryBrowserAction>[];
     readonly entries: readonly RepositoryBrowserEntryItem[];
+}
+
+export interface RepositoryBrowserPropertiesModel {
+    readonly repositoryPath: string;
+    readonly properties: readonly SvnPropertyEntry[];
 }
 
 export interface RepositoryBrowserViewStrings {
@@ -489,11 +497,14 @@ export function buildRepositoryBrowserViewModel(options: {
     });
 
     return {
+        repositoryRootUrl: options.repositoryRoot,
         currentRepositoryPath,
         currentUrl,
         currentWorkingCopyRepositoryPath,
         parentRepositoryPath:
-            currentRepositoryPath !== "/" ? getParentRepositoryPath(currentRepositoryPath) : undefined,
+            currentRepositoryPath !== "/"
+                ? getParentRepositoryPath(currentRepositoryPath)
+                : undefined,
         breadcrumbs: buildRepositoryBrowserBreadcrumbs(
             currentRepositoryPath,
             options.strings.rootBreadcrumbLabel
@@ -623,22 +634,18 @@ function buildRepositoryBrowserCurrentActions(options: {
 }): RepositoryBrowserViewActionItem<RepositoryBrowserAction>[] {
     const actions: RepositoryBrowserViewActionItem<RepositoryBrowserAction>[] = [
         createAction("show-history", options.strings.openHistoryActionLabel, "history"),
-        createAction("show-properties", options.strings.showPropertiesActionLabel, "symbol-property"),
+        createAction(
+            "show-properties",
+            options.strings.showPropertiesActionLabel,
+            "symbol-property"
+        ),
         createAction(
             "checkout-directory",
             options.strings.checkoutDirectoryActionLabel,
             "repo-clone"
         ),
-        createAction(
-            "export-directory",
-            options.strings.exportDirectoryActionLabel,
-            "export"
-        ),
-        createAction(
-            "create-directory",
-            options.strings.createDirectoryActionLabel,
-            "new-folder"
-        ),
+        createAction("export-directory", options.strings.exportDirectoryActionLabel, "export"),
+        createAction("create-directory", options.strings.createDirectoryActionLabel, "new-folder"),
         createAction(
             "import-local-folder-here",
             options.strings.importLocalFolderHereActionLabel,
@@ -677,9 +684,7 @@ function buildRepositoryBrowserCurrentActions(options: {
         normalizeRepositoryPath(options.currentRepositoryPath) !==
         normalizeRepositoryPath(options.currentWorkingCopyRepositoryPath)
     ) {
-        actions.push(
-            createAction("switch-here", options.strings.switchHereLabel, "git-branch")
-        );
+        actions.push(createAction("switch-here", options.strings.switchHereLabel, "git-branch"));
     }
 
     actions.push(
@@ -693,11 +698,7 @@ function buildRepositoryBrowserCurrentActions(options: {
         );
     } else if (canMoveOrDeleteCurrentDirectory) {
         actions.push(
-            createAction(
-                "delete-directory",
-                options.strings.deleteDirectoryActionLabel,
-                "trash"
-            )
+            createAction("delete-directory", options.strings.deleteDirectoryActionLabel, "trash")
         );
     }
 
@@ -733,8 +734,10 @@ function buildRepositoryBrowserEntryItems(options: {
             name: entry.name,
             kind: entry.kind,
             kindLabel: options.formatNodeKind(entry.kind),
+            size: entry.size,
             revision: entry.revision,
             author: entry.author,
+            date: entry.date,
             actions:
                 entry.kind === "dir"
                     ? buildDirectoryEntryActions({
@@ -754,16 +757,8 @@ function buildDirectoryEntryActions(options: {
     readonly strings: RepositoryBrowserViewStrings;
 }): RepositoryBrowserViewActionItem<RepositoryBrowserEntryAction>[] {
     const actions: RepositoryBrowserViewActionItem<RepositoryBrowserEntryAction>[] = [
-        createAction(
-            "open-directory",
-            options.strings.openDirectoryActionLabel,
-            "folder-opened"
-        ),
-        createAction(
-            "show-history",
-            options.strings.openHistoryActionLabel,
-            "history"
-        ),
+        createAction("open-directory", options.strings.openDirectoryActionLabel, "folder-opened"),
+        createAction("show-history", options.strings.openHistoryActionLabel, "history"),
         createAction(
             "show-properties",
             options.strings.showPropertiesActionLabel,
@@ -774,16 +769,8 @@ function buildDirectoryEntryActions(options: {
             options.strings.checkoutDirectoryActionLabel,
             "repo-clone"
         ),
-        createAction(
-            "export-directory",
-            options.strings.exportDirectoryActionLabel,
-            "export"
-        ),
-        createAction(
-            "create-directory",
-            options.strings.createDirectoryActionLabel,
-            "new-folder"
-        ),
+        createAction("export-directory", options.strings.exportDirectoryActionLabel, "export"),
+        createAction("create-directory", options.strings.createDirectoryActionLabel, "new-folder"),
         createAction(
             "create-branch-from-working-copy",
             options.strings.createBranchFromWorkingCopyActionLabel,
@@ -818,9 +805,7 @@ function buildDirectoryEntryActions(options: {
         normalizeRepositoryPath(options.repositoryPath) !==
         normalizeRepositoryPath(options.currentWorkingCopyRepositoryPath)
     ) {
-        actions.push(
-            createAction("switch-here", options.strings.switchHereLabel, "git-branch")
-        );
+        actions.push(createAction("switch-here", options.strings.switchHereLabel, "git-branch"));
     }
 
     actions.push(
@@ -830,19 +815,11 @@ function buildDirectoryEntryActions(options: {
 
     if (getReferenceKindForRepositoryPath(options.repositoryPath)) {
         actions.push(
-            createAction(
-                "delete-reference",
-                options.strings.deleteReferenceActionLabel,
-                "trash"
-            )
+            createAction("delete-reference", options.strings.deleteReferenceActionLabel, "trash")
         );
     } else if (canMoveOrDeleteDirectory) {
         actions.push(
-            createAction(
-                "delete-directory",
-                options.strings.deleteDirectoryActionLabel,
-                "trash"
-            )
+            createAction("delete-directory", options.strings.deleteDirectoryActionLabel, "trash")
         );
     }
 

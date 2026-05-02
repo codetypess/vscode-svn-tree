@@ -1,8 +1,5 @@
 import * as vscode from "vscode";
-import type {
-    ParsedSvnExternalDefinitions,
-    SvnExternalDefinition,
-} from "./svn-externals-utils";
+import type { ParsedSvnExternalDefinitions, SvnExternalDefinition } from "./svn-externals-utils";
 
 interface ExternalsEditorPanelStrings {
     readonly heading: string;
@@ -285,9 +282,10 @@ export class SvnExternalsEditorPanel implements vscode.Disposable {
             display: grid;
             gap: 12px;
             padding: 16px 18px;
-            border: 1px solid var(--border);
-            border-radius: 8px;
-            background: color-mix(in srgb, var(--details-bg) 78%, var(--surface-bg));
+            border: 1px solid var(--details-border);
+            border-radius: 10px;
+            background: color-mix(in srgb, var(--details-bg) 92%, var(--surface-bg));
+            box-shadow: inset 0 1px 0 color-mix(in srgb, white 4%, transparent);
         }
 
         .meta-label,
@@ -419,9 +417,10 @@ export class SvnExternalsEditorPanel implements vscode.Disposable {
             display: grid;
             gap: 10px;
             padding: 12px;
-            border: 1px solid var(--border);
-            border-radius: 6px;
-            background: color-mix(in srgb, var(--surface-bg) 82%, var(--details-bg));
+            border: 1px solid var(--details-border);
+            border-radius: 10px;
+            background: color-mix(in srgb, var(--surface-bg) 88%, var(--details-bg));
+            box-shadow: inset 0 1px 0 color-mix(in srgb, white 4%, transparent);
         }
 
         .row-grid {

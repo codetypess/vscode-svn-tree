@@ -51,14 +51,8 @@ import {
     getDepthLabelKey,
     getWorkingCopyDepthOptions,
 } from "./svn-depth-utils";
-import {
-    ExternalsEditorPanelState,
-    SvnExternalsEditorPanel,
-} from "./svn-externals-editor-panel";
-import {
-    normalizeExternalsEditorValue,
-    parseExternalsDefinitions,
-} from "./svn-externals-utils";
+import { ExternalsEditorPanelState, SvnExternalsEditorPanel } from "./svn-externals-editor-panel";
+import { normalizeExternalsEditorValue, parseExternalsDefinitions } from "./svn-externals-utils";
 import { IgnoreEditorPanelState, SvnIgnoreEditorPanel } from "./svn-ignore-editor-panel";
 import {
     getSuggestedIgnoreEntry,
@@ -85,6 +79,7 @@ import {
     type RepositoryBrowserAction,
     type RepositoryBrowserEntryAction,
     type RepositoryBrowserFileAction,
+    type RepositoryBrowserPropertiesModel,
     type RepositoryBrowserPathInputMode,
 } from "./svn-repository-browser";
 import {
@@ -105,10 +100,7 @@ import {
 } from "./svn-output-formatters";
 import { partitionStatusEntries } from "./svn-repository-status-utils";
 import { ScmResource } from "./scm-resource";
-import {
-    deriveCheckoutDestinationName,
-    deriveImportSourceFolderName,
-} from "./svn-checkout-utils";
+import { deriveCheckoutDestinationName, deriveImportSourceFolderName } from "./svn-checkout-utils";
 import {
     buildHistoryFileExportName,
     buildReferenceDestinationPath,
@@ -663,10 +655,7 @@ export class SvnRepository implements vscode.Disposable {
         );
     }
 
-    public async setWorkingCopyDepth(
-        depth: SvnDepth,
-        paths?: string[] | undefined
-    ): Promise<void> {
+    public async setWorkingCopyDepth(depth: SvnDepth, paths?: string[] | undefined): Promise<void> {
         const selectedPaths = paths ? this.normalizeUniquePaths(paths) : undefined;
         if (selectedPaths && selectedPaths.length === 0) {
             return;
@@ -1389,9 +1378,8 @@ export class SvnRepository implements vscode.Disposable {
     }
 
     public async editPathProperty(target: vscode.Uri | string): Promise<void> {
-        const { targetPath, displayPath, targetInfo } = await this.resolveWorkingCopyNodeTarget(
-            target
-        );
+        const { targetPath, displayPath, targetInfo } =
+            await this.resolveWorkingCopyNodeTarget(target);
 
         const propertyName = await this.promptPropertyName();
         if (!propertyName) {
@@ -1560,10 +1548,15 @@ export class SvnRepository implements vscode.Disposable {
                 revisionFieldLabel: this.i18n.t("externalsEditorRevisionFieldLabel"),
                 sourceFirstFormatLabel: this.i18n.t("externalsEditorSourceFirstFormatLabel"),
                 localFirstFormatLabel: this.i18n.t("externalsEditorLocalFirstFormatLabel"),
-                structuredUnavailableLabel: this.i18n.t("externalsEditorStructuredUnavailableLabel"),
-                structuredInvalidLinesLabel: this.i18n.t("externalsEditorStructuredInvalidLinesLabel", {
-                    lines: "{lines}",
-                }),
+                structuredUnavailableLabel: this.i18n.t(
+                    "externalsEditorStructuredUnavailableLabel"
+                ),
+                structuredInvalidLinesLabel: this.i18n.t(
+                    "externalsEditorStructuredInvalidLinesLabel",
+                    {
+                        lines: "{lines}",
+                    }
+                ),
                 structuredIncompleteLabel: this.i18n.t("externalsEditorStructuredIncompleteLabel"),
                 emptyStructuredStateLabel: this.i18n.t("externalsEditorEmptyStructuredStateLabel"),
             },
@@ -1901,6 +1894,27 @@ export class SvnRepository implements vscode.Disposable {
                 formatNodeKind: (kind) => this.i18n.formatNodeKind(kind),
                 strings: this.getRepositoryBrowserViewStrings(),
             }),
+        };
+    }
+
+    public async loadRepositoryBrowserProperties(
+        repositoryPath: string
+    ): Promise<RepositoryBrowserPropertiesModel> {
+        const normalizedRepositoryPath = normalizeRepositoryPath(repositoryPath);
+        const url = buildRepositoryUrl(this.info.repositoryRoot, normalizedRepositoryPath);
+        this.logRepositoryBrowser(
+            `Loading properties for ${normalizedRepositoryPath} from ${url}.`
+        );
+        const properties = await this.svnService.getProperties(url);
+        this.logRepositoryBrowser(
+            `Loaded ${properties.length} propert${
+                properties.length === 1 ? "y" : "ies"
+            } for ${normalizedRepositoryPath}.`
+        );
+
+        return {
+            repositoryPath: normalizedRepositoryPath,
+            properties,
         };
     }
 
@@ -2448,9 +2462,8 @@ export class SvnRepository implements vscode.Disposable {
             return undefined;
         }
 
-        const commitMessage = await this.promptRepositoryBrowserImportCommitMessage(
-            sourceFolderPath
-        );
+        const commitMessage =
+            await this.promptRepositoryBrowserImportCommitMessage(sourceFolderPath);
         if (!commitMessage) {
             return undefined;
         }
@@ -2650,9 +2663,8 @@ export class SvnRepository implements vscode.Disposable {
     }
 
     private async exportRepositoryFileAt(repositoryPath: string): Promise<void> {
-        const destinationPath = await this.promptRepositoryBrowserFileExportDestination(
-            repositoryPath
-        );
+        const destinationPath =
+            await this.promptRepositoryBrowserFileExportDestination(repositoryPath);
         if (!destinationPath) {
             return;
         }
@@ -3400,7 +3412,10 @@ export class SvnRepository implements vscode.Disposable {
         targetPath: string,
         targetKind?: SvnNodeKind
     ): Promise<DirectoryPropertyEditorTarget> {
-        const directoryCandidate = await this.resolvePropertyDirectoryCandidate(targetPath, targetKind);
+        const directoryCandidate = await this.resolvePropertyDirectoryCandidate(
+            targetPath,
+            targetKind
+        );
         const propertyDirectoryPath =
             (await this.findNearestVersionedDirectory(directoryCandidate)) ?? this.rootPath;
 
@@ -4426,7 +4441,9 @@ export class SvnRepository implements vscode.Disposable {
     }
 
     private async promptCheckoutDepth(): Promise<SvnCheckoutDepth | undefined> {
-        const selection = await vscode.window.showQuickPick<SvnDepthQuickPickItem<SvnCheckoutDepth>>(
+        const selection = await vscode.window.showQuickPick<
+            SvnDepthQuickPickItem<SvnCheckoutDepth>
+        >(
             getCheckoutDepthOptions().map((option) => ({
                 label: this.i18n.t(option.labelKey),
                 description: this.i18n.t(option.descriptionKey),
@@ -4441,9 +4458,7 @@ export class SvnRepository implements vscode.Disposable {
         return selection?.depth;
     }
 
-    public async promptWorkingCopyDepth(
-        includeExclude: boolean
-    ): Promise<SvnDepth | undefined> {
+    public async promptWorkingCopyDepth(includeExclude: boolean): Promise<SvnDepth | undefined> {
         const selection = await vscode.window.showQuickPick<SvnDepthQuickPickItem<SvnDepth>>(
             getWorkingCopyDepthOptions(includeExclude).map((option) => ({
                 label: this.i18n.t(option.labelKey),

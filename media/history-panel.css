@@ -1,1157 +1,1173 @@
 :root {
-  color-scheme: var(--vscode-color-scheme);
-  --page-bg: var(--vscode-editor-background, #1e1e1e);
-  --surface-bg: var(--vscode-editor-background, #1e1e1e);
-  --header-bg: var(--vscode-sideBarSectionHeader-background, var(--page-bg));
-  --details-bg: var(--vscode-editorWidget-background, var(--page-bg));
-  --muted: var(--vscode-descriptionForeground, #8c8c8c);
-  --accent: var(--vscode-button-background, #0e639c);
-  --accent-hover: var(--vscode-button-hoverBackground, #1177bb);
-  --accent-contrast: var(--vscode-button-foreground, #ffffff);
-  --secondary-button-bg: var(--vscode-button-secondaryBackground, transparent);
-  --secondary-button-hover-bg: var(
-    --vscode-button-secondaryHoverBackground,
-    color-mix(in srgb, var(--secondary-button-bg) 82%, white)
-  );
-  --secondary-button-fg: var(--vscode-button-secondaryForeground, var(--vscode-editor-foreground));
-  --border: var(--vscode-panel-border, rgba(128, 128, 128, 0.35));
-  --details-border: var(--vscode-widget-border, var(--border));
-  --input-bg: var(--vscode-input-background, transparent);
-  --input-fg: var(--vscode-input-foreground, var(--vscode-editor-foreground));
-  --input-border: var(--vscode-input-border, var(--border));
-  --focus-border: var(--vscode-focusBorder, var(--graph-node));
-  --row-hover: var(--vscode-list-hoverBackground, rgba(255, 255, 255, 0.04));
-  --row-active: var(--vscode-list-inactiveSelectionBackground, rgba(255, 255, 255, 0.06));
-  --graph-node: var(--vscode-textLink-foreground, #3794ff);
-  --graph-column-width: 56px;
-  --graph-center: calc(var(--graph-column-width) / 2);
-  --graph-rail-width: 2px;
-  --graph-dot-size: 10px;
-  --timeline: color-mix(in srgb, var(--graph-node) 88%, transparent);
-  --timeline-strong: var(--graph-node);
-  --graph-node-incoming: color-mix(in srgb, var(--muted) 82%, transparent);
-  --timeline-incoming: color-mix(in srgb, var(--muted) 74%, transparent);
-  --timeline-incoming-strong: color-mix(in srgb, var(--muted) 92%, transparent);
-  --added: var(--vscode-gitDecoration-addedResourceForeground, #81b88b);
-  --modified: var(--vscode-gitDecoration-modifiedResourceForeground, #e2c08d);
-  --deleted: var(--vscode-gitDecoration-deletedResourceForeground, #c74e39);
-  --replaced: var(--vscode-textLink-foreground, #3794ff);
-  --search-highlight-bg: color-mix(in srgb, var(--graph-node) 32%, transparent);
-  --search-highlight-border: color-mix(in srgb, var(--graph-node) 82%, transparent);
-  --search-highlight-fg: var(--vscode-editor-foreground, #ffffff);
+    color-scheme: var(--vscode-color-scheme);
+    --page-bg: var(--vscode-editor-background, #1e1e1e);
+    --surface-bg: var(--vscode-editor-background, #1e1e1e);
+    --header-bg: var(--vscode-sideBarSectionHeader-background, var(--page-bg));
+    --details-bg: var(--vscode-editorWidget-background, var(--page-bg));
+    --muted: var(--vscode-descriptionForeground, #8c8c8c);
+    --accent: var(--vscode-button-background, #0e639c);
+    --accent-hover: var(--vscode-button-hoverBackground, #1177bb);
+    --accent-contrast: var(--vscode-button-foreground, #ffffff);
+    --secondary-button-bg: var(--vscode-button-secondaryBackground, transparent);
+    --secondary-button-hover-bg: var(
+        --vscode-button-secondaryHoverBackground,
+        color-mix(in srgb, var(--secondary-button-bg) 82%, white)
+    );
+    --secondary-button-fg: var(
+        --vscode-button-secondaryForeground,
+        var(--vscode-editor-foreground)
+    );
+    --border: var(--vscode-panel-border, rgba(128, 128, 128, 0.35));
+    --details-border: var(--vscode-widget-border, var(--border));
+    --input-bg: var(--vscode-input-background, transparent);
+    --input-fg: var(--vscode-input-foreground, var(--vscode-editor-foreground));
+    --input-border: var(--vscode-input-border, var(--border));
+    --focus-border: var(--vscode-focusBorder, var(--graph-node));
+    --row-hover: var(--vscode-list-hoverBackground, rgba(255, 255, 255, 0.04));
+    --row-active: var(--vscode-list-inactiveSelectionBackground, rgba(255, 255, 255, 0.06));
+    --graph-node: var(--vscode-textLink-foreground, #3794ff);
+    --graph-column-width: 56px;
+    --graph-center: calc(var(--graph-column-width) / 2);
+    --graph-rail-width: 2px;
+    --graph-dot-size: 10px;
+    --timeline: color-mix(in srgb, var(--graph-node) 88%, transparent);
+    --timeline-strong: var(--graph-node);
+    --graph-node-incoming: color-mix(in srgb, var(--muted) 82%, transparent);
+    --timeline-incoming: color-mix(in srgb, var(--muted) 74%, transparent);
+    --timeline-incoming-strong: color-mix(in srgb, var(--muted) 92%, transparent);
+    --added: var(--vscode-gitDecoration-addedResourceForeground, #81b88b);
+    --modified: var(--vscode-gitDecoration-modifiedResourceForeground, #e2c08d);
+    --deleted: var(--vscode-gitDecoration-deletedResourceForeground, #c74e39);
+    --replaced: var(--vscode-textLink-foreground, #3794ff);
+    --search-highlight-bg: color-mix(in srgb, var(--graph-node) 32%, transparent);
+    --search-highlight-border: color-mix(in srgb, var(--graph-node) 82%, transparent);
+    --search-highlight-fg: var(--vscode-editor-foreground, #ffffff);
 }
 
 * {
-  box-sizing: border-box;
+    box-sizing: border-box;
 }
 
 body {
-  margin: 0;
-  padding: 0 !important;
-  font-family: var(--vscode-font-family);
-  background: var(--page-bg);
-  color: var(--vscode-editor-foreground);
+    margin: 0;
+    padding: 0 !important;
+    font-family: var(--vscode-font-family);
+    background: var(--page-bg);
+    color: var(--vscode-editor-foreground);
 }
 
 .page {
-  padding: 0;
-  min-height: 100vh;
+    padding: 0;
+    min-height: 100vh;
 }
 
 .card {
-  background: var(--surface-bg);
-  border: 0;
-  border-radius: 0;
-  overflow: hidden;
-  box-shadow: none;
+    background: var(--surface-bg);
+    border: 0;
+    border-radius: 0;
+    overflow: hidden;
+    box-shadow: none;
 }
 
 .toolbar {
-  display: flex;
-  gap: 12px;
-  align-items: center;
-  padding: 10px 16px;
-  border-bottom: 1px solid var(--border);
+    display: flex;
+    gap: 12px;
+    align-items: center;
+    padding: 10px 16px;
+    border-bottom: 1px solid var(--border);
 }
 
 .toolbar h1 {
-  margin: 0;
-  font-size: 15px;
-  font-weight: 700;
-  letter-spacing: 0.02em;
+    margin: 0;
+    font-size: 15px;
+    font-weight: 700;
+    letter-spacing: 0.02em;
 }
 
 .toolbar small {
-  color: var(--muted);
-  display: block;
-  margin-top: 2px;
-  font-size: 12px;
+    color: var(--muted);
+    display: block;
+    margin-top: 2px;
+    font-size: 12px;
 }
 
 .toolbar-actions {
-  margin-left: auto;
-  display: flex;
-  gap: 8px;
-  align-items: center;
+    margin-left: auto;
+    display: flex;
+    gap: 8px;
+    align-items: center;
 }
 
 .search {
-  width: 320px;
-  max-width: 100%;
-  min-height: 28px;
-  padding: 4px 8px;
-  color: var(--input-fg);
-  border: 1px solid var(--input-border);
-  border-radius: 4px;
-  background: var(--input-bg);
-  outline: none;
+    width: 320px;
+    max-width: 100%;
+    min-height: 28px;
+    padding: 4px 8px;
+    color: var(--input-fg);
+    border: 1px solid var(--input-border);
+    border-radius: 4px;
+    background: var(--input-bg);
+    outline: none;
 }
 
 .search::placeholder {
-  color: var(--muted);
+    color: var(--muted);
 }
 
 .search:hover {
-  border-color: color-mix(in srgb, var(--input-border) 70%, var(--focus-border));
+    border-color: color-mix(in srgb, var(--input-border) 70%, var(--focus-border));
 }
 
 .search:focus {
-  border-color: var(--focus-border);
-  box-shadow: inset 0 0 0 1px var(--focus-border);
+    border-color: var(--focus-border);
+    box-shadow: inset 0 0 0 1px var(--focus-border);
 }
 
 button {
-  min-height: 28px;
-  padding: 4px 12px;
-  border: 1px solid transparent;
-  border-radius: 4px;
-  cursor: pointer;
-  font: inherit;
-  color: var(--accent-contrast);
-  background: var(--accent);
+    min-height: 28px;
+    padding: 4px 12px;
+    border: 1px solid transparent;
+    border-radius: 4px;
+    cursor: pointer;
+    font: inherit;
+    color: var(--accent-contrast);
+    background: var(--accent);
 }
 
-button:not(.context-menu-item):not(.rdp-day_button):not(.rdp-button_next):not(.rdp-button_previous):hover {
-  background: var(--accent-hover);
+button:not(.context-menu-item):not(.rdp-day_button):not(.rdp-button_next):not(
+        .rdp-button_previous
+    ):hover {
+    background: var(--accent-hover);
 }
 
-button:not(.context-menu-item):not(.rdp-day_button):not(.rdp-button_next):not(.rdp-button_previous):focus-visible {
-  outline: 1px solid var(--focus-border);
-  outline-offset: 1px;
+button:not(.context-menu-item):not(.rdp-day_button):not(.rdp-button_next):not(
+        .rdp-button_previous
+    ):focus-visible {
+    outline: 1px solid var(--focus-border);
+    outline-offset: 1px;
 }
 
 mark.search-highlight {
-  padding: 0 0.16em;
-  border-radius: 3px;
-  color: var(--search-highlight-fg);
-  background: var(--search-highlight-bg);
-  box-shadow: inset 0 0 0 1px var(--search-highlight-border);
+    padding: 0 0.16em;
+    border-radius: 3px;
+    color: var(--search-highlight-fg);
+    background: var(--search-highlight-bg);
+    box-shadow: inset 0 0 0 1px var(--search-highlight-border);
 }
 
 .history-list {
-  position: relative;
-  max-height: calc(100vh - 94px);
-  overflow: auto;
+    position: relative;
+    max-height: calc(100vh - 94px);
+    overflow: auto;
 }
 
 .history-virtualized {
-  position: relative;
-  min-height: 100%;
+    position: relative;
+    min-height: 100%;
 }
 
 .history-virtual-item,
 .history-footer[style] {
-  position: absolute;
-  left: 0;
-  right: 0;
-  width: 100%;
+    position: absolute;
+    left: 0;
+    right: 0;
+    width: 100%;
 }
 
 .history-footer {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  min-height: 64px;
-  padding: 12px 16px 18px;
-  border-top: 1px solid color-mix(in srgb, var(--border) 60%, transparent);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 64px;
+    padding: 12px 16px 18px;
+    border-top: 1px solid color-mix(in srgb, var(--border) 60%, transparent);
 }
 
 .history-footer-text {
-  color: var(--muted);
-  font-size: 12px;
+    color: var(--muted);
+    font-size: 12px;
 }
 
 .history-footer .secondary {
-  color: var(--secondary-button-fg);
-  background: var(--secondary-button-bg);
-  border-color: var(--border);
+    color: var(--secondary-button-fg);
+    background: var(--secondary-button-bg);
+    border-color: var(--border);
 }
 
 button.secondary {
-  color: var(--secondary-button-fg);
-  background: var(--secondary-button-bg);
-  border-color: var(--border);
+    color: var(--secondary-button-fg);
+    background: var(--secondary-button-bg);
+    border-color: var(--border);
 }
 
 button.secondary:hover {
-  background: var(--secondary-button-hover-bg);
+    background: var(--secondary-button-hover-bg);
 }
 
 .toolbar-button {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 4px 10px;
-  white-space: nowrap;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 10px;
+    white-space: nowrap;
 }
 
 .toolbar-button .codicon {
-  font-size: 14px;
-  color: var(--muted);
+    font-size: 14px;
+    color: var(--muted);
 }
 
 .toolbar-button.is-active {
-  border-color: color-mix(in srgb, var(--focus-border) 55%, var(--border));
-  background: color-mix(in srgb, var(--accent) 12%, var(--secondary-button-bg));
+    border-color: color-mix(in srgb, var(--focus-border) 55%, var(--border));
+    background: color-mix(in srgb, var(--accent) 12%, var(--secondary-button-bg));
 }
 
 .toolbar-button.is-active .codicon,
 .toolbar-button.is-active .toolbar-button-label {
-  color: var(--vscode-editor-foreground);
+    color: var(--vscode-editor-foreground);
 }
 
 .toolbar-button-label {
-  line-height: 1;
+    line-height: 1;
 }
 
 .filter-panel {
-  display: grid;
-  gap: 12px;
-  padding: 12px 16px 14px;
-  border-bottom: 1px solid var(--border);
-  background: color-mix(in srgb, var(--details-bg) 76%, var(--surface-bg));
+    display: grid;
+    gap: 12px;
+    padding: 12px 16px 14px;
+    border-bottom: 1px solid var(--border);
+    background: color-mix(in srgb, var(--details-bg) 76%, var(--surface-bg));
 }
 
 .filter-grid {
-  display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: 12px;
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 12px;
 }
 
 .filter-field {
-  display: grid;
-  gap: 6px;
-  min-width: 0;
+    display: grid;
+    gap: 6px;
+    min-width: 0;
 }
 
 .filter-date-field {
-  position: relative;
+    position: relative;
 }
 
 .filter-label {
-  color: var(--muted);
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
+    color: var(--muted);
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
 }
 
 .filter-input {
-  width: 100%;
-  min-height: 28px;
-  padding: 4px 8px;
-  color: var(--input-fg);
-  border: 1px solid var(--input-border);
-  border-radius: 4px;
-  background: var(--input-bg);
-  outline: none;
-  font: inherit;
+    width: 100%;
+    min-height: 28px;
+    padding: 4px 8px;
+    color: var(--input-fg);
+    border: 1px solid var(--input-border);
+    border-radius: 4px;
+    background: var(--input-bg);
+    outline: none;
+    font: inherit;
 }
 
 .filter-input::placeholder {
-  color: var(--muted);
+    color: var(--muted);
 }
 
 .filter-input:hover {
-  border-color: color-mix(in srgb, var(--input-border) 70%, var(--focus-border));
+    border-color: color-mix(in srgb, var(--input-border) 70%, var(--focus-border));
 }
 
 .filter-input:focus {
-  border-color: var(--focus-border);
-  box-shadow: inset 0 0 0 1px var(--focus-border);
+    border-color: var(--focus-border);
+    box-shadow: inset 0 0 0 1px var(--focus-border);
 }
 
 .filter-date-input {
-  position: relative;
+    position: relative;
 }
 
 .filter-date-input .filter-input {
-  padding-right: 38px;
+    padding-right: 38px;
 }
 
 .filter-date-button {
-  position: absolute;
-  top: 50%;
-  right: 6px;
-  transform: translateY(-50%);
-  min-height: 22px;
-  min-width: 22px;
-  padding: 0;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border: 1px solid color-mix(in srgb, var(--border) 86%, transparent);
-  border-radius: 4px;
-  color: var(--secondary-button-fg);
-  background: color-mix(in srgb, var(--secondary-button-bg) 78%, transparent);
+    position: absolute;
+    top: 50%;
+    right: 6px;
+    transform: translateY(-50%);
+    min-height: 22px;
+    min-width: 22px;
+    padding: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid color-mix(in srgb, var(--border) 86%, transparent);
+    border-radius: 4px;
+    color: var(--secondary-button-fg);
+    background: color-mix(in srgb, var(--secondary-button-bg) 78%, transparent);
 }
 
 .filter-date-button:hover {
-  background: color-mix(in srgb, var(--focus-border) 16%, var(--secondary-button-bg));
+    background: color-mix(in srgb, var(--focus-border) 16%, var(--secondary-button-bg));
 }
 
 .filter-date-button:focus-visible {
-  outline: 1px solid var(--focus-border);
-  outline-offset: 1px;
+    outline: 1px solid var(--focus-border);
+    outline-offset: 1px;
 }
 
 .filter-date-button .codicon {
-  font-size: 14px;
-  color: var(--muted);
+    font-size: 14px;
+    color: var(--muted);
 }
 
 .filter-date-popover {
-  position: absolute;
-  top: calc(100% + 8px);
-  right: 0;
-  z-index: 8;
-  width: 286px;
-  padding: 12px;
-  border: 1px solid var(--details-border);
-  border-radius: 10px;
-  background: var(--vscode-menu-background, var(--details-bg));
-  box-shadow: 0 14px 28px rgba(0, 0, 0, 0.28);
+    position: absolute;
+    top: calc(100% + 8px);
+    right: 0;
+    z-index: 8;
+    width: 286px;
+    padding: 12px;
+    border: 1px solid var(--details-border);
+    border-radius: 10px;
+    background: var(--vscode-menu-background, var(--details-bg));
+    box-shadow: 0 14px 28px rgba(0, 0, 0, 0.28);
 }
 
 .filter-date-popover .rdp-root {
-  --rdp-accent-color: var(--graph-node);
-  --rdp-accent-background-color: color-mix(in srgb, var(--graph-node) 18%, transparent);
-  --rdp-day-width: 34px;
-  --rdp-day-height: 34px;
-  --rdp-day_button-width: 32px;
-  --rdp-day_button-height: 32px;
-  --rdp-day_button-border: 1px solid transparent;
-  --rdp-day_button-border-radius: 8px;
-  --rdp-selected-border: 1px solid color-mix(in srgb, var(--graph-node) 58%, transparent);
-  --rdp-nav_button-width: 28px;
-  --rdp-nav_button-height: 28px;
-  --rdp-nav-height: 32px;
-  --rdp-weekday-opacity: 1;
-  --rdp-weekday-padding: 0 0 8px;
-  position: relative;
-  box-sizing: border-box;
-  color: var(--vscode-editor-foreground);
+    --rdp-accent-color: var(--graph-node);
+    --rdp-accent-background-color: color-mix(in srgb, var(--graph-node) 18%, transparent);
+    --rdp-day-width: 34px;
+    --rdp-day-height: 34px;
+    --rdp-day_button-width: 32px;
+    --rdp-day_button-height: 32px;
+    --rdp-day_button-border: 1px solid transparent;
+    --rdp-day_button-border-radius: 8px;
+    --rdp-selected-border: 1px solid color-mix(in srgb, var(--graph-node) 58%, transparent);
+    --rdp-nav_button-width: 28px;
+    --rdp-nav_button-height: 28px;
+    --rdp-nav-height: 32px;
+    --rdp-weekday-opacity: 1;
+    --rdp-weekday-padding: 0 0 8px;
+    position: relative;
+    box-sizing: border-box;
+    color: var(--vscode-editor-foreground);
 }
 
 .filter-date-popover .rdp-root * {
-  box-sizing: border-box;
+    box-sizing: border-box;
 }
 
 .filter-date-popover .rdp-months {
-  display: block;
-  max-width: none;
+    display: block;
+    max-width: none;
 }
 
 .filter-date-popover .rdp-month {
-  position: relative;
-  width: 100%;
+    position: relative;
+    width: 100%;
 }
 
 .filter-date-popover .rdp-month_caption {
-  position: relative;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  min-height: var(--rdp-nav-height);
-  margin-inline-start: var(--rdp-nav_button-width);
-  margin-inline-end: var(--rdp-nav_button-width);
-  margin-bottom: 8px;
-  font-size: 13px;
-  font-weight: 700;
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: var(--rdp-nav-height);
+    margin-inline-start: var(--rdp-nav_button-width);
+    margin-inline-end: var(--rdp-nav_button-width);
+    margin-bottom: 8px;
+    font-size: 13px;
+    font-weight: 700;
 }
 
 .filter-date-popover .rdp-caption_label {
-  display: inline-flex;
-  align-items: center;
-  white-space: nowrap;
+    display: inline-flex;
+    align-items: center;
+    white-space: nowrap;
 }
 
 .filter-date-popover .rdp-nav {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  height: var(--rdp-nav-height);
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    height: var(--rdp-nav-height);
 }
 
 .filter-date-popover .rdp-button_previous,
 .filter-date-popover .rdp-button_next,
 .filter-date-popover .rdp-day_button {
-  min-height: 0;
-  padding: 0;
-  border-radius: 8px;
-  color: inherit;
-  background: transparent;
+    min-height: 0;
+    padding: 0;
+    border-radius: 8px;
+    color: inherit;
+    background: transparent;
 }
 
 .filter-date-popover .rdp-button_previous,
 .filter-date-popover .rdp-button_next {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: var(--rdp-nav_button-width);
-  height: var(--rdp-nav_button-height);
-  border: 1px solid transparent;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: var(--rdp-nav_button-width);
+    height: var(--rdp-nav_button-height);
+    border: 1px solid transparent;
 }
 
 .filter-date-popover .rdp-root[data-nav-layout="around"] .rdp-button_previous {
-  position: absolute;
-  left: 0;
-  top: 0;
+    position: absolute;
+    left: 0;
+    top: 0;
 }
 
 .filter-date-popover .rdp-root[data-nav-layout="around"] .rdp-button_next {
-  position: absolute;
-  right: 0;
-  top: 0;
+    position: absolute;
+    right: 0;
+    top: 0;
 }
 
 .filter-date-popover .rdp-button_previous:hover,
 .filter-date-popover .rdp-button_next:hover {
-  background: var(--row-hover);
+    background: var(--row-hover);
 }
 
 .filter-date-popover .rdp-button_previous:focus-visible,
 .filter-date-popover .rdp-button_next:focus-visible,
 .filter-date-popover .rdp-day_button:focus-visible {
-  outline: 1px solid var(--focus-border);
-  outline-offset: 1px;
+    outline: 1px solid var(--focus-border);
+    outline-offset: 1px;
 }
 
 .filter-date-popover .rdp-chevron {
-  fill: var(--muted);
+    fill: var(--muted);
 }
 
 .filter-date-popover .rdp-month_grid {
-  width: 100%;
-  border-collapse: collapse;
+    width: 100%;
+    border-collapse: collapse;
 }
 
 .filter-date-popover .rdp-weekday {
-  color: var(--muted);
-  font-size: 11px;
-  font-weight: 600;
-  text-align: center;
+    color: var(--muted);
+    font-size: 11px;
+    font-weight: 600;
+    text-align: center;
 }
 
 .filter-date-popover .rdp-day {
-  width: var(--rdp-day-width);
-  height: var(--rdp-day-height);
-  text-align: center;
+    width: var(--rdp-day-width);
+    height: var(--rdp-day-height);
+    text-align: center;
 }
 
 .filter-date-popover .rdp-day_button {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: var(--rdp-day_button-width);
-  height: var(--rdp-day_button-height);
-  border: var(--rdp-day_button-border);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: var(--rdp-day_button-width);
+    height: var(--rdp-day_button-height);
+    border: var(--rdp-day_button-border);
 }
 
 .filter-date-popover .rdp-day_button:hover {
-  background: var(--row-hover);
+    background: var(--row-hover);
 }
 
 .filter-date-popover .rdp-today:not(.rdp-selected):not(.rdp-outside) .rdp-day_button {
-  border-color: color-mix(in srgb, var(--graph-node) 48%, transparent);
+    border-color: color-mix(in srgb, var(--graph-node) 48%, transparent);
 }
 
 .filter-date-popover .rdp-selected .rdp-day_button {
-  color: var(--accent-contrast);
-  background: var(--graph-node);
-  border-color: color-mix(in srgb, var(--graph-node) 62%, black 10%);
+    color: var(--accent-contrast);
+    background: var(--graph-node);
+    border-color: color-mix(in srgb, var(--graph-node) 62%, black 10%);
 }
 
 .filter-date-popover .rdp-outside .rdp-day_button {
-  color: var(--muted);
+    color: var(--muted);
 }
 
 .filter-date-popover .rdp-disabled .rdp-day_button {
-  cursor: default;
+    cursor: default;
 }
 
 .filter-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
 }
 
 .filter-action-button {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
 }
 
 .filter-action-button .codicon {
-  font-size: 14px;
+    font-size: 14px;
 }
 
 .filter-action-button-label {
-  line-height: 1;
+    line-height: 1;
 }
 
 .filter-error {
-  color: var(--vscode-errorForeground, #f48771);
-  font-size: 12px;
+    color: var(--vscode-errorForeground, #f48771);
+    font-size: 12px;
 }
 
 .table-header,
 .commit-row {
-  display: grid;
-  grid-template-columns: var(--graph-column-width) minmax(0, 1fr) 180px 140px 96px;
-  gap: 10px;
-  align-items: center;
+    display: grid;
+    grid-template-columns: var(--graph-column-width) minmax(0, 1fr) 180px 140px 96px;
+    gap: 10px;
+    align-items: center;
 }
 
 .table-header {
-  position: sticky;
-  top: 0;
-  z-index: 2;
-  padding: 8px 16px;
-  border-bottom: 1px solid var(--border);
-  background: var(--header-bg);
-  color: var(--muted);
-  font-size: 11px;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    padding: 8px 16px;
+    border-bottom: 1px solid var(--border);
+    background: var(--header-bg);
+    color: var(--muted);
+    font-size: 11px;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
 }
 
 .table-header > :first-child {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  align-self: stretch;
-  color: var(--vscode-editor-foreground);
-  font-size: 13px;
-  font-weight: 700;
-  letter-spacing: 0.01em;
-  text-transform: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    align-self: stretch;
+    color: var(--vscode-editor-foreground);
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 0.01em;
+    text-transform: none;
 }
 
 .commit-row {
-  padding: 0 16px;
-  min-height: 24px;
-  cursor: pointer;
-  transition: background-color 120ms ease;
+    padding: 0 16px;
+    min-height: 24px;
+    cursor: pointer;
+    transition: background-color 120ms ease;
 }
 
 .commit-row:hover {
-  background: var(--row-hover);
+    background: var(--row-hover);
 }
 
 .commit.expanded > .commit-row {
-  background: var(--row-active);
+    background: var(--row-active);
 }
 
 .commit.expanded {
-  background: var(--details-bg);
+    background: var(--details-bg);
 }
 
 .graph-column {
-  position: relative;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 24px;
-  padding: 2px 0;
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 24px;
+    padding: 2px 0;
 }
 
 .graph-stem {
-  position: absolute;
-  left: var(--graph-center);
-  transform: translateX(-50%);
-  width: var(--graph-rail-width);
-  border-radius: 999px;
-  background: linear-gradient(180deg, var(--timeline-strong), var(--timeline));
+    position: absolute;
+    left: var(--graph-center);
+    transform: translateX(-50%);
+    width: var(--graph-rail-width);
+    border-radius: 999px;
+    background: linear-gradient(180deg, var(--timeline-strong), var(--timeline));
 }
 
 .graph-stem-incoming {
-  background: linear-gradient(180deg, var(--timeline-incoming-strong), var(--timeline-incoming));
+    background: linear-gradient(180deg, var(--timeline-incoming-strong), var(--timeline-incoming));
 }
 
 .graph-stem-top {
-  top: -1px;
-  bottom: 50%;
+    top: -1px;
+    bottom: 50%;
 }
 
 .graph-stem-bottom {
-  top: 50%;
-  bottom: -1px;
+    top: 50%;
+    bottom: -1px;
 }
 
 .commit.is-first .graph-stem-top,
 .commit.is-last .graph-stem-bottom {
-  display: none;
+    display: none;
 }
 
 .graph-dot {
-  position: relative;
-  z-index: 1;
-  width: var(--graph-dot-size);
-  height: var(--graph-dot-size);
-  border-radius: 999px;
-  background: var(--graph-node);
-  border: 1px solid color-mix(in srgb, black 16%, var(--graph-node));
-  box-shadow: 0 0 0 1px color-mix(in srgb, black 20%, transparent);
+    position: relative;
+    z-index: 1;
+    width: var(--graph-dot-size);
+    height: var(--graph-dot-size);
+    border-radius: 999px;
+    background: var(--graph-node);
+    border: 1px solid color-mix(in srgb, black 16%, var(--graph-node));
+    box-shadow: 0 0 0 1px color-mix(in srgb, black 20%, transparent);
 }
 
 .graph-dot-incoming {
-  background: var(--surface-bg);
-  border: 2px solid var(--graph-node-incoming);
-  box-shadow: 0 0 0 1px color-mix(in srgb, black 20%, transparent);
+    background: var(--surface-bg);
+    border: 2px solid var(--graph-node-incoming);
+    box-shadow: 0 0 0 1px color-mix(in srgb, black 20%, transparent);
 }
 
 .graph-dot-current::after {
-  content: "";
-  position: absolute;
-  inset: -4px;
-  border-radius: 999px;
-  border: 1.5px solid color-mix(in srgb, var(--graph-node) 72%, transparent);
-  pointer-events: none;
+    content: "";
+    position: absolute;
+    inset: -4px;
+    border-radius: 999px;
+    border: 1.5px solid color-mix(in srgb, var(--graph-node) 72%, transparent);
+    pointer-events: none;
 }
 
 .commit.expanded .graph-dot {
-  box-shadow:
-    0 0 0 1px color-mix(in srgb, black 20%, transparent),
-    0 0 0 4px color-mix(in srgb, var(--graph-node) 36%, transparent);
+    box-shadow:
+        0 0 0 1px color-mix(in srgb, black 20%, transparent),
+        0 0 0 4px color-mix(in srgb, var(--graph-node) 36%, transparent);
 }
 
 .description-cell {
-  min-width: 0;
-  padding: 0;
+    min-width: 0;
+    padding: 0;
 }
 
 .summary {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  min-width: 0;
-  overflow: hidden;
-  white-space: nowrap;
-  min-height: 24px;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    min-width: 0;
+    overflow: hidden;
+    white-space: nowrap;
+    min-height: 24px;
 }
 
 .summary-message {
-  min-width: 0;
-  flex: 0 1 auto;
-  font-weight: 400;
-  font-size: 13px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+    min-width: 0;
+    flex: 0 1 auto;
+    font-weight: 400;
+    font-size: 13px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 .summary-badge {
-  display: inline-flex;
-  align-items: center;
-  min-height: 20px;
-  padding: 0 8px;
-  border-radius: 999px;
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.01em;
-  white-space: nowrap;
+    display: inline-flex;
+    align-items: center;
+    min-height: 20px;
+    padding: 0 8px;
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.01em;
+    white-space: nowrap;
 }
 
 .summary-badge.incoming {
-  color: var(--graph-node);
-  background: color-mix(in srgb, var(--graph-node) 12%, transparent);
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--graph-node) 42%, transparent);
+    color: var(--graph-node);
+    background: color-mix(in srgb, var(--graph-node) 12%, transparent);
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--graph-node) 42%, transparent);
 }
 
 .summary-separator {
-  color: var(--muted);
-  flex: none;
-  font-size: 11px;
+    color: var(--muted);
+    flex: none;
+    font-size: 11px;
 }
 
 .summary-meta {
-  color: var(--muted);
-  font-size: 11px;
-  flex: none;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+    color: var(--muted);
+    font-size: 11px;
+    flex: none;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 .revision {
-  font-weight: 400;
-  letter-spacing: 0.03em;
+    font-weight: 400;
+    letter-spacing: 0.03em;
 }
 
 .cell-text {
-  padding: 0;
-  line-height: 24px;
-  font-size: 13px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+    padding: 0;
+    line-height: 24px;
+    font-size: 13px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 .muted {
-  color: var(--muted);
+    color: var(--muted);
 }
 
 .details-row {
-  display: grid;
-  grid-template-columns: var(--graph-column-width) minmax(0, 1fr);
-  gap: 10px;
-  padding: 0 16px 0;
+    display: grid;
+    grid-template-columns: var(--graph-column-width) minmax(0, 1fr);
+    gap: 10px;
+    padding: 0 16px 0;
 }
 
 .details-rail {
-  position: relative;
+    position: relative;
 }
 
 .details-rail::before {
-  content: "";
-  position: absolute;
-  left: var(--graph-center);
-  transform: translateX(-50%);
-  top: 0;
-  bottom: 0;
-  width: var(--graph-rail-width);
-  border-radius: 999px;
-  background: linear-gradient(180deg, var(--timeline-strong), var(--timeline));
+    content: "";
+    position: absolute;
+    left: var(--graph-center);
+    transform: translateX(-50%);
+    top: 0;
+    bottom: 0;
+    width: var(--graph-rail-width);
+    border-radius: 999px;
+    background: linear-gradient(180deg, var(--timeline-strong), var(--timeline));
 }
 
 .commit.incoming .details-rail::before {
-  background: linear-gradient(180deg, var(--timeline-incoming-strong), var(--timeline-incoming));
+    background: linear-gradient(180deg, var(--timeline-incoming-strong), var(--timeline-incoming));
 }
 
 .details-panel {
-  display: grid;
-  grid-template-columns: minmax(300px, 0.95fr) minmax(420px, 1.25fr);
-  background: var(--details-bg);
+    display: grid;
+    grid-template-columns: minmax(300px, 0.95fr) minmax(420px, 1.25fr);
+    border: 1px solid var(--details-border);
+    border-radius: 10px;
+    background: color-mix(in srgb, var(--details-bg) 92%, var(--surface-bg));
+    box-shadow: inset 0 1px 0 color-mix(in srgb, white 4%, transparent);
+    overflow: hidden;
 }
 
 .details-summary-panel {
-  padding: 14px 16px 16px;
-  border-right: 1px solid var(--details-border);
+    padding: 14px 16px 16px;
+    border-right: 1px solid var(--details-border);
 }
 
 .details-title-row {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 10px;
-  margin-bottom: 14px;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 14px;
 }
 
 .details-title {
-  font-size: 14px;
-  font-weight: 700;
-  line-height: 1.4;
+    font-size: 14px;
+    font-weight: 700;
+    line-height: 1.4;
 }
 
 .details-meta {
-  display: grid;
-  gap: 4px;
-  color: var(--muted);
-  font-size: 12px;
+    display: grid;
+    gap: 4px;
+    color: var(--muted);
+    font-size: 12px;
 }
 
 .details-meta strong {
-  color: var(--vscode-editor-foreground);
-  font-weight: 600;
+    color: var(--vscode-editor-foreground);
+    font-weight: 600;
 }
 
 .details-files-panel {
-  padding: 10px 0 12px;
+    padding: 10px 0 12px;
 }
 
 .section-title {
-  margin: 0 12px 8px;
-  font-size: 11px;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--muted);
+    margin: 0 12px 8px;
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--muted);
 }
 
 .tree-row {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 8px;
-  align-items: center;
-  min-height: 24px;
-  padding: 0 10px 0 calc(10px + var(--depth, 0) * 16px);
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 8px;
+    align-items: center;
+    min-height: 24px;
+    padding: 0 10px 0 calc(10px + var(--depth, 0) * 16px);
 }
 
 .tree-row:hover {
-  background: var(--row-hover);
+    background: var(--row-hover);
 }
 
 .tree-dir {
-  color: var(--muted);
-  cursor: pointer;
+    color: var(--muted);
+    cursor: pointer;
 }
 
 .tree-dir.is-focused-ancestor {
-  color: color-mix(in srgb, var(--vscode-editor-foreground) 84%, var(--muted));
+    color: color-mix(in srgb, var(--vscode-editor-foreground) 84%, var(--muted));
 }
 
 .tree-dir.is-focused-ancestor .tree-label {
-  color: color-mix(in srgb, var(--vscode-editor-foreground) 88%, var(--muted));
-  font-weight: 500;
+    color: color-mix(in srgb, var(--vscode-editor-foreground) 88%, var(--muted));
+    font-weight: 500;
 }
 
 .tree-dir.is-focused-ancestor .tree-icon,
 .tree-dir.is-focused-ancestor .tree-chevron {
-  color: color-mix(in srgb, var(--vscode-editor-foreground) 68%, var(--muted));
+    color: color-mix(in srgb, var(--vscode-editor-foreground) 68%, var(--muted));
 }
 
 .tree-dir.is-dimmed-dir {
-  color: color-mix(in srgb, var(--muted) 78%, transparent);
+    color: color-mix(in srgb, var(--muted) 78%, transparent);
 }
 
 .tree-dir.is-dimmed-dir .tree-label,
 .tree-dir.is-dimmed-dir .tree-icon,
 .tree-dir.is-dimmed-dir .tree-chevron {
-  color: color-mix(in srgb, var(--muted) 78%, transparent);
+    color: color-mix(in srgb, var(--muted) 78%, transparent);
 }
 
 .tree-main {
-  min-width: 0;
-  display: flex;
-  align-items: center;
-  gap: 6px;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    gap: 6px;
 }
 
 .tree-chevron {
-  width: 12px;
-  font-size: 12px;
-  color: var(--muted);
-  flex: none;
+    width: 12px;
+    font-size: 12px;
+    color: var(--muted);
+    flex: none;
 }
 
 .tree-icon {
-  flex: none;
-  width: 14px;
-  font-size: 14px;
-  color: var(--muted);
+    flex: none;
+    width: 14px;
+    font-size: 14px;
+    color: var(--muted);
 }
 
 .change-row {
-  background: transparent;
-  cursor: pointer;
-  color: inherit;
-  text-decoration: none;
+    background: transparent;
+    cursor: pointer;
+    color: inherit;
+    text-decoration: none;
 }
 
 .change-row:hover {
-  background: var(--row-hover);
+    background: var(--row-hover);
 }
 
 .change-row:focus-visible {
-  outline: 1px solid var(--vscode-focusBorder, var(--graph-node));
-  outline-offset: -1px;
-  background: var(--row-hover);
+    outline: 1px solid var(--vscode-focusBorder, var(--graph-node));
+    outline-offset: -1px;
+    background: var(--row-hover);
 }
 
 .change-row.is-focused-file .change-path {
-  color: var(--vscode-editor-foreground);
-  font-weight: 600;
+    color: var(--vscode-editor-foreground);
+    font-weight: 600;
 }
 
 .change-row.is-dimmed-file .change-path {
-  color: color-mix(in srgb, var(--vscode-editor-foreground) 22%, var(--muted));
+    color: color-mix(in srgb, var(--vscode-editor-foreground) 22%, var(--muted));
 }
 
 .change-row.is-dimmed-file .change-icon {
-  color: color-mix(in srgb, currentColor 72%, transparent);
+    color: color-mix(in srgb, currentColor 72%, transparent);
 }
 
 .change-row.is-dimmed-file .change-note {
-  color: color-mix(in srgb, var(--muted) 58%, transparent);
+    color: color-mix(in srgb, var(--muted) 58%, transparent);
 }
 
 .change-icon {
-  width: 10px;
-  font-size: 10px;
-  color: var(--muted);
+    width: 10px;
+    font-size: 10px;
+    color: var(--muted);
 }
 
 .change-icon.action-a {
-  color: var(--added);
+    color: var(--added);
 }
 
 .change-icon.action-d {
-  color: var(--deleted);
+    color: var(--deleted);
 }
 
 .change-icon.action-m {
-  color: var(--modified);
+    color: var(--modified);
 }
 
 .change-icon.action-r {
-  color: var(--replaced);
+    color: var(--replaced);
 }
 
 .change-body {
-  min-width: 0;
-  display: flex;
-  align-items: center;
-  gap: 8px;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    gap: 8px;
 }
 
 .tree-label {
-  min-width: 0;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+    min-width: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 .change-path {
-  min-width: 0;
-  flex: 1;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+    min-width: 0;
+    flex: 1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 .tree-actions {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-width: 0;
-  padding-right: 8px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+    padding-right: 8px;
 }
 
 .change-note {
-  color: var(--muted);
-  font-size: 11px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+    color: var(--muted);
+    font-size: 11px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 .empty-state {
-  padding: 28px 20px;
-  color: var(--muted);
+    padding: 28px 20px;
+    color: var(--muted);
 }
 
 .empty-state-error {
-  margin-top: 12px;
-  white-space: pre-wrap;
+    margin-top: 12px;
+    white-space: pre-wrap;
 }
 
 .empty-state-actions {
-  margin-top: 16px;
+    margin-top: 16px;
 }
 
 .context-menu-root {
-  position: fixed;
-  inset: 0;
-  z-index: 30;
-  pointer-events: none;
+    position: fixed;
+    inset: 0;
+    z-index: 30;
+    pointer-events: none;
 }
 
 .context-menu-backdrop {
-  position: absolute;
-  inset: 0;
-  pointer-events: auto;
+    position: absolute;
+    inset: 0;
+    pointer-events: auto;
 }
 
 .context-menu {
-  position: absolute;
-  min-width: 240px;
-  max-width: min(360px, calc(100vw - 16px));
-  max-height: calc(100vh - 16px);
-  overflow: auto;
-  padding: 5px;
-  border: 1px solid var(--details-border);
-  border-radius: 10px;
-  background: var(--vscode-menu-background, var(--details-bg));
-  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.32);
-  pointer-events: auto;
+    position: absolute;
+    min-width: 240px;
+    max-width: min(360px, calc(100vw - 16px));
+    max-height: calc(100vh - 16px);
+    overflow: auto;
+    padding: 5px;
+    border: 1px solid var(--details-border);
+    border-radius: 10px;
+    background: var(--vscode-menu-background, var(--details-bg));
+    box-shadow: 0 12px 28px rgba(0, 0, 0, 0.32);
+    font: inherit;
+    pointer-events: auto;
 }
 
 .context-menu-header {
-  padding: 8px 10px 10px;
-  border-bottom: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
+    padding: 8px 10px 10px;
+    border-bottom: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
 }
 
 .context-menu-title {
-  font-size: 12px;
-  font-weight: 700;
-  overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
-  direction: rtl;
-  text-align: left;
+    font-size: inherit;
+    font-weight: 600;
+    line-height: 1.4;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    direction: rtl;
+    text-align: left;
 }
 
 .context-menu-subtitle {
-  margin-top: 4px;
-  color: var(--muted);
-  font-size: 11px;
-  line-height: 1.35;
+    margin-top: 4px;
+    color: var(--muted);
+    font-size: inherit;
+    line-height: 1.4;
+    white-space: pre-line;
+    overflow-wrap: anywhere;
 }
 
 .context-menu-actions {
-  padding-top: 2px;
+    padding-top: 2px;
 }
 
 .context-menu-item {
-  width: 100%;
-  min-height: 26px;
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  padding: 6px 10px;
-  border: 0;
-  border-radius: 7px;
-  background: transparent;
-  color: inherit;
-  cursor: pointer;
-  text-align: left;
+    width: 100%;
+    min-height: 26px;
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    padding: 6px 10px;
+    border: 0;
+    border-radius: 7px;
+    background: transparent;
+    color: inherit;
+    cursor: pointer;
+    font: inherit;
+    text-align: left;
 }
 
 .context-menu-item:hover,
 .context-menu-item:focus-visible {
-  background: var(--row-hover);
-  outline: none;
+    background: var(--row-hover);
+    outline: none;
 }
 
 .context-menu-item .codicon {
-  width: 16px;
-  flex: none;
-  color: var(--muted);
+    width: 16px;
+    flex: none;
+    color: var(--muted);
 }
 
 .context-menu-label {
-  flex: 1;
-  min-width: 0;
-  font-size: 12px;
-  line-height: 1.35;
+    flex: 1;
+    min-width: 0;
+    font-size: inherit;
+    line-height: 1.4;
 }
 
 .context-menu-separator {
-  height: 1px;
-  margin: 3px 6px;
-  background: color-mix(in srgb, var(--border) 70%, transparent);
+    height: 1px;
+    margin: 3px 6px;
+    background: color-mix(in srgb, var(--border) 70%, transparent);
 }
 
 @media (max-width: 1160px) {
-  :root {
-    --graph-column-width: 48px;
-  }
+    :root {
+        --graph-column-width: 48px;
+    }
 
-  .table-header,
-  .commit-row {
-    grid-template-columns: var(--graph-column-width) minmax(0, 1fr) 160px 120px 88px;
-  }
+    .table-header,
+    .commit-row {
+        grid-template-columns: var(--graph-column-width) minmax(0, 1fr) 160px 120px 88px;
+    }
 
-  .details-panel {
-    grid-template-columns: minmax(260px, 0.9fr) minmax(360px, 1.1fr);
-  }
+    .details-panel {
+        grid-template-columns: minmax(260px, 0.9fr) minmax(360px, 1.1fr);
+    }
 
-  .filter-grid {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-  }
+    .filter-grid {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
 }
 
 @media (max-width: 900px) {
-  :root {
-    --graph-column-width: 44px;
-    --graph-dot-size: 8px;
-  }
+    :root {
+        --graph-column-width: 44px;
+        --graph-dot-size: 8px;
+    }
 
-  .table-header {
-    display: none;
-  }
+    .table-header {
+        display: none;
+    }
 
-  .commit-row {
-    grid-template-columns: var(--graph-column-width) minmax(0, 1fr) auto;
-    gap: 8px;
-  }
+    .commit-row {
+        grid-template-columns: var(--graph-column-width) minmax(0, 1fr) auto;
+        gap: 8px;
+    }
 
-  .commit-row > .cell-text {
-    display: none;
-  }
+    .commit-row > .cell-text {
+        display: none;
+    }
 
-  .commit-row > .cell-text.revision {
-    display: block;
-  }
+    .commit-row > .cell-text.revision {
+        display: block;
+    }
 
-  .summary-meta,
-  .summary-separator {
-    display: none;
-  }
+    .summary-meta,
+    .summary-separator {
+        display: none;
+    }
 
-  .details-panel {
-    grid-template-columns: 1fr;
-  }
+    .details-panel {
+        grid-template-columns: 1fr;
+    }
 
-  .details-summary-panel {
-    border-right: 0;
-    border-bottom: 1px solid var(--details-border);
-  }
+    .details-summary-panel {
+        border-right: 0;
+        border-bottom: 1px solid var(--details-border);
+    }
 
-  .change-body {
-    gap: 6px;
-  }
+    .change-body {
+        gap: 6px;
+    }
 
-  .change-note {
-    display: none;
-  }
+    .change-note {
+        display: none;
+    }
 
-  .toolbar {
-    flex-wrap: wrap;
-  }
+    .toolbar {
+        flex-wrap: wrap;
+    }
 
-  .toolbar-actions {
-    width: 100%;
-    margin-left: 0;
-    justify-content: space-between;
-    flex-wrap: wrap;
-  }
+    .toolbar-actions {
+        width: 100%;
+        margin-left: 0;
+        justify-content: space-between;
+        flex-wrap: wrap;
+    }
 
-  .search {
-    flex: 1;
-  }
+    .search {
+        flex: 1;
+    }
 
-  .filter-grid {
-    grid-template-columns: 1fr;
-  }
+    .filter-grid {
+        grid-template-columns: 1fr;
+    }
 
-  .filter-date-popover {
-    left: 0;
-    right: 0;
-    width: auto;
-  }
+    .filter-date-popover {
+        left: 0;
+        right: 0;
+        width: auto;
+    }
 
-  .filter-actions {
-    justify-content: stretch;
-    flex-wrap: wrap;
-  }
+    .filter-actions {
+        justify-content: stretch;
+        flex-wrap: wrap;
+    }
 
-  .filter-actions button {
-    flex: 1;
-  }
+    .filter-actions button {
+        flex: 1;
+    }
 }
