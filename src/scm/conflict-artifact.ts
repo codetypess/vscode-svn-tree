@@ -1,7 +1,7 @@
 import * as nodePath from "node:path";
 import type { SvnStatusEntry } from "../svn/svn-types";
 
-function getRelatedConflictPath(artifactPath: string): string | undefined {
+export function getRelatedConflictPath(artifactPath: string): string | undefined {
     const basename = nodePath.basename(artifactPath);
     const dirname = nodePath.dirname(artifactPath);
 

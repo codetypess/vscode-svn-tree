@@ -7,7 +7,10 @@ import {
 } from "../history/history-utils";
 import { HistoryPanel } from "../history/history-panel";
 import { RepositoryBrowserPanel } from "../repository-browser/repository-browser-panel";
-import type { RepositoryBrowserDataPayload } from "../repository-browser/repository-browser-types";
+import type {
+    RepositoryBrowserDataPayload,
+    RepositoryBrowserPropertyMutationAction,
+} from "../repository-browser/repository-browser-types";
 import {
     buildRevisionGraph,
     buildRevisionGraphSummary,
@@ -46,11 +49,18 @@ import { getI18n } from "../vscode-i18n";
 import { appendOutputSection, buildErrorOutputLines } from "./output-channel-utils";
 import { parseBlameLines, type ParsedBlameLine } from "./svn-blame-utils";
 import { isCommittableStatus } from "./commit-utils";
+import { getRelatedConflictPath } from "./conflict-artifact";
 import {
     getCheckoutDepthOptions,
     getDepthLabelKey,
     getWorkingCopyDepthOptions,
 } from "./svn-depth-utils";
+import type {
+    ConflictInspectorArtifact,
+    ConflictInspectorDiffAction,
+    ConflictInspectorResolutionAction,
+    ConflictInspectorView,
+} from "./svn-conflict-inspector-types";
 import { ExternalsEditorPanelState, SvnExternalsEditorPanel } from "./svn-externals-editor-panel";
 import { normalizeExternalsEditorValue, parseExternalsDefinitions } from "./svn-externals-utils";
 import { IgnoreEditorPanelState, SvnIgnoreEditorPanel } from "./svn-ignore-editor-panel";
@@ -98,6 +108,7 @@ import { partitionStatusEntries } from "./svn-repository-status-utils";
 import { ScmResource } from "./scm-resource";
 import { deriveCheckoutDestinationName, deriveImportSourceFolderName } from "./svn-checkout-utils";
 import { SvnInspectorPanel } from "./svn-inspector-panel";
+import { SvnConflictInspectorPanel } from "./svn-conflict-inspector-panel";
 import {
     buildHistoryFileExportName,
     buildReferenceDestinationPath,
@@ -358,6 +369,7 @@ export class SvnRepository implements vscode.Disposable {
         private readonly svnService: SvnService,
         private readonly historyPanel: HistoryPanel,
         private readonly inspectorPanel: SvnInspectorPanel,
+        private readonly conflictInspectorPanel: SvnConflictInspectorPanel,
         private readonly repositoryBrowserPanel: RepositoryBrowserPanel,
         private readonly revisionGraphPanel: RevisionGraphPanel,
         private readonly contentProvider: SvnContentProvider,
@@ -507,6 +519,7 @@ export class SvnRepository implements vscode.Disposable {
             }
 
             this.updateStatusBarCommands(this.remoteChangeCount);
+            await this.conflictInspectorPanel.refresh(this);
             await this.revisionGraphPanel.refresh(this);
         } catch (error) {
             refreshError = error;
@@ -974,6 +987,161 @@ export class SvnRepository implements vscode.Disposable {
     ): ScmResource[] {
         return resourceStates.filter(
             (resource): resource is ScmResource => resource instanceof ScmResource
+        );
+    }
+
+    private getConflictInspectorRelativePath(targetPath: string): string {
+        return nodePath.relative(this.rootPath, targetPath).replace(/\\/g, "/") || this.label;
+    }
+
+    private resolveConflictInspectorState(targetPath: string): {
+        conflictPath: string;
+        conflictResource?: ScmResource;
+        artifacts: ConflictInspectorArtifact[];
+    } {
+        const normalizedTargetPath = nodePath.resolve(targetPath);
+        const conflictPath = nodePath.resolve(
+            getRelatedConflictPath(normalizedTargetPath) ?? normalizedTargetPath
+        );
+        const conflictResource = this.getResources(this.changesGroup.resourceStates).find(
+            (resource) =>
+                resource.status.wcStatus === "conflicted" &&
+                nodePath.resolve(resource.status.absolutePath) === conflictPath
+        );
+        const artifactResources = this.getResources(
+            this.conflictArtifactsGroup.resourceStates
+        ).filter(
+            (resource) =>
+                nodePath.resolve(
+                    getRelatedConflictPath(resource.status.absolutePath) ??
+                        resource.status.absolutePath
+                ) === conflictPath
+        );
+
+        return {
+            conflictPath,
+            conflictResource,
+            artifacts: this.buildConflictInspectorArtifacts(artifactResources),
+        };
+    }
+
+    private buildConflictInspectorArtifacts(
+        resources: readonly ScmResource[]
+    ): ConflictInspectorArtifact[] {
+        const mineArtifacts: ConflictInspectorArtifact[] = [];
+        const propertyArtifacts: ConflictInspectorArtifact[] = [];
+        const relatedArtifacts: ConflictInspectorArtifact[] = [];
+        const revisionArtifacts: Array<ConflictInspectorArtifact & { revisionNumber: number }> = [];
+
+        for (const resource of resources) {
+            const basename = nodePath.basename(resource.status.absolutePath);
+            const artifact: ConflictInspectorArtifact = {
+                path: resource.status.absolutePath,
+                relativePath: this.getConflictInspectorRelativePath(resource.status.absolutePath),
+                role: "related",
+            };
+
+            if (basename.endsWith(".mine")) {
+                mineArtifacts.push({
+                    ...artifact,
+                    role: "mine",
+                });
+                continue;
+            }
+
+            if (basename.endsWith(".prej")) {
+                propertyArtifacts.push({
+                    ...artifact,
+                    role: "property",
+                });
+                continue;
+            }
+
+            const revisionMatch = basename.match(/\.r(\d+)$/);
+            if (revisionMatch?.[1]) {
+                revisionArtifacts.push({
+                    ...artifact,
+                    role: "revision",
+                    revision: `r${revisionMatch[1]}`,
+                    revisionNumber: Number(revisionMatch[1]),
+                });
+                continue;
+            }
+
+            relatedArtifacts.push(artifact);
+        }
+
+        revisionArtifacts.sort((left, right) => left.revisionNumber - right.revisionNumber);
+        const normalizedRevisionArtifacts: ConflictInspectorArtifact[] = [];
+
+        if (revisionArtifacts.length === 1) {
+            normalizedRevisionArtifacts.push(revisionArtifacts[0]);
+        } else if (revisionArtifacts.length > 1) {
+            const firstRevisionArtifact = revisionArtifacts[0];
+            const lastRevisionArtifact = revisionArtifacts[revisionArtifacts.length - 1];
+
+            if (firstRevisionArtifact) {
+                normalizedRevisionArtifacts.push({
+                    ...firstRevisionArtifact,
+                    role: "base",
+                });
+            }
+
+            for (const artifact of revisionArtifacts.slice(1, -1)) {
+                normalizedRevisionArtifacts.push(artifact);
+            }
+
+            if (lastRevisionArtifact) {
+                normalizedRevisionArtifacts.push({
+                    ...lastRevisionArtifact,
+                    role: "incoming",
+                });
+            }
+        }
+
+        return [
+            ...mineArtifacts,
+            ...normalizedRevisionArtifacts,
+            ...propertyArtifacts,
+            ...relatedArtifacts,
+        ];
+    }
+
+    private async openConflictInspectorLocalPath(
+        targetPath: string,
+        kind: SvnNodeKind
+    ): Promise<void> {
+        const uri = vscode.Uri.file(targetPath);
+
+        if (kind === "dir") {
+            await vscode.commands.executeCommand("revealInExplorer", uri);
+            return;
+        }
+
+        await vscode.window.showTextDocument(uri, {
+            preview: true,
+        });
+    }
+
+    private async detectConflictInspectorNodeKind(targetPath: string): Promise<SvnNodeKind> {
+        try {
+            const stat = await vscode.workspace.fs.stat(vscode.Uri.file(targetPath));
+            return stat.type & vscode.FileType.Directory ? "dir" : "file";
+        } catch {
+            return "file";
+        }
+    }
+
+    private async openConflictInspectorLocalDiff(
+        leftPath: string,
+        rightPath: string,
+        title: string
+    ): Promise<void> {
+        await vscode.commands.executeCommand(
+            "vscode.diff",
+            vscode.Uri.file(leftPath),
+            vscode.Uri.file(rightPath),
+            title
         );
     }
 
@@ -1901,6 +2069,239 @@ export class SvnRepository implements vscode.Disposable {
         };
     }
 
+    public async editRepositoryPathProperty(
+        repositoryPath: string,
+        options: {
+            url?: string;
+            propertyName?: string;
+            propertyAction?: RepositoryBrowserPropertyMutationAction;
+        } = {}
+    ): Promise<boolean> {
+        const normalizedRepositoryPath = normalizeRepositoryPath(repositoryPath);
+        const targetUrl =
+            options.url ?? buildRepositoryUrl(this.info.repositoryRoot, normalizedRepositoryPath);
+        const propertyName = options.propertyName ?? (await this.promptPropertyName());
+        if (!propertyName) {
+            return false;
+        }
+
+        const currentValue = await this.svnService.getProperty(targetUrl, propertyName);
+        const action =
+            options.propertyAction ?? (await this.promptPropertyAction(propertyName, currentValue));
+        if (!action) {
+            return false;
+        }
+
+        const commitMessage =
+            action === "delete"
+                ? this.i18n.t("repositoryBrowserDeletePropertyCommitMessage", {
+                      name: propertyName,
+                      path: normalizedRepositoryPath,
+                  })
+                : this.i18n.t("repositoryBrowserSetPropertyCommitMessage", {
+                      name: propertyName,
+                      path: normalizedRepositoryPath,
+                  });
+
+        if (action === "delete") {
+            if (currentValue === undefined) {
+                void vscode.window.showInformationMessage(
+                    this.i18n.t("propertyNotSetInfo", {
+                        name: propertyName,
+                    })
+                );
+                return false;
+            }
+
+            await this.runNotificationProgress(
+                this.i18n.t("deletePropertyProgress", {
+                    name: propertyName,
+                }),
+                async () => {
+                    await this.svnService.deleteProperty(targetUrl, propertyName, {
+                        message: commitMessage,
+                    });
+                }
+            );
+
+            await this.finalizeRemoteRepositoryMutation();
+            void vscode.window.showInformationMessage(
+                this.i18n.t("deletedPropertyInfo", {
+                    name: propertyName,
+                    path: normalizedRepositoryPath,
+                })
+            );
+            return true;
+        }
+
+        const nextValue = await this.promptPropertyValue(propertyName, currentValue);
+        if (nextValue === undefined) {
+            return false;
+        }
+
+        await this.runNotificationProgress(
+            this.i18n.t("setPropertyProgress", {
+                name: propertyName,
+            }),
+            async () => {
+                await this.svnService.setProperty(targetUrl, propertyName, nextValue, {
+                    message: commitMessage,
+                });
+            }
+        );
+
+        await this.finalizeRemoteRepositoryMutation();
+        void vscode.window.showInformationMessage(
+            this.i18n.t("updatedPropertyInfo", {
+                name: propertyName,
+                path: normalizedRepositoryPath,
+            })
+        );
+        return true;
+    }
+
+    public async loadConflictInspectorView(targetPath: string): Promise<ConflictInspectorView> {
+        const { conflictPath, conflictResource, artifacts } =
+            this.resolveConflictInspectorState(targetPath);
+
+        return {
+            conflictPath,
+            conflictRelativePath: this.getConflictInspectorRelativePath(conflictPath),
+            repositoryPath: this.resolveRepositoryPath(conflictPath),
+            kind:
+                conflictResource?.status.kind ??
+                (await this.detectConflictInspectorNodeKind(conflictPath)),
+            revision:
+                conflictResource?.status.committedRevision !== undefined
+                    ? `r${conflictResource.status.committedRevision}`
+                    : conflictResource?.status.revision !== undefined
+                      ? `r${conflictResource.status.revision}`
+                      : undefined,
+            author: conflictResource?.status.author,
+            date: conflictResource?.status.date,
+            resolved: conflictResource === undefined,
+            artifacts,
+        };
+    }
+
+    public canInspectConflict(targetPath: string): boolean {
+        const { conflictResource, artifacts } = this.resolveConflictInspectorState(targetPath);
+        return conflictResource !== undefined || artifacts.length > 0;
+    }
+
+    public async openConflictInspectorPath(targetPath: string): Promise<void> {
+        const view = await this.loadConflictInspectorView(targetPath);
+        await this.openConflictInspectorLocalPath(view.conflictPath, view.kind);
+    }
+
+    public async openConflictInspectorArtifact(artifactPath: string): Promise<void> {
+        await this.openConflictInspectorLocalPath(artifactPath, "file");
+    }
+
+    public async openConflictInspectorDiff(
+        targetPath: string,
+        action: ConflictInspectorDiffAction
+    ): Promise<void> {
+        const view = await this.loadConflictInspectorView(targetPath);
+        const findArtifact = (role: ConflictInspectorArtifact["role"]) =>
+            view.artifacts.find((artifact) => artifact.role === role);
+
+        switch (action) {
+            case "base-working": {
+                const baseArtifact = findArtifact("base");
+                if (!baseArtifact) {
+                    return;
+                }
+
+                await this.openConflictInspectorLocalDiff(
+                    baseArtifact.path,
+                    view.conflictPath,
+                    this.i18n.t("conflictInspectorCompareBaseWorkingTitle", {
+                        path: view.conflictRelativePath,
+                    })
+                );
+                return;
+            }
+            case "mine-working": {
+                const mineArtifact = findArtifact("mine");
+                if (!mineArtifact) {
+                    return;
+                }
+
+                await this.openConflictInspectorLocalDiff(
+                    mineArtifact.path,
+                    view.conflictPath,
+                    this.i18n.t("conflictInspectorCompareMineWorkingTitle", {
+                        path: view.conflictRelativePath,
+                    })
+                );
+                return;
+            }
+            case "working-incoming": {
+                const incomingArtifact = findArtifact("incoming");
+                if (!incomingArtifact) {
+                    return;
+                }
+
+                await this.openConflictInspectorLocalDiff(
+                    view.conflictPath,
+                    incomingArtifact.path,
+                    this.i18n.t("conflictInspectorCompareWorkingIncomingTitle", {
+                        path: view.conflictRelativePath,
+                    })
+                );
+                return;
+            }
+            case "mine-incoming": {
+                const mineArtifact = findArtifact("mine");
+                const incomingArtifact = findArtifact("incoming");
+                if (!mineArtifact || !incomingArtifact) {
+                    return;
+                }
+
+                await this.openConflictInspectorLocalDiff(
+                    mineArtifact.path,
+                    incomingArtifact.path,
+                    this.i18n.t("conflictInspectorCompareMineIncomingTitle", {
+                        path: view.conflictRelativePath,
+                    })
+                );
+                return;
+            }
+        }
+    }
+
+    public async runConflictInspectorResolution(
+        targetPath: string,
+        action: ConflictInspectorResolutionAction
+    ): Promise<void> {
+        const { conflictPath } = this.resolveConflictInspectorState(targetPath);
+
+        switch (action) {
+            case "working":
+                await this.markResolved([conflictPath]);
+                return;
+            case "base":
+                await this.acceptBase([conflictPath]);
+                return;
+            case "mine-conflict":
+                await this.acceptMineConflict([conflictPath]);
+                return;
+            case "theirs-conflict":
+                await this.acceptTheirsConflict([conflictPath]);
+                return;
+            case "mine-full":
+                await this.acceptMine([conflictPath]);
+                return;
+            case "theirs-full":
+                await this.acceptTheirs([conflictPath]);
+                return;
+            case "postpone":
+                await this.postponeConflicts([conflictPath]);
+                return;
+        }
+    }
+
     public async runRepositoryBrowserCurrentAction(
         action: RepositoryBrowserAction,
         repositoryPath: string
@@ -2273,6 +2674,11 @@ export class SvnRepository implements vscode.Disposable {
             case "show-properties":
                 await this.showRepositoryPathProperties(repositoryPath, url);
                 return;
+            case "edit-property":
+                await this.editRepositoryPathProperty(repositoryPath, {
+                    url,
+                });
+                return;
             case "checkout-directory":
                 await this.checkoutRepositoryDirectoryAt(repositoryPath);
                 return;
@@ -2326,6 +2732,7 @@ export class SvnRepository implements vscode.Disposable {
                 strings: {
                     openHistoryActionLabel: this.i18n.t("openHistoryActionLabel"),
                     showPropertiesActionLabel: this.i18n.t("showPropertiesActionLabel"),
+                    editPropertyActionLabel: this.i18n.t("editPropertyActionLabel"),
                     showBlameActionLabel: this.i18n.t("showBlameActionLabel"),
                     showBlameOutputActionLabel: this.i18n.t("showBlameOutputActionLabel"),
                     copyBlameLineActionLabel: this.i18n.t("copyBlameLineActionLabel"),
@@ -2359,6 +2766,7 @@ export class SvnRepository implements vscode.Disposable {
             openDirectoryActionLabel: this.i18n.t("repositoryBrowserOpenDirectoryActionLabel"),
             openHistoryActionLabel: this.i18n.t("openHistoryActionLabel"),
             showPropertiesActionLabel: this.i18n.t("showPropertiesActionLabel"),
+            editPropertyActionLabel: this.i18n.t("editPropertyActionLabel"),
             checkoutDirectoryActionLabel: this.i18n.t(
                 "repositoryBrowserCheckoutDirectoryActionLabel"
             ),
@@ -3098,6 +3506,11 @@ export class SvnRepository implements vscode.Disposable {
                 return;
             case "show-properties":
                 await this.showRepositoryPathProperties(repositoryPath, url);
+                return;
+            case "edit-property":
+                await this.editRepositoryPathProperty(repositoryPath, {
+                    url,
+                });
                 return;
             case "show-blame": {
                 const workingCopyPath = getWorkingCopyPathForRepositoryPath(

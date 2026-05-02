@@ -50,6 +50,7 @@
   "command.deleteGroup.title": "Delete All Unversioned",
   "command.openHistoryDiff.title": "Open History Diff",
   "command.openFileHistory.title": "Open File History",
+  "command.openConflictInspector.title": "Open Conflict Inspector",
   "command.resolveConflict.title": "Mark Conflict As Resolved",
   "command.acceptMine.title": "Accept Local Version",
   "command.acceptBase.title": "Accept Base Version",

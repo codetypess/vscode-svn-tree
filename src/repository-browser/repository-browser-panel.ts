@@ -164,6 +164,15 @@ export class RepositoryBrowserPanel implements vscode.Disposable {
                     errorRepositoryPath = message.repositoryPath;
                     await this.pushPropertiesData(state, repository, message.repositoryPath);
                     return;
+                case "edit-property":
+                    errorRepositoryPath = message.repositoryPath;
+                    await repository.editRepositoryPathProperty(message.repositoryPath, {
+                        propertyName: message.propertyName,
+                        propertyAction: message.propertyAction,
+                    });
+                    await this.pushData(state, repository);
+                    await this.pushPropertiesData(state, repository, message.repositoryPath);
+                    return;
                 case "run-current-action": {
                     errorRepositoryPath = message.repositoryPath;
                     const nextRepositoryPath = await repository.runRepositoryBrowserCurrentAction(
@@ -173,6 +182,13 @@ export class RepositoryBrowserPanel implements vscode.Disposable {
                     if (shouldRefreshAfterCurrentAction(message.action)) {
                         state.currentRepositoryPath = nextRepositoryPath ?? message.repositoryPath;
                         await this.pushData(state, repository);
+                        if (message.action === "edit-property") {
+                            await this.pushPropertiesData(
+                                state,
+                                repository,
+                                message.repositoryPath
+                            );
+                        }
                     }
                     return;
                 }
@@ -191,6 +207,13 @@ export class RepositoryBrowserPanel implements vscode.Disposable {
 
                     if (shouldRefreshAfterEntryAction(message.action)) {
                         await this.pushData(state, repository);
+                        if (message.action === "edit-property") {
+                            await this.pushPropertiesData(
+                                state,
+                                repository,
+                                message.repositoryPath
+                            );
+                        }
                     }
                     return;
                 }
@@ -329,6 +352,7 @@ function shouldRefreshAfterCurrentAction(action: RepositoryBrowserAction): boole
         case "copy-directory":
         case "move-directory":
         case "delete-directory":
+        case "edit-property":
         case "switch-here":
         case "create-branch-from-working-copy":
         case "create-tag-from-working-copy":
@@ -348,6 +372,7 @@ function shouldRefreshAfterEntryAction(action: RepositoryBrowserEntryAction): bo
         case "copy-file":
         case "move-file":
         case "delete-file":
+        case "edit-property":
         case "switch-here":
         case "create-branch-from-working-copy":
         case "create-tag-from-working-copy":

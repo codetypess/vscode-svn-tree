@@ -1,4 +1,6 @@
 import { spawn } from "node:child_process";
+import { promises as nodeFs } from "node:fs";
+import * as nodeOs from "node:os";
 import * as nodePath from "node:path";
 import * as vscode from "vscode";
 import {
@@ -45,6 +47,8 @@ interface RunSvnOptions {
     timeoutMs?: number;
     getTimeoutMs?: (attempt: number, totalAttempts: number) => number | undefined;
     captureOutput?: boolean;
+    executable?: "svn" | "svnmucc";
+    actionName?: string;
 }
 
 type SvnResolveAcceptOption =
@@ -73,6 +77,10 @@ function toPegTarget(target: string, revision?: string): string {
     }
 
     return `${target}@${revision}`;
+}
+
+function isRepositoryUrlTarget(target: string): boolean {
+    return /^[a-z][a-z0-9+.-]*:\/\//i.test(target);
 }
 
 export class SvnService {
@@ -164,9 +172,7 @@ export class SvnService {
             entries,
             hasMore: entries.length === limit && oldestRevision !== undefined && oldestRevision > 1,
             nextBeforeRevision:
-                oldestRevision !== undefined && oldestRevision > 1
-                    ? oldestRevision - 1
-                    : undefined,
+                oldestRevision !== undefined && oldestRevision > 1 ? oldestRevision - 1 : undefined,
         };
     }
 
@@ -363,7 +369,11 @@ export class SvnService {
         await this.runWithoutOutput(args);
     }
 
-    public async importToUrl(sourcePath: string, targetUrl: string, message: string): Promise<void> {
+    public async importToUrl(
+        sourcePath: string,
+        targetUrl: string,
+        message: string
+    ): Promise<void> {
         await this.runWithoutOutput(["import", sourcePath, targetUrl, "-m", message]);
     }
 
@@ -398,12 +408,7 @@ export class SvnService {
         options: SvnMergeRunOptions = {}
     ): Promise<void> {
         await this.runWithoutOutput(
-            this.buildMergeArgs([
-                "-c",
-                String(Math.floor(revision)),
-                source,
-                ".",
-            ], options),
+            this.buildMergeArgs(["-c", String(Math.floor(revision)), source, "."], options),
             { cwd: rootPath }
         );
     }
@@ -416,12 +421,10 @@ export class SvnService {
         options: SvnMergeRunOptions = {}
     ): Promise<void> {
         await this.runWithoutOutput(
-            this.buildMergeArgs([
-                "-r",
-                `${Math.floor(fromRevision)}:${Math.floor(toRevision)}`,
-                source,
-                ".",
-            ], options),
+            this.buildMergeArgs(
+                ["-r", `${Math.floor(fromRevision)}:${Math.floor(toRevision)}`, source, "."],
+                options
+            ),
             { cwd: rootPath }
         );
     }
@@ -433,12 +436,7 @@ export class SvnService {
         options: SvnMergeRunOptions = {}
     ): Promise<void> {
         await this.runWithoutOutput(
-            this.buildMergeArgs([
-                "-c",
-                `-${Math.floor(revision)}`,
-                source,
-                ".",
-            ], options),
+            this.buildMergeArgs(["-c", `-${Math.floor(revision)}`, source, "."], options),
             { cwd: rootPath }
         );
     }
@@ -450,12 +448,7 @@ export class SvnService {
         options: SvnMergeRunOptions = {}
     ): Promise<void> {
         await this.runWithoutOutput(
-            this.buildMergeArgs([
-                "-r",
-                `HEAD:${Math.floor(revision)}`,
-                source,
-                ".",
-            ], options),
+            this.buildMergeArgs(["-r", `HEAD:${Math.floor(revision)}`, source, "."], options),
             { cwd: rootPath }
         );
     }
@@ -504,10 +497,7 @@ export class SvnService {
         await this.runWithoutOutput(["move", "-m", message, source, destination]);
     }
 
-    private buildMergeArgs(
-        mergeArgs: string[],
-        options: SvnMergeRunOptions = {}
-    ): string[] {
+    private buildMergeArgs(mergeArgs: string[], options: SvnMergeRunOptions = {}): string[] {
         const args = ["merge"];
         if (options.dryRun) {
             args.push("--dry-run");
@@ -544,10 +534,9 @@ export class SvnService {
         message: string,
         changelist: string
     ): Promise<void> {
-        await this.runWithoutOutput(
-            ["commit", "--changelist", changelist, "-m", message, "."],
-            { cwd: rootPath }
-        );
+        await this.runWithoutOutput(["commit", "--changelist", changelist, "-m", message, "."], {
+            cwd: rootPath,
+        });
     }
 
     public async resolve(
@@ -574,13 +563,55 @@ export class SvnService {
         return parsePropertyListXml(stdout);
     }
 
-    public async setProperty(target: string, name: string, value: string): Promise<void> {
+    public async setProperty(
+        target: string,
+        name: string,
+        value: string,
+        options: {
+            message?: string;
+        } = {}
+    ): Promise<void> {
+        if (isRepositoryUrlTarget(target)) {
+            if (!options.message) {
+                throw new Error("Remote property updates require a commit message.");
+            }
+
+            await this.withTemporaryFile(value, async (filePath) => {
+                await this.runWithoutOutput(
+                    ["-m", options.message ?? "", "propsetf", name, filePath, target],
+                    {
+                        executable: "svnmucc",
+                        actionName: "propsetf",
+                    }
+                );
+            });
+            return;
+        }
+
         await this.runWithoutOutput(["propset", name, value, target], {
             cwd: nodePath.isAbsolute(target) ? nodePath.dirname(target) : undefined,
         });
     }
 
-    public async deleteProperty(target: string, name: string): Promise<void> {
+    public async deleteProperty(
+        target: string,
+        name: string,
+        options: {
+            message?: string;
+        } = {}
+    ): Promise<void> {
+        if (isRepositoryUrlTarget(target)) {
+            if (!options.message) {
+                throw new Error("Remote property updates require a commit message.");
+            }
+
+            await this.runWithoutOutput(["-m", options.message ?? "", "propdel", name, target], {
+                executable: "svnmucc",
+                actionName: "propdel",
+            });
+            return;
+        }
+
         await this.runWithoutOutput(["propdel", name, target], {
             cwd: nodePath.isAbsolute(target) ? nodePath.dirname(target) : undefined,
         });
@@ -633,19 +664,21 @@ export class SvnService {
         options: RunSvnOptions = {}
     ): Promise<{ stdout: string; stderr: string }> {
         const totalAttempts = Math.max(1, (options.retryCount ?? 0) + 1);
+        const executable = options.executable ?? "svn";
+        const actionName = options.actionName ?? args[0] ?? "command";
 
         for (let attempt = 1; attempt <= totalAttempts; attempt += 1) {
             const timeoutMs = this.resolveTimeoutMs(options, attempt, totalAttempts);
             if (!options.quiet) {
                 this.outputChannel.appendLine(
-                    this.renderCommand(args, options, attempt, totalAttempts, timeoutMs)
+                    this.renderCommand(executable, args, options, attempt, totalAttempts, timeoutMs)
                 );
             }
 
             try {
-                return await this.spawnSvn(args, options, timeoutMs);
+                return await this.spawnProcess(executable, args, options, timeoutMs);
             } catch (error) {
-                const message = this.renderError(error, args, timeoutMs);
+                const message = this.renderError(executable, error, args, timeoutMs);
                 const canRetry = attempt < totalAttempts && this.shouldRetry(error, timeoutMs);
                 const attemptMessage =
                     totalAttempts > 1 && attempt > 1
@@ -664,7 +697,7 @@ export class SvnService {
 
                 const retryDelayMs = options.retryDelayMs ?? 0;
                 this.outputChannel.appendLine(
-                    `Retrying svn ${args[0]} in ${Math.max(retryDelayMs, 0)}ms ` +
+                    `Retrying ${executable} ${actionName} in ${Math.max(retryDelayMs, 0)}ms ` +
                         `(${attempt + 1}/${totalAttempts})`
                 );
 
@@ -677,17 +710,15 @@ export class SvnService {
         throw new Error("SVN command did not complete.");
     }
 
-    private async runWithoutOutput(
-        args: string[],
-        options: RunSvnOptions = {}
-    ): Promise<void> {
+    private async runWithoutOutput(args: string[], options: RunSvnOptions = {}): Promise<void> {
         await this.run(args, {
             ...options,
             captureOutput: false,
         });
     }
 
-    private async spawnSvn(
+    private async spawnProcess(
+        executable: "svn" | "svnmucc",
         args: string[],
         options: RunSvnOptions,
         timeoutMs?: number
@@ -695,7 +726,7 @@ export class SvnService {
         const captureOutput = options.captureOutput ?? true;
 
         return await new Promise((resolve, reject) => {
-            const child = spawn("svn", args, {
+            const child = spawn(executable, args, {
                 cwd: options.cwd,
                 stdio: ["ignore", "pipe", "pipe"],
             });
@@ -767,7 +798,7 @@ export class SvnService {
 
                     const outputExcerpt = captureOutput ? stderr || stdout : retainedOutput;
                     reject(
-                        this.createProcessError(args, {
+                        this.createProcessError(executable, options.actionName, args, {
                             code,
                             signal,
                             timedOut,
@@ -814,6 +845,7 @@ export class SvnService {
     }
 
     private renderCommand(
+        executable: "svn" | "svnmucc",
         args: string[],
         options: RunSvnOptions,
         attempt: number,
@@ -824,7 +856,7 @@ export class SvnService {
         const attemptSuffix =
             totalAttempts > 1 && attempt > 1 ? ` [attempt ${attempt}/${totalAttempts}]` : "";
 
-        return `svn ${args.join(" ")}${renderedCwd}${attemptSuffix}`;
+        return `${executable} ${args.join(" ")}${renderedCwd}${attemptSuffix}`;
     }
 
     private appendRetainedOutput(current: string, chunk: string): string {
@@ -886,6 +918,8 @@ export class SvnService {
     }
 
     private createProcessError(
+        executable: "svn" | "svnmucc",
+        actionName: string | undefined,
         args: string[],
         options: {
             code: number | null;
@@ -894,12 +928,12 @@ export class SvnService {
             outputExcerpt: string;
         }
     ): Error {
-        const action = args[0] ?? "command";
+        const action = actionName ?? args[0] ?? "command";
         const excerpt = options.outputExcerpt.trim();
         const message = options.timedOut
-            ? `svn ${action} timed out.`
+            ? `${executable} ${action} timed out.`
             : excerpt ||
-              `svn ${action} failed with exit code ${options.code ?? "unknown"}.`;
+              `${executable} ${action} failed with exit code ${options.code ?? "unknown"}.`;
         const error = new Error(message) as Error & {
             killed?: boolean;
             signal?: NodeJS.Signals | null;
@@ -918,11 +952,13 @@ export class SvnService {
     }
 
     private renderError(
+        executable: "svn" | "svnmucc",
         error: unknown,
         args?: string[],
         timeoutMs?: number
     ): string {
         if (
+            executable === "svn" &&
             this.isTimeoutError(error) &&
             Array.isArray(args) &&
             args[0] === "log" &&
@@ -940,5 +976,23 @@ export class SvnService {
         }
 
         return String(error);
+    }
+
+    private async withTemporaryFile<T>(
+        content: string,
+        action: (filePath: string) => Promise<T>
+    ): Promise<T> {
+        const directoryPath = await nodeFs.mkdtemp(nodePath.join(nodeOs.tmpdir(), "svn-tree-"));
+        const filePath = nodePath.join(directoryPath, "property-value.txt");
+
+        try {
+            await nodeFs.writeFile(filePath, content, "utf8");
+            return await action(filePath);
+        } finally {
+            await nodeFs.rm(directoryPath, {
+                recursive: true,
+                force: true,
+            });
+        }
     }
 }

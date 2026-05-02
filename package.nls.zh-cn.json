@@ -50,6 +50,7 @@
   "command.deleteGroup.title": "删除全部未纳管项",
   "command.openHistoryDiff.title": "打开历史差异",
   "command.openFileHistory.title": "打开文件历史",
+  "command.openConflictInspector.title": "打开冲突检查器",
   "command.resolveConflict.title": "标记冲突为已解决",
   "command.acceptMine.title": "接受本地版本",
   "command.acceptBase.title": "接受基础版本",

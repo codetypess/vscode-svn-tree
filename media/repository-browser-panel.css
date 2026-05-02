@@ -301,6 +301,12 @@ button.browser-tree-toggle:active {
     gap: 10px;
 }
 
+.browser-details-section-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
 .browser-details-section-title {
     color: var(--muted);
     font-size: 13px;
@@ -379,6 +385,14 @@ button.browser-tree-toggle:active {
     justify-content: center;
 }
 
+.browser-details-manage-button {
+    min-height: 26px;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 0 10px;
+}
+
 .browser-details-empty,
 .browser-details-error {
     margin-top: 10px;
@@ -422,10 +436,32 @@ button.browser-tree-toggle:active {
     box-shadow: inset 0 1px 0 color-mix(in srgb, white 4%, transparent);
 }
 
+.browser-property-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 10px;
+}
+
 .browser-property-name {
     font-size: 13px;
     font-weight: 700;
     line-height: 1.35;
+}
+
+.browser-property-actions {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.browser-property-action {
+    min-height: 24px;
+    min-width: 24px;
+    padding: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
 }
 
 .browser-property-value {

@@ -41,6 +41,8 @@ export interface RepositoryBrowserConfigPayload {
     locale: SupportedLocale;
 }
 
+export type RepositoryBrowserPropertyMutationAction = "set" | "delete";
+
 export type RepositoryBrowserResponseMessage =
     | {
           type: "browser-data";
@@ -96,6 +98,13 @@ export type RepositoryBrowserRequestMessage =
           action: RepositoryBrowserEntryAction;
           repositoryPath: string;
           kind: SvnNodeKind;
+      }
+    | {
+          type: "edit-property";
+          repositoryPath: string;
+          kind: SvnNodeKind;
+          propertyName?: string;
+          propertyAction?: RepositoryBrowserPropertyMutationAction;
       };
 
 declare global {

@@ -11,6 +11,7 @@ import {
 export type RepositoryBrowserAction =
     | "show-history"
     | "show-properties"
+    | "edit-property"
     | "checkout-directory"
     | "export-directory"
     | "create-directory"
@@ -35,6 +36,7 @@ export interface RepositoryBrowserQuickPickItem extends vscode.QuickPickItem {
 export type RepositoryBrowserFileAction =
     | "show-history"
     | "show-properties"
+    | "edit-property"
     | "show-blame"
     | "show-blame-output"
     | "copy-blame-line"
@@ -68,6 +70,7 @@ interface RepositoryBrowserStrings {
     readonly actionsSeparator: string;
     readonly openHistoryActionLabel: string;
     readonly showPropertiesActionLabel: string;
+    readonly editPropertyActionLabel: string;
     readonly checkoutDirectoryActionLabel: string;
     readonly exportDirectoryActionLabel: string;
     readonly createDirectoryActionLabel: string;
@@ -89,6 +92,7 @@ interface RepositoryBrowserStrings {
 interface RepositoryBrowserFileActionStrings {
     readonly openHistoryActionLabel: string;
     readonly showPropertiesActionLabel: string;
+    readonly editPropertyActionLabel: string;
     readonly showBlameActionLabel: string;
     readonly showBlameOutputActionLabel: string;
     readonly copyBlameLineActionLabel: string;
@@ -146,6 +150,7 @@ export interface RepositoryBrowserViewStrings {
     readonly openDirectoryActionLabel: string;
     readonly openHistoryActionLabel: string;
     readonly showPropertiesActionLabel: string;
+    readonly editPropertyActionLabel: string;
     readonly checkoutDirectoryActionLabel: string;
     readonly exportDirectoryActionLabel: string;
     readonly showBlameActionLabel: string;
@@ -221,6 +226,14 @@ export function buildRepositoryBrowserItems(options: {
             description: options.currentRepositoryPath,
             itemType: "action",
             action: "show-properties",
+            repositoryPath: options.currentRepositoryPath,
+            url: options.currentUrl,
+        },
+        {
+            label: options.strings.editPropertyActionLabel,
+            description: options.currentRepositoryPath,
+            itemType: "action",
+            action: "edit-property",
             repositoryPath: options.currentRepositoryPath,
             url: options.currentUrl,
         },
@@ -421,6 +434,11 @@ export function buildRepositoryBrowserFileActionItems(options: {
             label: options.strings.showPropertiesActionLabel,
             description: options.repositoryPath,
             action: "show-properties",
+        },
+        {
+            label: options.strings.editPropertyActionLabel,
+            description: options.repositoryPath,
+            action: "edit-property",
         },
         {
             label: options.strings.showBlameActionLabel,
@@ -639,6 +657,7 @@ function buildRepositoryBrowserCurrentActions(options: {
             options.strings.showPropertiesActionLabel,
             "symbol-property"
         ),
+        createAction("edit-property", options.strings.editPropertyActionLabel, "edit"),
         createAction(
             "checkout-directory",
             options.strings.checkoutDirectoryActionLabel,
@@ -764,6 +783,7 @@ function buildDirectoryEntryActions(options: {
             options.strings.showPropertiesActionLabel,
             "symbol-property"
         ),
+        createAction("edit-property", options.strings.editPropertyActionLabel, "edit"),
         createAction(
             "checkout-directory",
             options.strings.checkoutDirectoryActionLabel,
@@ -832,6 +852,7 @@ function buildFileEntryActions(
     return [
         createAction("show-history", strings.openHistoryActionLabel, "history"),
         createAction("show-properties", strings.showPropertiesActionLabel, "symbol-property"),
+        createAction("edit-property", strings.editPropertyActionLabel, "edit"),
         createAction("show-blame", strings.showBlameActionLabel, "comment-discussion"),
         createAction("show-blame-output", strings.showBlameOutputActionLabel, "output"),
         createAction("copy-blame-line", strings.copyBlameLineActionLabel, "copy"),

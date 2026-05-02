@@ -16,6 +16,7 @@ import {
 import { SvnContentProvider } from "../svn/svn-content-provider";
 import { SvnService } from "../svn/svn-service";
 import { ScmResource } from "./scm-resource";
+import { SvnConflictInspectorPanel } from "./svn-conflict-inspector-panel";
 import { SvnInlineBlameController } from "./svn-inline-blame-controller";
 import { SvnInspectorPanel } from "./svn-inspector-panel";
 import { getCheckoutDepthOptions } from "./svn-depth-utils";
@@ -160,6 +161,7 @@ export class SvnRepositoryManager implements vscode.Disposable {
     private readonly contentProvider = new SvnContentProvider(this.svnService);
     private readonly historyPanel: HistoryPanel;
     private readonly inspectorPanel: SvnInspectorPanel;
+    private readonly conflictInspectorPanel: SvnConflictInspectorPanel;
     private readonly repositoryBrowserPanel: RepositoryBrowserPanel;
     private readonly revisionGraphPanel: RevisionGraphPanel;
     private readonly inlineBlameController: SvnInlineBlameController;
@@ -168,6 +170,9 @@ export class SvnRepositoryManager implements vscode.Disposable {
     public constructor(context: vscode.ExtensionContext) {
         this.historyPanel = new HistoryPanel(context.extensionUri);
         this.inspectorPanel = new SvnInspectorPanel(context.extensionUri);
+        this.conflictInspectorPanel = new SvnConflictInspectorPanel(context.extensionUri, (error) =>
+            this.showError(error)
+        );
         this.repositoryBrowserPanel = new RepositoryBrowserPanel(context.extensionUri);
         this.revisionGraphPanel = new RevisionGraphPanel(context.extensionUri);
         this.inlineBlameController = new SvnInlineBlameController((uri) =>
@@ -183,6 +188,7 @@ export class SvnRepositoryManager implements vscode.Disposable {
             this.outputChannel,
             this.historyPanel,
             this.inspectorPanel,
+            this.conflictInspectorPanel,
             this.repositoryBrowserPanel,
             this.revisionGraphPanel,
             this.inlineBlameController,
@@ -414,6 +420,10 @@ export class SvnRepositoryManager implements vscode.Disposable {
                 command: "svn-tree.open-file-history",
                 run: (arg) => this.openFileHistory(arg),
             },
+            {
+                command: "svn-tree.open-conflict-inspector",
+                run: (arg) => this.openConflictInspector(arg),
+            },
             ...this.createConflictCommandRegistrations(),
             {
                 command: "svn-tree.add-to-changelist",
@@ -585,6 +595,7 @@ export class SvnRepositoryManager implements vscode.Disposable {
             this.svnService,
             this.historyPanel,
             this.inspectorPanel,
+            this.conflictInspectorPanel,
             this.repositoryBrowserPanel,
             this.revisionGraphPanel,
             this.contentProvider,
@@ -1227,6 +1238,24 @@ export class SvnRepositoryManager implements vscode.Disposable {
         });
     }
 
+    private async openConflictInspector(arg: unknown): Promise<void> {
+        const target = this.resolvePathTargetOrShowInfo(arg);
+        if (!target) {
+            return;
+        }
+
+        if (!target.repository.canInspectConflict(target.uri.fsPath)) {
+            this.showInformationStatus("noConflictsInfo");
+            return;
+        }
+
+        try {
+            await this.conflictInspectorPanel.show(target.repository, target.uri.fsPath);
+        } catch (error) {
+            this.showError(error);
+        }
+    }
+
     private async showPathInfo(arg: unknown): Promise<void> {
         await this.runForResolvedNodeInfoTarget(arg, async ({ nodeInfo, displayPath }) => {
             await this.inspectorPanel.showPathInfo({
@@ -1821,6 +1850,7 @@ export class SvnRepositoryManager implements vscode.Disposable {
     private refreshLocalization(): void {
         this.historyStatusBarItem.tooltip = getI18n().t("historyStatusTooltip");
         this.inspectorPanel.refreshLocalization();
+        this.conflictInspectorPanel.refreshLocalization();
 
         for (const repository of this.repositories.values()) {
             repository.refreshLocalization();

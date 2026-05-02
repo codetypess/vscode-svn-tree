@@ -49,6 +49,7 @@ test("repository browser helpers build actions and sorted entries", () => {
             actionsSeparator: "actions",
             openHistoryActionLabel: "history",
             showPropertiesActionLabel: "properties",
+            editPropertyActionLabel: "edit-properties",
             checkoutDirectoryActionLabel: "checkout-dir",
             exportDirectoryActionLabel: "export-dir",
             createDirectoryActionLabel: "create-dir",
@@ -89,6 +90,10 @@ test("repository browser helpers build actions and sorted entries", () => {
         true
     );
     assert.equal(
+        items.some((item) => item.action === "edit-property"),
+        true
+    );
+    assert.equal(
         items.some((item) => item.action === "import-local-folder-here"),
         true
     );
@@ -118,6 +123,7 @@ test("repository browser helpers gate destructive current-directory actions", ()
             actionsSeparator: "actions",
             openHistoryActionLabel: "history",
             showPropertiesActionLabel: "properties",
+            editPropertyActionLabel: "edit-properties",
             checkoutDirectoryActionLabel: "checkout-dir",
             exportDirectoryActionLabel: "export-dir",
             createDirectoryActionLabel: "create-dir",
@@ -170,6 +176,7 @@ test("repository browser helpers build file action items", () => {
         strings: {
             openHistoryActionLabel: "history",
             showPropertiesActionLabel: "properties",
+            editPropertyActionLabel: "edit-properties",
             showBlameActionLabel: "blame",
             showBlameOutputActionLabel: "blame-output",
             copyBlameLineActionLabel: "copy-line",
@@ -188,6 +195,7 @@ test("repository browser helpers build file action items", () => {
         [
             "show-history",
             "show-properties",
+            "edit-property",
             "show-blame",
             "show-blame-output",
             "copy-blame-line",
@@ -258,6 +266,7 @@ test("repository browser helpers build webview view model", () => {
             openDirectoryActionLabel: "open-dir",
             openHistoryActionLabel: "history",
             showPropertiesActionLabel: "properties",
+            editPropertyActionLabel: "edit-properties",
             checkoutDirectoryActionLabel: "checkout-dir",
             exportDirectoryActionLabel: "export-dir",
             showBlameActionLabel: "blame",
@@ -298,6 +307,10 @@ test("repository browser helpers build webview view model", () => {
         true
     );
     assert.equal(
+        model.currentActions.some((item) => item.id === "edit-property"),
+        true
+    );
+    assert.equal(
         model.currentActions.some((item) => item.id === "export-directory"),
         true
     );
@@ -313,6 +326,10 @@ test("repository browser helpers build webview view model", () => {
     );
     assert.equal(
         model.entries[0]?.actions.some((item) => item.id === "checkout-directory"),
+        true
+    );
+    assert.equal(
+        model.entries[0]?.actions.some((item) => item.id === "edit-property"),
         true
     );
     assert.equal(
@@ -340,6 +357,10 @@ test("repository browser helpers build webview view model", () => {
     assert.equal(model.entries[1]?.date, "2026-05-02T10:00:00.000Z");
     assert.equal(
         model.entries[1]?.actions.some((item) => item.id === "show-blame"),
+        true
+    );
+    assert.equal(
+        model.entries[1]?.actions.some((item) => item.id === "edit-property"),
         true
     );
     assert.equal(

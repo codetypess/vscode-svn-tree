@@ -13,6 +13,7 @@ import type {
     RepositoryBrowserConfigPayload,
     RepositoryBrowserDataPayload,
     RepositoryBrowserErrorPayload,
+    RepositoryBrowserPropertyMutationAction,
     RepositoryBrowserPropertiesErrorPayload,
     RepositoryBrowserPropertiesPayload,
     RepositoryBrowserRequestMessage,
@@ -457,6 +458,11 @@ function buildDirectoryPathContextActions(
             id: "show-properties",
             label: i18n.t("showPropertiesActionLabel"),
             icon: "symbol-property",
+        },
+        {
+            id: "edit-property",
+            label: i18n.t("editPropertyActionLabel"),
+            icon: "edit",
         },
         {
             id: "checkout-directory",
@@ -912,6 +918,36 @@ function resolveRepositoryBrowserNavigationPath(value: string): string | undefin
             vscode.postMessage({
                 type: "load-properties",
                 repositoryPath,
+            } satisfies RepositoryBrowserRequestMessage);
+        }
+
+        function runPropertyMutation(
+            repositoryPath: string,
+            kind: SvnNodeKind,
+            propertyName?: string,
+            propertyAction?: RepositoryBrowserPropertyMutationAction
+        ): void {
+            pendingPropertyLoadPathsRef.current[repositoryPath] = true;
+            setState(function (previous) {
+                const existingPropertyData = previous.propertyDataByPath[repositoryPath];
+                return {
+                    ...previous,
+                    propertyDataByPath: {
+                        ...previous.propertyDataByPath,
+                        [repositoryPath]: {
+                            isLoading: true,
+                            properties: existingPropertyData?.properties,
+                            error: undefined,
+                        },
+                    },
+                };
+            });
+            vscode.postMessage({
+                type: "edit-property",
+                repositoryPath,
+                kind,
+                propertyName,
+                propertyAction,
             } satisfies RepositoryBrowserRequestMessage);
         }
 
@@ -2013,26 +2049,49 @@ function resolveRepositoryBrowserNavigationPath(value: string): string | undefin
                                             <div className="browser-details-section-title">
                                                 {i18n.t("repositoryBrowserPropertiesSectionLabel")}
                                             </div>
-                                            <button
-                                                type="button"
-                                                className="secondary browser-details-refresh"
-                                                disabled={detailsPropertyState?.isLoading === true}
-                                                onClick={function () {
-                                                    requestPropertyLoad(
-                                                        detailsTarget.repositoryPath,
-                                                        true
-                                                    );
-                                                }}
-                                            >
-                                                <span
-                                                    className={`codicon ${
-                                                        detailsPropertyState?.isLoading
-                                                            ? "codicon-loading codicon-modifier-spin"
-                                                            : "codicon-refresh"
-                                                    }`}
-                                                    aria-hidden="true"
-                                                />
-                                            </button>
+                                            <div className="browser-details-section-actions">
+                                                <button
+                                                    type="button"
+                                                    className="secondary browser-details-manage-button"
+                                                    disabled={
+                                                        detailsPropertyState?.isLoading === true
+                                                    }
+                                                    onClick={function () {
+                                                        runPropertyMutation(
+                                                            detailsTarget.repositoryPath,
+                                                            detailsTarget.kind
+                                                        );
+                                                    }}
+                                                >
+                                                    <span
+                                                        className="codicon codicon-edit"
+                                                        aria-hidden="true"
+                                                    />
+                                                    <span>{i18n.t("editPropertyActionLabel")}</span>
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    className="secondary browser-details-refresh"
+                                                    disabled={
+                                                        detailsPropertyState?.isLoading === true
+                                                    }
+                                                    onClick={function () {
+                                                        requestPropertyLoad(
+                                                            detailsTarget.repositoryPath,
+                                                            true
+                                                        );
+                                                    }}
+                                                >
+                                                    <span
+                                                        className={`codicon ${
+                                                            detailsPropertyState?.isLoading
+                                                                ? "codicon-loading codicon-modifier-spin"
+                                                                : "codicon-refresh"
+                                                        }`}
+                                                        aria-hidden="true"
+                                                    />
+                                                </button>
+                                            </div>
                                         </div>
 
                                         {!detailsPropertyState || detailsPropertyState.isLoading ? (
@@ -2060,8 +2119,66 @@ function resolveRepositoryBrowserNavigationPath(value: string): string | undefin
                                                                 key={`${detailsTarget.repositoryPath}:${property.name}`}
                                                                 className="browser-property-item"
                                                             >
-                                                                <div className="browser-property-name">
-                                                                    {property.name}
+                                                                <div className="browser-property-header">
+                                                                    <div className="browser-property-name">
+                                                                        {property.name}
+                                                                    </div>
+                                                                    <div className="browser-property-actions">
+                                                                        <button
+                                                                            type="button"
+                                                                            className="secondary browser-property-action"
+                                                                            disabled={
+                                                                                detailsPropertyState?.isLoading ===
+                                                                                true
+                                                                            }
+                                                                            title={i18n.t(
+                                                                                "editPropertyActionLabel"
+                                                                            )}
+                                                                            aria-label={i18n.t(
+                                                                                "editPropertyActionLabel"
+                                                                            )}
+                                                                            onClick={function () {
+                                                                                runPropertyMutation(
+                                                                                    detailsTarget.repositoryPath,
+                                                                                    detailsTarget.kind,
+                                                                                    property.name,
+                                                                                    "set"
+                                                                                );
+                                                                            }}
+                                                                        >
+                                                                            <span
+                                                                                className="codicon codicon-edit"
+                                                                                aria-hidden="true"
+                                                                            />
+                                                                        </button>
+                                                                        <button
+                                                                            type="button"
+                                                                            className="secondary browser-property-action"
+                                                                            disabled={
+                                                                                detailsPropertyState?.isLoading ===
+                                                                                true
+                                                                            }
+                                                                            title={i18n.t(
+                                                                                "propertyDeleteActionLabel"
+                                                                            )}
+                                                                            aria-label={i18n.t(
+                                                                                "propertyDeleteActionLabel"
+                                                                            )}
+                                                                            onClick={function () {
+                                                                                runPropertyMutation(
+                                                                                    detailsTarget.repositoryPath,
+                                                                                    detailsTarget.kind,
+                                                                                    property.name,
+                                                                                    "delete"
+                                                                                );
+                                                                            }}
+                                                                        >
+                                                                            <span
+                                                                                className="codicon codicon-trash"
+                                                                                aria-hidden="true"
+                                                                            />
+                                                                        </button>
+                                                                    </div>
                                                                 </div>
                                                                 <pre className="browser-property-value">
                                                                     {property.value}
