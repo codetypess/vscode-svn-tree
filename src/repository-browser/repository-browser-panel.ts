@@ -145,9 +145,6 @@ export class RepositoryBrowserPanel implements vscode.Disposable {
         message: RepositoryBrowserRequestMessage
     ): Promise<void> {
         let errorRepositoryPath = state.currentRepositoryPath;
-        repository.logRepositoryBrowser(
-            `Received webview message ${message.type} for ${"repositoryPath" in message ? message.repositoryPath : state.currentRepositoryPath}.`
-        );
         try {
             switch (message.type) {
                 case "ready":
@@ -200,9 +197,6 @@ export class RepositoryBrowserPanel implements vscode.Disposable {
             }
         } catch (error) {
             const messageText = error instanceof Error ? error.message : String(error);
-            repository.logRepositoryBrowser(
-                `Failed to handle ${message.type} for ${errorRepositoryPath}: ${messageText}`
-            );
             await state.panel.webview.postMessage({
                 type: "browser-error",
                 payload: {
@@ -217,7 +211,6 @@ export class RepositoryBrowserPanel implements vscode.Disposable {
         state: RepositoryBrowserPanelState,
         repository: SvnRepository
     ): Promise<void> {
-        repository.logRepositoryBrowser(`Pushing browser data for ${state.currentRepositoryPath}.`);
         const browserData = await repository.loadRepositoryBrowserData(state.currentRepositoryPath);
         state.currentRepositoryPath = browserData.currentRepositoryPath;
         this.updatePanelTitle(state.panel, browserData.currentRepositoryPath);
@@ -232,7 +225,6 @@ export class RepositoryBrowserPanel implements vscode.Disposable {
         repository: SvnRepository,
         repositoryPath: string
     ): Promise<void> {
-        repository.logRepositoryBrowser(`Pushing directory data for ${repositoryPath}.`);
         const browserData = await repository.loadRepositoryBrowserData(repositoryPath);
         await state.panel.webview.postMessage({
             type: "directory-data",
@@ -245,7 +237,6 @@ export class RepositoryBrowserPanel implements vscode.Disposable {
         repository: SvnRepository,
         repositoryPath: string
     ): Promise<void> {
-        repository.logRepositoryBrowser(`Pushing properties for ${repositoryPath}.`);
         try {
             const properties = await repository.loadRepositoryBrowserProperties(repositoryPath);
             await state.panel.webview.postMessage({
@@ -254,9 +245,6 @@ export class RepositoryBrowserPanel implements vscode.Disposable {
             } satisfies RepositoryBrowserResponseMessage);
         } catch (error) {
             const messageText = error instanceof Error ? error.message : String(error);
-            repository.logRepositoryBrowser(
-                `Failed to load properties for ${repositoryPath}: ${messageText}`
-            );
             await state.panel.webview.postMessage({
                 type: "properties-error",
                 payload: {

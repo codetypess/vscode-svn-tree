@@ -93,14 +93,11 @@ import {
     decodePropertyValue,
     encodePropertyValue,
 } from "./svn-property-utils";
-import {
-    buildBlameOutputLines,
-    buildBlamePreviewContent,
-    buildPropertyOutputLines,
-} from "./svn-output-formatters";
+import { buildBlameOutputLines, buildBlamePreviewContent } from "./svn-output-formatters";
 import { partitionStatusEntries } from "./svn-repository-status-utils";
 import { ScmResource } from "./scm-resource";
 import { deriveCheckoutDestinationName, deriveImportSourceFolderName } from "./svn-checkout-utils";
+import { SvnInspectorPanel } from "./svn-inspector-panel";
 import {
     buildHistoryFileExportName,
     buildReferenceDestinationPath,
@@ -360,6 +357,7 @@ export class SvnRepository implements vscode.Disposable {
         public readonly info: SvnWorkingCopyInfo,
         private readonly svnService: SvnService,
         private readonly historyPanel: HistoryPanel,
+        private readonly inspectorPanel: SvnInspectorPanel,
         private readonly repositoryBrowserPanel: RepositoryBrowserPanel,
         private readonly revisionGraphPanel: RevisionGraphPanel,
         private readonly contentProvider: SvnContentProvider,
@@ -1369,12 +1367,15 @@ export class SvnRepository implements vscode.Disposable {
             async () => this.svnService.getProperties(targetPath)
         );
 
-        this.writePropertiesToOutput({
+        await this.inspectorPanel.showProperties({
+            kind: "properties",
+            rootPath: this.rootPath,
             displayPath,
             repositoryPath: targetInfo.repositoryRelativePath,
             url: targetInfo.url,
             properties,
         });
+        void vscode.window.setStatusBarMessage(this.i18n.t("openedPropertiesStatus"), 2000);
     }
 
     public async editPathProperty(target: vscode.Uri | string): Promise<void> {
@@ -1863,10 +1864,6 @@ export class SvnRepository implements vscode.Disposable {
         await this.repositoryBrowserPanel.show(this, initialRepositoryPath);
     }
 
-    public logRepositoryBrowser(message: string): void {
-        this.outputChannel.appendLine(`[Repository Browser] ${message}`);
-    }
-
     public async loadRepositoryBrowserData(
         repositoryPath: string
     ): Promise<RepositoryBrowserDataPayload> {
@@ -1874,13 +1871,7 @@ export class SvnRepository implements vscode.Disposable {
             repositoryPath || this.info.repositoryRelativePath
         );
         const currentUrl = buildRepositoryUrl(this.info.repositoryRoot, currentRepositoryPath);
-        this.logRepositoryBrowser(`Loading ${currentRepositoryPath} from ${currentUrl}.`);
         const entries = await this.svnService.list(currentUrl);
-        this.logRepositoryBrowser(
-            `Loaded ${currentRepositoryPath} with ${entries.length} entr${
-                entries.length === 1 ? "y" : "ies"
-            }.`
-        );
 
         return {
             repositoryLabel: this.label,
@@ -1902,15 +1893,7 @@ export class SvnRepository implements vscode.Disposable {
     ): Promise<RepositoryBrowserPropertiesModel> {
         const normalizedRepositoryPath = normalizeRepositoryPath(repositoryPath);
         const url = buildRepositoryUrl(this.info.repositoryRoot, normalizedRepositoryPath);
-        this.logRepositoryBrowser(
-            `Loading properties for ${normalizedRepositoryPath} from ${url}.`
-        );
         const properties = await this.svnService.getProperties(url);
-        this.logRepositoryBrowser(
-            `Loaded ${properties.length} propert${
-                properties.length === 1 ? "y" : "ies"
-            } for ${normalizedRepositoryPath}.`
-        );
 
         return {
             repositoryPath: normalizedRepositoryPath,
@@ -2814,12 +2797,15 @@ export class SvnRepository implements vscode.Disposable {
             async () => this.svnService.getProperties(url)
         );
 
-        this.writePropertiesToOutput({
+        await this.inspectorPanel.showProperties({
+            kind: "properties",
+            rootPath: this.rootPath,
             displayPath: repositoryPath,
             repositoryPath,
             url,
             properties,
         });
+        void vscode.window.setStatusBarMessage(this.i18n.t("openedPropertiesStatus"), 2000);
     }
 
     public async showBlameForRepositoryPath(
@@ -2991,30 +2977,6 @@ export class SvnRepository implements vscode.Disposable {
                 options
             ),
             this.i18n.t("openedBlameStatus")
-        );
-    }
-
-    private writePropertiesToOutput(options: {
-        displayPath: string;
-        repositoryPath: string;
-        url: string;
-        properties: SvnPropertyEntry[];
-    }): void {
-        this.writeOutputSection(
-            this.i18n.t("showPropertiesOutputHeader", {
-                path: options.displayPath,
-            }),
-            buildPropertyOutputLines(
-                {
-                    infoPathLabel: this.i18n.t("infoPathLabel"),
-                    infoRepositoryPathLabel: this.i18n.t("infoRepositoryPathLabel"),
-                    infoUrlLabel: this.i18n.t("infoUrlLabel"),
-                    propertiesHeaderLabel: this.i18n.t("propertiesHeaderLabel"),
-                    noPropertiesFoundLabel: this.i18n.t("noPropertiesFoundLabel"),
-                },
-                options
-            ),
-            this.i18n.t("openedPropertiesStatus")
         );
     }
 

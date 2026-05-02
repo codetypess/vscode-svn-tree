@@ -17,8 +17,8 @@ import { SvnContentProvider } from "../svn/svn-content-provider";
 import { SvnService } from "../svn/svn-service";
 import { ScmResource } from "./scm-resource";
 import { SvnInlineBlameController } from "./svn-inline-blame-controller";
+import { SvnInspectorPanel } from "./svn-inspector-panel";
 import { getCheckoutDepthOptions } from "./svn-depth-utils";
-import { buildPathInfoOutputLines } from "./svn-output-formatters";
 import {
     deriveCheckoutDestinationName,
     deriveImportSourceFolderName,
@@ -159,6 +159,7 @@ export class SvnRepositoryManager implements vscode.Disposable {
     private readonly svnService = new SvnService(this.outputChannel);
     private readonly contentProvider = new SvnContentProvider(this.svnService);
     private readonly historyPanel: HistoryPanel;
+    private readonly inspectorPanel: SvnInspectorPanel;
     private readonly repositoryBrowserPanel: RepositoryBrowserPanel;
     private readonly revisionGraphPanel: RevisionGraphPanel;
     private readonly inlineBlameController: SvnInlineBlameController;
@@ -166,6 +167,7 @@ export class SvnRepositoryManager implements vscode.Disposable {
 
     public constructor(context: vscode.ExtensionContext) {
         this.historyPanel = new HistoryPanel(context.extensionUri);
+        this.inspectorPanel = new SvnInspectorPanel(context.extensionUri);
         this.repositoryBrowserPanel = new RepositoryBrowserPanel(context.extensionUri);
         this.revisionGraphPanel = new RevisionGraphPanel(context.extensionUri);
         this.inlineBlameController = new SvnInlineBlameController((uri) =>
@@ -180,6 +182,7 @@ export class SvnRepositoryManager implements vscode.Disposable {
             this.historyStatusBarItem,
             this.outputChannel,
             this.historyPanel,
+            this.inspectorPanel,
             this.repositoryBrowserPanel,
             this.revisionGraphPanel,
             this.inlineBlameController,
@@ -581,6 +584,7 @@ export class SvnRepositoryManager implements vscode.Disposable {
             info,
             this.svnService,
             this.historyPanel,
+            this.inspectorPanel,
             this.repositoryBrowserPanel,
             this.revisionGraphPanel,
             this.contentProvider,
@@ -1225,33 +1229,13 @@ export class SvnRepositoryManager implements vscode.Disposable {
 
     private async showPathInfo(arg: unknown): Promise<void> {
         await this.runForResolvedNodeInfoTarget(arg, async ({ nodeInfo, displayPath }) => {
-            const i18n = getI18n();
-            const lines = buildPathInfoOutputLines(nodeInfo, {
-                labels: {
-                    infoPathLabel: i18n.t("infoPathLabel"),
-                    infoKindLabel: i18n.t("infoKindLabel"),
-                    infoRepositoryPathLabel: i18n.t("infoRepositoryPathLabel"),
-                    infoUrlLabel: i18n.t("infoUrlLabel"),
-                    infoRepositoryRootLabel: i18n.t("infoRepositoryRootLabel"),
-                    infoWorkingCopyRootLabel: i18n.t("infoWorkingCopyRootLabel"),
-                    infoRevisionLabel: i18n.t("infoRevisionLabel"),
-                    infoLastChangedRevisionLabel: i18n.t("infoLastChangedRevisionLabel"),
-                    infoLastChangedAuthorLabel: i18n.t("infoLastChangedAuthorLabel"),
-                    infoLastChangedDateLabel: i18n.t("infoLastChangedDateLabel"),
-                    infoLockOwnerLabel: i18n.t("infoLockOwnerLabel"),
-                    infoLockCreatedLabel: i18n.t("infoLockCreatedLabel"),
-                    infoLockCommentLabel: i18n.t("infoLockCommentLabel"),
-                },
-                formatNodeKind: (kind) => i18n.formatNodeKind(kind),
+            await this.inspectorPanel.showPathInfo({
+                kind: "path-info",
+                rootPath: nodeInfo.workingCopyRoot ?? nodeInfo.absolutePath,
+                displayPath,
+                nodeInfo,
             });
-
-            appendOutputSection(
-                this.outputChannel,
-                i18n.t("showPathInfoOutputHeader", { path: displayPath }),
-                lines
-            );
-            this.outputChannel.show(true);
-            void vscode.window.setStatusBarMessage(i18n.t("openedPathInfoStatus"), 2000);
+            void vscode.window.setStatusBarMessage(getI18n().t("openedPathInfoStatus"), 2000);
         });
     }
 
@@ -1321,9 +1305,8 @@ export class SvnRepositoryManager implements vscode.Disposable {
                 return;
             }
 
-            const containingWorkingCopy = await this.findContainingWorkingCopyInfo(
-                sourceFolderPath
-            );
+            const containingWorkingCopy =
+                await this.findContainingWorkingCopyInfo(sourceFolderPath);
             if (containingWorkingCopy) {
                 void vscode.window.showWarningMessage(
                     getI18n().t("importSourceFolderInWorkingCopyWarning", {
@@ -1837,6 +1820,7 @@ export class SvnRepositoryManager implements vscode.Disposable {
 
     private refreshLocalization(): void {
         this.historyStatusBarItem.tooltip = getI18n().t("historyStatusTooltip");
+        this.inspectorPanel.refreshLocalization();
 
         for (const repository of this.repositories.values()) {
             repository.refreshLocalization();
@@ -2014,7 +1998,9 @@ export class SvnRepositoryManager implements vscode.Disposable {
 
     private async promptCheckoutDepth(): Promise<SvnCheckoutDepth | undefined> {
         const i18n = getI18n();
-        const selection = await vscode.window.showQuickPick<SvnDepthQuickPickItem<SvnCheckoutDepth>>(
+        const selection = await vscode.window.showQuickPick<
+            SvnDepthQuickPickItem<SvnCheckoutDepth>
+        >(
             getCheckoutDepthOptions().map((option) => ({
                 label: i18n.t(option.labelKey),
                 description: i18n.t(option.descriptionKey),
