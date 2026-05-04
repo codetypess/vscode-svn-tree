@@ -41,6 +41,7 @@ Users open a folder that already belongs to an SVN working copy and then:
 - Commit all or selected paths.
 - Update the whole working copy or selected paths.
 - Adjust working copy depth on repository roots or selected paths for sparse workflows.
+- Export working-copy patches or apply patch files with a dry-run before mutating the working copy.
 - Revert, add, delete, rename, ignore, lock, unlock, or clean up paths.
 - Edit `svn:ignore` rules or `svn:externals` definitions through dedicated editors when a generic property prompt is too coarse.
 
@@ -51,6 +52,7 @@ Users inspect repository or file history and then:
 - Filter revisions by author, message, path, and date range.
 - Compare revisions with the working copy or previous revisions.
 - Export revisions or files.
+- Export revision-scoped patch files from history.
 - Copy revision metadata.
 - Revert the working copy to a revision or reverse-merge a revision.
 
@@ -87,6 +89,7 @@ The extension currently supports:
 - SCM integration for SVN working copies inside the active workspace.
 - Status grouping for local changes, unversioned files, conflict artifacts, and optional incoming remote changes.
 - Repository-level and path-level commands contributed through VS Code menus.
+- Patch-oriented workflows for exporting working-copy diffs, exporting revision patches from history, and applying patch files through `svn patch` with dry-run preview.
 - History webview with incremental loading and filters.
 - Revision graph webview with reference comparison and mergeinfo metadata.
 - Repository browser actions for current-directory local-folder import, remote directory maintenance, and selected-entry file maintenance.
@@ -127,7 +130,6 @@ New work should preserve these expectations:
 
 These are useful candidates for future specs:
 
-- Patch-oriented workflows.
 - More visual conflict inspection flows.
 
 ## SDD Implication

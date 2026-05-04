@@ -179,6 +179,18 @@
         "icon": "$(output)"
       },
       {
+        "command": "svn-tree.export-patch",
+        "title": "%command.exportPatch.title%",
+        "category": "%command.category%",
+        "icon": "$(diff)"
+      },
+      {
+        "command": "svn-tree.apply-patch",
+        "title": "%command.applyPatch.title%",
+        "category": "%command.category%",
+        "icon": "$(repo-pull)"
+      },
+      {
         "command": "svn-tree.open-diff",
         "title": "%command.openDiff.title%",
         "category": "%command.category%"
@@ -385,7 +397,17 @@
         "category": "%command.category%"
       },
       {
-        "command": "svn-tree.reveal-in-file-manager",
+        "command": "svn-tree.reveal-in-finder",
+        "title": "%command.revealInFinder.title%",
+        "category": "%command.category%"
+      },
+      {
+        "command": "svn-tree.reveal-in-explorer",
+        "title": "%command.revealInExplorer.title%",
+        "category": "%command.category%"
+      },
+      {
+        "command": "svn-tree.reveal-in-system-file-manager",
         "title": "%command.revealInFileManager.title%",
         "category": "%command.category%"
       }
@@ -647,16 +669,24 @@
           "group": "1_changes@1"
         },
         {
-          "command": "svn-tree.add-group",
+          "command": "svn-tree.export-patch",
           "group": "1_changes@2"
         },
         {
-          "command": "svn-tree.delete-group",
+          "command": "svn-tree.apply-patch",
           "group": "1_changes@3"
         },
         {
-          "command": "svn-tree.revert-group",
+          "command": "svn-tree.add-group",
           "group": "1_changes@4"
+        },
+        {
+          "command": "svn-tree.delete-group",
+          "group": "1_changes@5"
+        },
+        {
+          "command": "svn-tree.revert-group",
+          "group": "1_changes@6"
         }
       ],
       "svn-tree.repository-actions.conflicts": [
@@ -746,8 +776,18 @@
           "group": "1_primary@2"
         },
         {
-          "command": "svn-tree.reveal-in-file-manager",
-          "when": "scmProvider == svn-tree",
+          "command": "svn-tree.reveal-in-finder",
+          "when": "scmProvider == svn-tree && isMac",
+          "group": "1_primary@3"
+        },
+        {
+          "command": "svn-tree.reveal-in-explorer",
+          "when": "scmProvider == svn-tree && isWindows",
+          "group": "1_primary@3"
+        },
+        {
+          "command": "svn-tree.reveal-in-system-file-manager",
+          "when": "scmProvider == svn-tree && !isMac && !isWindows",
           "group": "1_primary@3"
         },
         {
@@ -852,24 +892,29 @@
           "group": "1_changes@2"
         },
         {
-          "command": "svn-tree.add-to-changelist",
+          "command": "svn-tree.export-patch",
           "when": "scmProvider == svn-tree && (scmResourceState == svn-change || scmResourceState == svn-conflict)",
           "group": "1_changes@3"
         },
         {
-          "command": "svn-tree.remove-from-changelist",
+          "command": "svn-tree.add-to-changelist",
           "when": "scmProvider == svn-tree && (scmResourceState == svn-change || scmResourceState == svn-conflict)",
           "group": "1_changes@4"
         },
         {
-          "command": "svn-tree.lock-path",
+          "command": "svn-tree.remove-from-changelist",
           "when": "scmProvider == svn-tree && (scmResourceState == svn-change || scmResourceState == svn-conflict)",
           "group": "1_changes@5"
         },
         {
-          "command": "svn-tree.unlock-path",
+          "command": "svn-tree.lock-path",
           "when": "scmProvider == svn-tree && (scmResourceState == svn-change || scmResourceState == svn-conflict)",
           "group": "1_changes@6"
+        },
+        {
+          "command": "svn-tree.unlock-path",
+          "when": "scmProvider == svn-tree && (scmResourceState == svn-change || scmResourceState == svn-conflict)",
+          "group": "1_changes@7"
         }
       ],
       "svn-tree.resource-actions.path": [
@@ -930,6 +975,20 @@
         {
           "command": "svn-tree.postpone-conflict",
           "group": "1_conflict@6"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "svn-tree.reveal-in-finder",
+          "when": "isMac"
+        },
+        {
+          "command": "svn-tree.reveal-in-explorer",
+          "when": "isWindows"
+        },
+        {
+          "command": "svn-tree.reveal-in-system-file-manager",
+          "when": "!isMac && !isWindows"
         }
       ],
       "scm/resourceGroup/context": [

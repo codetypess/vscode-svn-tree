@@ -12,6 +12,7 @@ export type ContextActionType =
     | "update-to-revision"
     | "checkout-revision"
     | "export-revision"
+    | "export-patch"
     | "compare-with-working-copy"
     | "compare-with-previous-revision"
     | "revert-to-revision"
@@ -28,7 +29,7 @@ export type FileContextActionType =
     | "compare-file-with-working-copy"
     | "compare-file-with-previous-revision"
     | "show-file-history"
-    | "reveal-in-file-manager"
+    | "reveal-in-system-file-manager"
     | "copy-file-path";
 
 export interface HistoryBootstrap {
@@ -121,6 +122,7 @@ export type HistoryRequestMessage =
               | "update-to-revision"
               | "checkout-revision"
               | "export-revision"
+              | "export-patch"
               | "revert-to-revision"
               | "revert-changes-from-revision"
               | "copy-revision"
@@ -139,7 +141,7 @@ export type HistoryRequestMessage =
           action: string;
       }
     | {
-          type: "show-file-history" | "reveal-in-file-manager";
+          type: "show-file-history" | "reveal-in-system-file-manager";
           path: string;
       }
     | {

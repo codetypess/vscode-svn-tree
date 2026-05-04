@@ -71,6 +71,18 @@ interface SvnLogQueryResult {
     nextBeforeRevision?: number;
 }
 
+export interface SvnPatchRunOptions {
+    readonly dryRun?: boolean;
+    readonly stripCount?: number;
+    readonly reverse?: boolean;
+}
+
+export interface SvnPatchRunResult {
+    readonly succeeded: boolean;
+    readonly output: string;
+    readonly errorMessage?: string;
+}
+
 function toPegTarget(target: string, revision?: string): string {
     if (!revision) {
         return target;
@@ -380,6 +392,70 @@ export class SvnService {
     public async export(target: string, revision: string, destinationPath: string): Promise<void> {
         const args = ["export", "-r", revision, target, destinationPath];
         await this.runWithoutOutput(args);
+    }
+
+    public async supportsPatch(): Promise<boolean> {
+        try {
+            await this.runWithoutOutput(["help", "patch"], { quiet: true });
+            return true;
+        } catch {
+            return false;
+        }
+    }
+
+    public async diffWorkingCopy(rootPath: string, paths?: string[]): Promise<string> {
+        const targets = this.toRelativeTargets(rootPath, paths);
+        const { stdout } = await this.run(["diff", ...targets], { cwd: rootPath });
+        return stdout;
+    }
+
+    public async diffRevision(
+        rootPath: string,
+        revision: number,
+        targetPath?: string
+    ): Promise<string> {
+        const { stdout } = await this.run(
+            ["diff", "-c", String(Math.max(1, Math.floor(revision))), this.toLogTarget(rootPath, targetPath)],
+            { cwd: rootPath }
+        );
+        return stdout;
+    }
+
+    public async patch(
+        rootPath: string,
+        patchFilePath: string,
+        options: SvnPatchRunOptions = {}
+    ): Promise<SvnPatchRunResult> {
+        const args = ["patch"];
+        if (options.dryRun) {
+            args.push("--dry-run");
+        }
+
+        const normalizedStripCount = normalizePatchStripCount(options.stripCount);
+        if (normalizedStripCount !== undefined) {
+            args.push("--strip", String(normalizedStripCount));
+        }
+
+        if (options.reverse) {
+            args.push("--reverse-diff");
+        }
+
+        args.push(patchFilePath, ".");
+
+        try {
+            const { stdout, stderr } = await this.run(args, { cwd: rootPath, captureOutput: true });
+            return {
+                succeeded: true,
+                output: this.joinCommandOutput(stdout, stderr),
+            };
+        } catch (error) {
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            return {
+                succeeded: false,
+                output: this.extractCommandOutput(error) ?? errorMessage,
+                errorMessage,
+            };
+        }
     }
 
     public async mkdir(target: string, message: string): Promise<void> {
@@ -937,9 +1013,11 @@ export class SvnService {
         const error = new Error(message) as Error & {
             killed?: boolean;
             signal?: NodeJS.Signals | null;
+            outputExcerpt?: string;
         };
         error.killed = options.timedOut;
         error.signal = options.signal;
+        error.outputExcerpt = excerpt || undefined;
         return error;
     }
 
@@ -978,6 +1056,37 @@ export class SvnService {
         return String(error);
     }
 
+    private joinCommandOutput(stdout: string, stderr: string): string {
+        if (!stdout) {
+            return stderr;
+        }
+
+        if (!stderr) {
+            return stdout;
+        }
+
+        return `${stdout}\n${stderr}`;
+    }
+
+    private extractCommandOutput(error: unknown): string | undefined {
+        let currentError = error;
+        while (currentError instanceof Error) {
+            const outputExcerpt = (currentError as Error & { outputExcerpt?: unknown }).outputExcerpt;
+            if (typeof outputExcerpt === "string" && outputExcerpt.trim()) {
+                return outputExcerpt;
+            }
+
+            const cause = (currentError as Error & { cause?: unknown }).cause;
+            if (cause === currentError) {
+                break;
+            }
+
+            currentError = cause;
+        }
+
+        return undefined;
+    }
+
     private async withTemporaryFile<T>(
         content: string,
         action: (filePath: string) => Promise<T>
@@ -995,4 +1104,8 @@ export class SvnService {
             });
         }
     }
+}
+
+function normalizePatchStripCount(value: number | undefined): number | undefined {
+    return Number.isInteger(value) && (value ?? 0) >= 0 ? value : undefined;
 }

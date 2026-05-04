@@ -345,6 +345,14 @@ export class SvnRepositoryManager implements vscode.Disposable {
                 },
             },
             {
+                command: "svn-tree.export-patch",
+                run: (arg) => this.exportPatch(arg),
+            },
+            {
+                command: "svn-tree.apply-patch",
+                run: (arg) => this.applyPatch(arg),
+            },
+            {
                 command: "svn-tree.open-diff",
                 run: (arg) => this.openDiff(arg),
             },
@@ -433,10 +441,15 @@ export class SvnRepositoryManager implements vscode.Disposable {
                 command: "svn-tree.remove-from-changelist",
                 run: (arg) => this.removeFromChangelist(arg),
             },
-            {
-                command: "svn-tree.reveal-in-file-manager",
-                run: (arg) => this.revealInFileManager(arg),
-            },
+            ...[
+                "svn-tree.reveal-in-finder",
+                "svn-tree.reveal-in-explorer",
+                "svn-tree.reveal-in-system-file-manager",
+                "svn-tree.reveal-in-file-manager",
+            ].map((command) => ({
+                command,
+                run: (arg: unknown) => this.revealInFileManager(arg),
+            })),
         ];
     }
 
@@ -960,6 +973,16 @@ export class SvnRepositoryManager implements vscode.Disposable {
                         labelKey: "revertAllChangesActionLabel",
                         descriptionKey: "revertAllChangesActionDescription",
                         run: (repository) => this.revertGroup(repository),
+                    },
+                    {
+                        labelKey: "exportPatchActionLabel",
+                        descriptionKey: "exportPatchActionDescription",
+                        run: (repository) => repository.exportWorkingCopyPatch(),
+                    },
+                    {
+                        labelKey: "applyPatchActionLabel",
+                        descriptionKey: "applyPatchActionDescription",
+                        run: (repository) => repository.applyPatchToWorkingCopy(),
                     },
                 ],
             },
@@ -1780,6 +1803,23 @@ export class SvnRepositoryManager implements vscode.Disposable {
         await this.runForUriRepository(arg, async (repository, uri) => {
             await repository.revealWorkingCopyPathInFileManager(uri);
         });
+    }
+
+    private async exportPatch(arg: unknown): Promise<void> {
+        const handledSelection = await this.runSelectedResourceAction(
+            arg,
+            ["svn-change", "svn-conflict"],
+            (repository, paths) => repository.exportWorkingCopyPatch(paths)
+        );
+        if (handledSelection) {
+            return;
+        }
+
+        await this.runForRepository(arg, (repository) => repository.exportWorkingCopyPatch());
+    }
+
+    private async applyPatch(arg: unknown): Promise<void> {
+        await this.runForRepository(arg, (repository) => repository.applyPatchToWorkingCopy());
     }
 
     private async deleteResource(arg: unknown): Promise<void> {

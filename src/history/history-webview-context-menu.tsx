@@ -169,7 +169,7 @@ export function ContextMenu(props: ContextMenuProps): React.ReactElement | null 
                             type: "button",
                             onClick: function () {
                                 props.onFileAction(
-                                    "reveal-in-file-manager",
+                                    "reveal-in-system-file-manager",
                                     entry.revision,
                                     change
                                 );
@@ -302,6 +302,25 @@ export function ContextMenu(props: ContextMenuProps): React.ReactElement | null 
                         "span",
                         { className: "context-menu-label" },
                         props.i18n.t("exportThisRevision")
+                    )
+                ),
+                React.createElement(
+                    "button",
+                    {
+                        className: "context-menu-item",
+                        type: "button",
+                        onClick: function () {
+                            props.onAction("export-patch", entry);
+                        },
+                    },
+                    React.createElement("span", {
+                        className: "codicon codicon-diff",
+                        "aria-hidden": "true",
+                    }),
+                    React.createElement(
+                        "span",
+                        { className: "context-menu-label" },
+                        props.i18n.t("exportRevisionPatch")
                     )
                 ),
                 React.createElement(

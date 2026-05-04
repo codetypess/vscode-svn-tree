@@ -207,6 +207,18 @@ export class HistoryPanel implements vscode.Disposable {
                 }
 
                 if (
+                    payload.type === "export-patch" &&
+                    typeof payload.revision === "number"
+                ) {
+                    await repository.exportHistoryRevisionPatch(
+                        payload.revision,
+                        resolvedScope.targetPath,
+                        resolvedScope.focusedRepositoryPath
+                    );
+                    return;
+                }
+
+                if (
                     payload.type === "export-file" &&
                     typeof payload.revision === "number" &&
                     typeof payload.path === "string" &&
@@ -301,7 +313,7 @@ export class HistoryPanel implements vscode.Disposable {
                 }
 
                 if (
-                    payload.type === "reveal-in-file-manager" &&
+                    payload.type === "reveal-in-system-file-manager" &&
                     typeof payload.path === "string"
                 ) {
                     await repository.revealRepositoryPathInFileManager(payload.path);

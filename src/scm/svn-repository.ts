@@ -30,7 +30,7 @@ import type {
     RevisionGraphQuery,
 } from "../revision-graph/revision-graph-types";
 import { SvnContentProvider } from "../svn/svn-content-provider";
-import { SvnService } from "../svn/svn-service";
+import { SvnService, type SvnPatchRunResult } from "../svn/svn-service";
 import type {
     SvnCheckoutDepth,
     SvnDepth,
@@ -110,6 +110,13 @@ import { deriveCheckoutDestinationName, deriveImportSourceFolderName } from "./s
 import { SvnInspectorPanel } from "./svn-inspector-panel";
 import { SvnConflictInspectorPanel } from "./svn-conflict-inspector-panel";
 import {
+    deriveRevisionPatchFileName,
+    deriveWorkingCopyPatchFileName,
+    normalizePatchExportPaths,
+    normalizePatchStripCount,
+    summarizeSvnPatchOutput,
+} from "./svn-patch-utils";
+import {
     buildHistoryFileExportName,
     buildReferenceDestinationPath,
     buildRepositoryUrl,
@@ -180,6 +187,10 @@ interface MergeModeQuickPickItem extends vscode.QuickPickItem {
 
 interface MergeExecutionQuickPickItem extends vscode.QuickPickItem {
     readonly dryRun: boolean;
+}
+
+interface PatchApplyModeQuickPickItem extends vscode.QuickPickItem {
+    readonly reverse: boolean;
 }
 
 interface MergeWizardRequest {
@@ -1277,6 +1288,203 @@ export class SvnRepository implements vscode.Disposable {
 
     public async exportRevision(revision: number): Promise<void> {
         await this.transferRepositoryRevision("export", revision);
+    }
+
+    public async exportWorkingCopyPatch(paths?: string[]): Promise<void> {
+        const normalizedPaths = normalizePatchExportPaths(paths);
+        const targetLabel = this.describeDepthTarget(
+            normalizedPaths.length > 0 ? normalizedPaths : undefined
+        );
+        const patchText = await this.runNotificationProgress(
+            this.i18n.t("exportPatchProgress", {
+                target: targetLabel,
+            }),
+            async () =>
+                this.svnService.diffWorkingCopy(
+                    this.rootPath,
+                    normalizedPaths.length > 0 ? normalizedPaths : undefined
+                )
+        );
+
+        if (!patchText.trim()) {
+            void vscode.window.showWarningMessage(
+                this.i18n.t("exportPatchNoDifferencesWarning", {
+                    target: targetLabel,
+                })
+            );
+            return;
+        }
+
+        await this.previewAndOfferPatchSave(
+            patchText,
+            deriveWorkingCopyPatchFileName(this.rootPath, normalizedPaths),
+            this.i18n.t("savePatchTitle", {
+                name: deriveWorkingCopyPatchFileName(this.rootPath, normalizedPaths),
+            })
+        );
+    }
+
+    public async exportHistoryRevisionPatch(
+        revision: number,
+        targetPath?: string,
+        repositoryPathHint?: string
+    ): Promise<void> {
+        const displayTarget =
+            repositoryPathHint && repositoryPathHint !== "/"
+                ? repositoryPathHint
+                : this.label;
+        const patchText = await this.runNotificationProgress(
+            this.i18n.t("exportRevisionPatchProgress", {
+                revision,
+                target: displayTarget,
+            }),
+            async () => this.svnService.diffRevision(this.rootPath, revision, targetPath)
+        );
+
+        if (!patchText.trim()) {
+            void vscode.window.showWarningMessage(
+                this.i18n.t("exportRevisionPatchNoDifferencesWarning", {
+                    revision,
+                    target: displayTarget,
+                })
+            );
+            return;
+        }
+
+        const patchFileName = deriveRevisionPatchFileName(
+            repositoryPathHint ?? this.info.repositoryRelativePath,
+            revision
+        );
+        await this.previewAndOfferPatchSave(
+            patchText,
+            patchFileName,
+            this.i18n.t("savePatchTitle", {
+                name: patchFileName,
+            })
+        );
+    }
+
+    public async applyPatchToWorkingCopy(): Promise<void> {
+        if (!(await this.svnService.supportsPatch())) {
+            void vscode.window.showWarningMessage(this.i18n.t("patchCommandUnavailableWarning"));
+            return;
+        }
+
+        const patchFilePath = await this.promptPatchFilePath();
+        if (!patchFilePath) {
+            return;
+        }
+
+        const reverse = await this.promptPatchApplyMode();
+        if (reverse === undefined) {
+            return;
+        }
+
+        const stripCount = await this.promptPatchStripCount();
+        if (stripCount === undefined) {
+            return;
+        }
+
+        const dryRunResult = await this.runNotificationProgress(
+            this.i18n.t("patchDryRunProgress", {
+                label: this.label,
+            }),
+            async () =>
+                this.svnService.patch(this.rootPath, patchFilePath, {
+                    dryRun: true,
+                    reverse,
+                    stripCount,
+                })
+        );
+        await this.openTextPreview(
+            "plaintext",
+            this.buildPatchRunSummaryContent({
+                patchFilePath,
+                reverse,
+                stripCount,
+                result: dryRunResult,
+                dryRun: true,
+            })
+        );
+
+        if (!dryRunResult.succeeded) {
+            void vscode.window.showWarningMessage(
+                this.i18n.t("patchDryRunFailedWarning", {
+                    file: patchFilePath,
+                })
+            );
+            return;
+        }
+
+        const applyAction = this.i18n.t("applyPatchActionButton");
+        const selection = await vscode.window.showInformationMessage(
+            this.i18n.t("patchDryRunCompletedInfo", {
+                file: patchFilePath,
+            }),
+            applyAction
+        );
+        if (selection !== applyAction) {
+            return;
+        }
+
+        const applyResult = await this.runNotificationProgress(
+            this.i18n.t("applyPatchProgress", {
+                label: this.label,
+            }),
+            async () =>
+                this.svnService.patch(this.rootPath, patchFilePath, {
+                    reverse,
+                    stripCount,
+                })
+        );
+        const applySummary = summarizeSvnPatchOutput(applyResult.output);
+        if (applyResult.succeeded || applySummary.lines.length > 0) {
+            await this.finalizeRepositoryMutation({ refresh: true });
+        }
+
+        if (!applyResult.succeeded) {
+            await this.openTextPreview(
+                "plaintext",
+                this.buildPatchRunSummaryContent({
+                    patchFilePath,
+                    reverse,
+                    stripCount,
+                    result: applyResult,
+                    dryRun: false,
+                })
+            );
+            void vscode.window.showWarningMessage(
+                this.i18n.t("applyPatchFailedWarning", {
+                    file: patchFilePath,
+                })
+            );
+            return;
+        }
+
+        if (applySummary.hasWarnings) {
+            await this.openTextPreview(
+                "plaintext",
+                this.buildPatchRunSummaryContent({
+                    patchFilePath,
+                    reverse,
+                    stripCount,
+                    result: applyResult,
+                    dryRun: false,
+                })
+            );
+            void vscode.window.showWarningMessage(
+                this.i18n.t("appliedPatchWithWarningsInfo", {
+                    file: patchFilePath,
+                })
+            );
+            return;
+        }
+
+        void vscode.window.showInformationMessage(
+            this.i18n.t("appliedPatchInfo", {
+                file: patchFilePath,
+            })
+        );
     }
 
     public async exportFileRevision(
@@ -4106,6 +4314,138 @@ export class SvnRepository implements vscode.Disposable {
         return destinationPath;
     }
 
+    private async promptPatchSaveDestination(
+        defaultFileName: string,
+        title: string
+    ): Promise<string | undefined> {
+        const defaultParentPath = (await this.getNearestExistingPath(this.rootPath)) ?? this.rootPath;
+        const destinationUri = await vscode.window.showSaveDialog({
+            defaultUri: vscode.Uri.file(nodePath.join(defaultParentPath, defaultFileName)),
+            saveLabel: this.i18n.t("savePatchActionLabel"),
+            title,
+            filters: {
+                "Patch Files": ["patch", "diff"],
+            },
+        });
+        if (!destinationUri) {
+            return undefined;
+        }
+
+        const destinationPath = destinationUri.fsPath;
+        if (await this.pathExists(destinationPath)) {
+            void vscode.window.showWarningMessage(
+                this.i18n.t("destinationExistsWarning", {
+                    destination: destinationPath,
+                })
+            );
+            return undefined;
+        }
+
+        return destinationPath;
+    }
+
+    private async promptPatchFilePath(): Promise<string | undefined> {
+        const selectedFiles = await vscode.window.showOpenDialog({
+            canSelectFiles: true,
+            canSelectFolders: false,
+            canSelectMany: false,
+            openLabel: this.i18n.t("selectPatchFileActionLabel"),
+            title: this.i18n.t("selectPatchFileTitle"),
+            filters: {
+                "Patch Files": ["patch", "diff"],
+                "Text Files": ["txt"],
+            },
+        });
+        const patchFile = selectedFiles?.[0];
+        if (!patchFile) {
+            return undefined;
+        }
+
+        if (await this.isDirectoryPath(patchFile.fsPath) || !(await this.pathExists(patchFile.fsPath))) {
+            void vscode.window.showWarningMessage(
+                this.i18n.t("patchFileUnavailableWarning", {
+                    file: patchFile.fsPath,
+                })
+            );
+            return undefined;
+        }
+
+        return patchFile.fsPath;
+    }
+
+    private async promptPatchApplyMode(): Promise<boolean | undefined> {
+        const selection = await vscode.window.showQuickPick<PatchApplyModeQuickPickItem>(
+            [
+                {
+                    label: this.i18n.t("applyPatchForwardLabel"),
+                    description: this.i18n.t("applyPatchForwardDescription"),
+                    reverse: false,
+                },
+                {
+                    label: this.i18n.t("applyPatchReverseLabel"),
+                    description: this.i18n.t("applyPatchReverseDescription"),
+                    reverse: true,
+                },
+            ],
+            {
+                title: this.i18n.t("applyPatchActionLabel"),
+                placeHolder: this.i18n.t("applyPatchModePlaceholder"),
+            }
+        );
+
+        return selection?.reverse;
+    }
+
+    private async promptPatchStripCount(): Promise<number | undefined> {
+        const selection = await vscode.window.showInputBox({
+            title: this.i18n.t("applyPatchActionLabel"),
+            prompt: this.i18n.t("patchStripCountPrompt"),
+            placeHolder: this.i18n.t("patchStripCountPlaceholder"),
+            value: "0",
+            validateInput: (value) =>
+                normalizePatchStripCount(value) !== undefined
+                    ? undefined
+                    : this.i18n.t("patchStripCountInvalid"),
+        });
+
+        return normalizePatchStripCount(selection);
+    }
+
+    private async previewAndOfferPatchSave(
+        content: string,
+        defaultFileName: string,
+        title: string
+    ): Promise<void> {
+        await this.openTextPreview("diff", content);
+
+        const saveAction = this.i18n.t("savePatchActionLabel");
+        const selection = await vscode.window.showInformationMessage(
+            this.i18n.t("patchPreviewReadyInfo", {
+                name: defaultFileName,
+            }),
+            saveAction
+        );
+        if (selection !== saveAction) {
+            return;
+        }
+
+        const destinationPath = await this.promptPatchSaveDestination(defaultFileName, title);
+        if (!destinationPath) {
+            return;
+        }
+
+        await vscode.workspace.fs.writeFile(
+            vscode.Uri.file(destinationPath),
+            new TextEncoder().encode(content)
+        );
+        await this.revealCreatedPath(
+            destinationPath,
+            this.i18n.t("savedPatchInfo", {
+                destination: destinationPath,
+            })
+        );
+    }
+
     private async revealCreatedPath(
         destinationPath: string,
         successMessage: string
@@ -4309,6 +4649,58 @@ export class SvnRepository implements vscode.Disposable {
         ].join("\n");
 
         await this.openTextPreview(summarize ? "plaintext" : "diff", content);
+    }
+
+    private buildPatchRunSummaryContent(options: {
+        readonly patchFilePath: string;
+        readonly reverse: boolean;
+        readonly stripCount: number;
+        readonly result: SvnPatchRunResult;
+        readonly dryRun: boolean;
+    }): string {
+        const summary = summarizeSvnPatchOutput(options.result.output);
+        const status = options.dryRun
+            ? options.result.succeeded
+                ? this.i18n.t("patchDryRunSucceededStatus")
+                : this.i18n.t("patchDryRunFailedStatus")
+            : options.result.succeeded
+              ? summary.hasWarnings
+                    ? this.i18n.t("patchApplyWarningsStatus")
+                    : this.i18n.t("patchApplySucceededStatus")
+              : this.i18n.t("patchApplyFailedStatus");
+        const warningLines: string[] = [];
+        if (summary.hasConflicts) {
+            warningLines.push(this.i18n.t("patchSummaryConflictWarning"));
+        }
+        if (summary.hasOffsets) {
+            warningLines.push(this.i18n.t("patchSummaryOffsetWarning"));
+        }
+        if (summary.hasRejects) {
+            warningLines.push(this.i18n.t("patchSummaryRejectWarning"));
+        }
+
+        return [
+            `${this.i18n.t("patchFileLabel")}: ${options.patchFilePath}`,
+            `${this.i18n.t("workingCopyLabel")}: ${this.rootPath}`,
+            `${this.i18n.t("patchApplyModeLabel")}: ${options.reverse ? this.i18n.t("applyPatchReverseLabel") : this.i18n.t("applyPatchForwardLabel")}`,
+            `${this.i18n.t("patchStripCountLabel")}: ${options.stripCount}`,
+            this.i18n.t("statusLabel", { status }),
+            "",
+            `${this.i18n.t("patchActionSummaryLabel")}:`,
+            ...(["A", "D", "U", "G", "C"] as const).map(
+                (actionCode) =>
+                    `${actionCode}: ${summary.actionCounts[actionCode]}`
+            ),
+            ...(warningLines.length > 0
+                ? ["", `${this.i18n.t("warningLabel")}:`, ...warningLines]
+                : []),
+            "",
+            `${this.i18n.t("patchRawOutputLabel")}:`,
+            ...(summary.lines.length > 0 ? summary.lines : [this.i18n.t("patchNoOutputReported")]),
+            ...(options.result.errorMessage && options.result.errorMessage !== options.result.output
+                ? ["", `${this.i18n.t("errorOutputMessageLabel")}: ${options.result.errorMessage}`]
+                : []),
+        ].join("\n");
     }
 
     private async openTextPreview(language: string, content: string): Promise<void> {

@@ -746,7 +746,7 @@ import type {
                 return;
             }
 
-            if (type === "show-file-history" || type === "reveal-in-file-manager") {
+            if (type === "show-file-history" || type === "reveal-in-system-file-manager") {
                 vscode.postMessage({
                     type: type,
                     path: change.path,

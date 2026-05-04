@@ -14,7 +14,7 @@ SVN Tree adds a focused Subversion workflow to Visual Studio Code. It integrates
 - Built-in diff flows for working copy changes, incoming changes, file history, revision-to-revision comparison, and revision-to-working-copy comparison.
 - Dedicated history webview with search, filters, infinite scroll, changed-file trees, copy/export actions, and revision-level operations.
 - Dedicated repository browser webview with a file tree, current-directory and selected-entry details, local-folder import, and inline remote directory and file maintenance actions.
-- Repository tools for switching references, revision-graph inspection, branch and tag management, cleanup, blame, properties, locks, and changelists.
+- Repository tools for switching references, revision-graph inspection, branch and tag management, cleanup, blame, properties, locks, changelists, and patch workflows.
 - Dedicated `svn:ignore` and `svn:externals` editors, including structured externals editing for common definitions.
 - Runtime UI localization in English or Simplified Chinese.
 
@@ -38,19 +38,19 @@ If `svn` is unavailable, the extension stays inactive and shows a warning until 
 ## What You Can Do
 
 - Acquire and publish repository content: check out any absolute SVN repository URL to a new local folder at `HEAD` or a specific revision with selectable depth, or import an existing local folder into an absolute SVN repository URL without leaving VS Code.
-- Track working copy changes: refresh status, review diffs, update the working copy, set sparse depth on a working copy or path, commit the whole repository, commit selected paths, update selected paths, and run cleanup after interrupted operations.
-- Inspect history: open repository or file history, filter revisions by author, commit message, changed path, and date range, then compare revisions, copy commit messages, export files, or update and check out to a selected revision.
+- Track working copy changes: refresh status, review diffs, update the working copy, set sparse depth on a working copy or path, commit the whole repository, commit selected paths, update selected paths, export patch files, apply patch files with dry-run preview, and run cleanup after interrupted operations.
+- Inspect history: open repository or file history, filter revisions by author, commit message, changed path, and date range, then compare revisions, copy commit messages, export files or revision patches, or update and check out to a selected revision.
 - Browse repository structure: open a dedicated repository browser panel, move through repository directories in a tree view, inspect selected directories or files, import a local folder into the current repository path, export remote files, and run current-directory or selected-entry maintenance actions from the side panel.
 - Manage repository references: switch branch or tag, inspect repository layout in the revision graph, update to a specific revision, relocate a working copy, create or delete branches and tags from the working copy, and create, copy, move, or delete remote directories and files from the repository browser.
 - Work with paths and metadata: add, delete, revert, rename, ignore or unignore, edit dedicated `svn:ignore` rules or structured `svn:externals` definitions, lock or unlock, reveal in the file manager, inspect SVN info, edit properties, and open blame or annotate views.
-- Handle conflicts and changelists: mark conflicts as resolved, accept local, base, or incoming variants, postpone resolution, and add or remove files from SVN changelists.
+- Handle conflicts, changelists, and patch exchange: mark conflicts as resolved, accept local, base, or incoming variants, postpone resolution, add or remove files from SVN changelists, export working-copy patches, and apply incoming patch files.
 
 ## Commands
 
 Most commands are context-sensitive and are available from the Source Control view, file explorer context menus, or repository action menus.
 
-- Global and repository commands: `Checkout SVN Repository URL`, `Import Local Folder Into SVN Repository`, `Refresh SVN Status`, `Update SVN Working Copy`, `Commit SVN Changes`, `Open SVN History`, `Open SVN Revision Graph`, `More SVN Actions`, `Show SVN Output`, `Cleanup SVN Working Copy`, `Update Working Copy To Revision`, `Switch Branch Or Tag`, `Merge Revision Into Working Copy`, and `Relocate Working Copy`.
-- Path and change commands: `Open Diff`, `Open File`, `Open File History`, `Commit Selected Changes`, `Update Selected Paths`, `Update Selected Paths To Revision`, `Add Resource`, `Revert Resource`, `Delete Resource`, `Rename`, `Ignore Path`, `Unignore Path`, `Edit SVN Ignore Rules`, `Edit SVN Externals`, `Set SVN Depth`, `Lock`, `Unlock`, `Add To Changelist`, `Remove From Changelist`, and `Reveal In File Manager`.
+- Global and repository commands: `Checkout SVN Repository URL`, `Import Local Folder Into SVN Repository`, `Refresh SVN Status`, `Update SVN Working Copy`, `Commit SVN Changes`, `Open SVN History`, `Open SVN Revision Graph`, `More SVN Actions`, `Show SVN Output`, `Export Patch`, `Apply Patch To Working Copy`, `Cleanup SVN Working Copy`, `Update Working Copy To Revision`, `Switch Branch Or Tag`, `Merge Revision Into Working Copy`, and `Relocate Working Copy`.
+- Path and change commands: `Open Diff`, `Open File`, `Open File History`, `Commit Selected Changes`, `Update Selected Paths`, `Update Selected Paths To Revision`, `Add Resource`, `Revert Resource`, `Delete Resource`, `Rename`, `Ignore Path`, `Unignore Path`, `Edit SVN Ignore Rules`, `Edit SVN Externals`, `Set SVN Depth`, `Lock`, `Unlock`, `Add To Changelist`, `Remove From Changelist`, `Export Patch`, and `Reveal In File Manager`.
 - Metadata and repository tools: `Blame / Annotate`, `Show Properties`, `Edit Properties`, `Show SVN Info`, `Copy Repository URL`, `Copy Repository Path`, and `Repository Browser` with tree navigation, local-folder import, selected-entry file actions, and current-directory remote maintenance actions.
 - Branch, tag, and conflict commands: `Create Branch From Working Copy`, `Create Tag From Working Copy`, `Delete Branch / Tag`, `Mark Conflict As Resolved`, `Accept Local Version`, `Accept Base Version`, `Accept Incoming Version`, and `Postpone Conflict Resolution`.
 
