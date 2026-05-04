@@ -2236,8 +2236,15 @@ export class SvnRepository implements vscode.Disposable {
         await this.switchWorkingCopyToRepositoryPath(repositoryPath);
     }
 
-    public async openRepositoryBrowser(initialRepositoryPath?: string): Promise<void> {
-        await this.repositoryBrowserPanel.show(this, initialRepositoryPath);
+    public async openRepositoryBrowser(
+        initialRepositoryPath?: string,
+        selectedRepositoryPath?: string
+    ): Promise<void> {
+        await this.repositoryBrowserPanel.show(
+            this,
+            initialRepositoryPath,
+            selectedRepositoryPath
+        );
     }
 
     public async loadRepositoryBrowserData(

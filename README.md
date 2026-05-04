@@ -3,6 +3,7 @@
 SVN Tree adds a focused Subversion workflow to Visual Studio Code. It integrates SVN working copies into the Source Control view, keeps diffs inside the editor, and exposes repository-aware actions for day-to-day maintenance, history inspection, and conflict handling.
 
 ![SVN Tree preview](media/preview.png)
+![SVN Tree preview](media/repository_browser.png)
 
 ## Highlights
 
@@ -42,7 +43,7 @@ If `svn` is unavailable, the extension stays inactive and shows a warning until 
 - Inspect history: open repository or file history, filter revisions by author, commit message, changed path, and date range, then compare revisions, copy commit messages, export files or revision patches, or update and check out to a selected revision.
 - Browse repository structure: open a dedicated repository browser panel, move through repository directories in a tree view, inspect selected directories or files, import a local folder into the current repository path, export remote files, and run current-directory or selected-entry maintenance actions from the side panel.
 - Manage repository references: switch branch or tag, inspect repository layout in the revision graph, update to a specific revision, relocate a working copy, create or delete branches and tags from the working copy, and create, copy, move, or delete remote directories and files from the repository browser.
-- Work with paths and metadata: add, delete, revert, rename, ignore or unignore, edit dedicated `svn:ignore` rules or structured `svn:externals` definitions, lock or unlock, reveal in the file manager, inspect SVN info, edit properties, and open blame or annotate views.
+- Work with paths and metadata: add, delete, revert, rename, ignore or unignore, edit dedicated `svn:ignore` rules or structured `svn:externals` definitions, lock or unlock, reveal in the file manager, locate resources in the repository browser, edit properties, and open blame or annotate views.
 - Handle conflicts, changelists, and patch exchange: mark conflicts as resolved, accept local, base, or incoming variants, postpone resolution, add or remove files from SVN changelists, export working-copy patches, and apply incoming patch files.
 
 ## Commands
@@ -51,7 +52,7 @@ Most commands are context-sensitive and are available from the Source Control vi
 
 - Global and repository commands: `Checkout SVN Repository URL`, `Import Local Folder Into SVN Repository`, `Refresh SVN Status`, `Update SVN Working Copy`, `Commit SVN Changes`, `Open SVN History`, `Open SVN Revision Graph`, `More SVN Actions`, `Show SVN Output`, `Export Patch`, `Apply Patch To Working Copy`, `Cleanup SVN Working Copy`, `Update Working Copy To Revision`, `Switch Branch Or Tag`, `Merge Revision Into Working Copy`, and `Relocate Working Copy`.
 - Path and change commands: `Open Diff`, `Open File`, `Open File History`, `Commit Selected Changes`, `Update Selected Paths`, `Update Selected Paths To Revision`, `Add Resource`, `Revert Resource`, `Delete Resource`, `Rename`, `Ignore Path`, `Unignore Path`, `Edit SVN Ignore Rules`, `Edit SVN Externals`, `Set SVN Depth`, `Lock`, `Unlock`, `Add To Changelist`, `Remove From Changelist`, `Export Patch`, and `Reveal In File Manager`.
-- Metadata and repository tools: `Blame / Annotate`, `Show Properties`, `Edit Properties`, `Show SVN Info`, `Copy Repository URL`, `Copy Repository Path`, and `Repository Browser` with tree navigation, local-folder import, selected-entry file actions, and current-directory remote maintenance actions.
+- Metadata and repository tools: `Blame / Annotate`, `Show Properties`, `Edit Properties`, `Locate In Repository Browser`, `Copy Repository URL`, `Copy Repository Path`, and `Repository Browser` with tree navigation, local-folder import, selected-entry file actions, and current-directory remote maintenance actions.
 - Branch, tag, and conflict commands: `Create Branch From Working Copy`, `Create Tag From Working Copy`, `Delete Branch / Tag`, `Mark Conflict As Resolved`, `Accept Local Version`, `Accept Base Version`, `Accept Incoming Version`, and `Postpone Conflict Resolution`.
 
 ## Settings

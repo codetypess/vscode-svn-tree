@@ -1,6 +1,6 @@
 import * as vscode from "vscode";
 import { getHtmlLanguage } from "../i18n";
-import type { SvnNodeInfo, SvnPropertyEntry } from "../svn/svn-types";
+import type { SvnPropertyEntry } from "../svn/svn-types";
 import { getDisplayLocale, getI18n } from "../vscode-i18n";
 
 function escapeHtml(value: string): string {
@@ -19,13 +19,6 @@ interface InspectorDetailItem {
     readonly multiline?: boolean;
 }
 
-interface SvnInspectorPathInfoView {
-    readonly kind: "path-info";
-    readonly rootPath: string;
-    readonly displayPath: string;
-    readonly nodeInfo: SvnNodeInfo;
-}
-
 interface SvnInspectorPropertiesView {
     readonly kind: "properties";
     readonly rootPath: string;
@@ -35,7 +28,7 @@ interface SvnInspectorPropertiesView {
     readonly properties: readonly SvnPropertyEntry[];
 }
 
-type SvnInspectorView = SvnInspectorPathInfoView | SvnInspectorPropertiesView;
+type SvnInspectorView = SvnInspectorPropertiesView;
 
 interface SvnInspectorPanelState {
     readonly panel: vscode.WebviewPanel;
@@ -58,10 +51,6 @@ export class SvnInspectorPanel implements vscode.Disposable {
         }
 
         this.panels.clear();
-    }
-
-    public async showPathInfo(view: SvnInspectorPathInfoView): Promise<void> {
-        await this.show(this.getPanelKey(view), view);
     }
 
     public async showProperties(view: SvnInspectorPropertiesView): Promise<void> {
@@ -115,11 +104,7 @@ export class SvnInspectorPanel implements vscode.Disposable {
     }
 
     private getPanelTitle(view: SvnInspectorView): string {
-        const actionLabel =
-            view.kind === "properties"
-                ? getI18n().t("showPropertiesActionLabel")
-                : getI18n().t("showPathInfoActionLabel");
-        return `${actionLabel}: ${view.displayPath}`;
+        return `${getI18n().t("showPropertiesActionLabel")}: ${view.displayPath}`;
     }
 
     private updatePanel(panel: vscode.WebviewPanel, view: SvnInspectorView): void {
@@ -131,10 +116,7 @@ export class SvnInspectorPanel implements vscode.Disposable {
         const stylesUri = webview.asWebviewUri(
             vscode.Uri.joinPath(this.extensionUri, "media", "svn-inspector-panel.css")
         );
-        const bodyMarkup =
-            view.kind === "properties"
-                ? this.renderPropertiesView(view)
-                : this.renderPathInfoView(view);
+        const bodyMarkup = this.renderPropertiesView(view);
 
         return `<!DOCTYPE html>
 <html lang="${escapeHtml(getHtmlLanguage(getDisplayLocale()))}">
@@ -152,121 +134,6 @@ export class SvnInspectorPanel implements vscode.Disposable {
     ${bodyMarkup}
 </body>
 </html>`;
-    }
-
-    private renderPathInfoView(view: SvnInspectorPathInfoView): string {
-        const i18n = getI18n();
-        const summaryItems: InspectorDetailItem[] = [
-            {
-                label: i18n.t("infoPathLabel"),
-                value: view.nodeInfo.absolutePath,
-                tone: "code",
-                multiline: true,
-            },
-            {
-                label: i18n.t("infoRepositoryPathLabel"),
-                value: view.nodeInfo.repositoryRelativePath,
-                tone: "code",
-            },
-            {
-                label: i18n.t("infoUrlLabel"),
-                value: view.nodeInfo.url,
-                tone: "code",
-                multiline: true,
-            },
-            {
-                label: i18n.t("infoRepositoryRootLabel"),
-                value: view.nodeInfo.repositoryRoot,
-                tone: "code",
-                multiline: true,
-            },
-        ];
-
-        if (view.nodeInfo.workingCopyRoot) {
-            summaryItems.push({
-                label: i18n.t("infoWorkingCopyRootLabel"),
-                value: view.nodeInfo.workingCopyRoot,
-                tone: "code",
-                multiline: true,
-            });
-        }
-
-        const factItems: InspectorDetailItem[] = [
-            {
-                label: i18n.t("infoKindLabel"),
-                value: i18n.formatNodeKind(view.nodeInfo.kind),
-            },
-        ];
-
-        if (view.nodeInfo.revision) {
-            factItems.push({
-                label: i18n.t("infoRevisionLabel"),
-                value: `r${view.nodeInfo.revision}`,
-                tone: "code",
-            });
-        }
-
-        if (view.nodeInfo.committedRevision) {
-            factItems.push({
-                label: i18n.t("infoLastChangedRevisionLabel"),
-                value: `r${view.nodeInfo.committedRevision}`,
-                tone: "code",
-            });
-        }
-
-        if (view.nodeInfo.author) {
-            factItems.push({
-                label: i18n.t("infoLastChangedAuthorLabel"),
-                value: view.nodeInfo.author,
-            });
-        }
-
-        if (view.nodeInfo.date) {
-            factItems.push({
-                label: i18n.t("infoLastChangedDateLabel"),
-                value: view.nodeInfo.date,
-            });
-        }
-
-        if (view.nodeInfo.lockOwner) {
-            factItems.push({
-                label: i18n.t("infoLockOwnerLabel"),
-                value: view.nodeInfo.lockOwner,
-            });
-        }
-
-        if (view.nodeInfo.lockCreated) {
-            factItems.push({
-                label: i18n.t("infoLockCreatedLabel"),
-                value: view.nodeInfo.lockCreated,
-            });
-        }
-
-        if (view.nodeInfo.lockComment) {
-            factItems.push({
-                label: i18n.t("infoLockCommentLabel"),
-                value: view.nodeInfo.lockComment,
-                multiline: true,
-            });
-        }
-
-        return this.renderPage({
-            title: i18n.t("showPathInfoActionLabel"),
-            subtitle: view.displayPath,
-            content: `
-                <section class="surface summary-surface">
-                    ${this.renderDetailItems(summaryItems)}
-                </section>
-                <section class="section">
-                    <div class="section-header">
-                        <h2>${escapeHtml(i18n.t("showPathInfoActionLabel"))}</h2>
-                    </div>
-                    <div class="fact-grid">
-                        ${this.renderFactItems(factItems)}
-                    </div>
-                </section>
-            `,
-        });
     }
 
     private renderPropertiesView(view: SvnInspectorPropertiesView): string {

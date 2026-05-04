@@ -64,7 +64,7 @@ Users browse repository paths and references, then:
 - Import a local folder into the current repository path.
 - Create, copy, move, or delete remote directories from the browser when the target path is safe to mutate.
 - Export, copy, move, or delete remote files from the browser.
-- Inspect path info and properties.
+- Locate resources in the repository browser and inspect properties.
 - Open blame output or text previews.
 - Copy repository URLs or paths.
 - Open revision graph views.

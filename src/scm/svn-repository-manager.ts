@@ -406,7 +406,7 @@ export class SvnRepositoryManager implements vscode.Disposable {
             },
             {
                 command: "svn-tree.show-path-info",
-                run: (arg) => this.showPathInfo(arg),
+                run: (arg) => this.locateInRepositoryBrowser(arg),
             },
             {
                 command: "svn-tree.copy-repository-url",
@@ -1279,15 +1279,13 @@ export class SvnRepositoryManager implements vscode.Disposable {
         }
     }
 
-    private async showPathInfo(arg: unknown): Promise<void> {
-        await this.runForResolvedNodeInfoTarget(arg, async ({ nodeInfo, displayPath }) => {
-            await this.inspectorPanel.showPathInfo({
-                kind: "path-info",
-                rootPath: nodeInfo.workingCopyRoot ?? nodeInfo.absolutePath,
-                displayPath,
-                nodeInfo,
-            });
-            void vscode.window.setStatusBarMessage(getI18n().t("openedPathInfoStatus"), 2000);
+    private async locateInRepositoryBrowser(arg: unknown): Promise<void> {
+        await this.runForResolvedNodeInfoTarget(arg, async ({ target, nodeInfo }) => {
+            await this.openRepositoryBrowserForTarget(target, nodeInfo);
+            void vscode.window.setStatusBarMessage(
+                getI18n().t("locatedInRepositoryBrowserStatus"),
+                2000
+            );
         });
     }
 
@@ -1557,12 +1555,9 @@ export class SvnRepositoryManager implements vscode.Disposable {
         await this.runForOptionalPathTargetOrRepository(
             arg,
             async (target) => {
-                const nodeInfo = await this.resolveNodeInfo(target);
-                const repositoryPath = target.repository.resolveRepositoryPath(target.uri.fsPath);
-                await target.repository.openRepositoryBrowser(
-                    nodeInfo?.kind === "file"
-                        ? nodePath.posix.dirname(repositoryPath).replace(/^$/, "/")
-                        : repositoryPath
+                await this.openRepositoryBrowserForTarget(
+                    target,
+                    await this.resolveNodeInfo(target)
                 );
             },
             (repository) => repository.openRepositoryBrowser()
@@ -2751,6 +2746,33 @@ export class SvnRepositoryManager implements vscode.Disposable {
         }
 
         return undefined;
+    }
+
+    private async openRepositoryBrowserForTarget(
+        target: ResolvedPathTarget,
+        nodeInfo?: SvnNodeInfo
+    ): Promise<void> {
+        const repositoryPath = target.repository.resolveRepositoryPath(target.uri.fsPath);
+        const targetKind =
+            nodeInfo?.kind ??
+            (target.resource && target.resource.contextValue !== "svn-unversioned"
+                ? target.resource.status.kind
+                : undefined);
+
+        if (targetKind === "file") {
+            await target.repository.openRepositoryBrowser(
+                nodePath.posix.dirname(repositoryPath),
+                repositoryPath
+            );
+            return;
+        }
+
+        if (targetKind === "dir") {
+            await target.repository.openRepositoryBrowser(repositoryPath);
+            return;
+        }
+
+        await target.repository.openRepositoryBrowser(nodePath.posix.dirname(repositoryPath));
     }
 
     private async resolveNodeInfoOrThrow(target: ResolvedPathTarget): Promise<SvnNodeInfo> {

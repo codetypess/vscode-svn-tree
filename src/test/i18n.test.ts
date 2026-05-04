@@ -63,7 +63,10 @@ test("createI18n returns repository action prompts", () => {
     assert.equal(english.t("changelistLabel", { name: "feature-a" }), "Changelist: feature-a");
     assert.equal(english.t("renamePathActionLabel"), "Rename");
     assert.equal(english.t("lockPathActionLabel"), "Lock");
-    assert.equal(english.t("showPathInfoActionLabel"), "Show SVN Info");
+    assert.equal(
+        english.t("locatedInRepositoryBrowserStatus"),
+        "Located in repository browser"
+    );
     assert.equal(english.t("showBlameActionLabel"), "Blame / Annotate");
     assert.equal(english.t("showBlameOutputActionLabel"), "Show Blame In Output");
     assert.equal(english.t("inlineBlameEnabledStatus"), "Inline blame enabled");
@@ -171,6 +174,7 @@ test("createI18n returns repository action prompts", () => {
     assert.equal(chinese.t("editPropertyActionLabel"), "编辑属性");
     assert.equal(chinese.t("editExternalsActionLabel"), "编辑 SVN Externals");
     assert.equal(chinese.t("setDepthActionLabel"), "设置 SVN Depth");
+    assert.equal(chinese.t("locatedInRepositoryBrowserStatus"), "已在仓库浏览器中定位");
     assert.equal(chinese.t("depthInfinityLabel"), "完整递归");
     assert.equal(chinese.t("showPropertiesActionLabel"), "显示属性");
     assert.equal(chinese.t("showBlameOutputActionLabel"), "在输出中显示 blame");

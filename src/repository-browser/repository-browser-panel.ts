@@ -33,6 +33,7 @@ interface RepositoryBrowserPanelState {
     panel: vscode.WebviewPanel;
     repositoryRootPath: string;
     currentRepositoryPath: string;
+    pendingSelectedRepositoryPath?: string;
 }
 
 export class RepositoryBrowserPanel implements vscode.Disposable {
@@ -53,12 +54,17 @@ export class RepositoryBrowserPanel implements vscode.Disposable {
         this.panels.clear();
     }
 
-    public async show(repository: SvnRepository, repositoryPath?: string): Promise<void> {
+    public async show(
+        repository: SvnRepository,
+        repositoryPath?: string,
+        selectedRepositoryPath?: string
+    ): Promise<void> {
         const currentRepositoryPath = repositoryPath ?? repository.info.repositoryRelativePath;
         const existingState = this.panels.get(repository.rootPath);
 
         if (existingState) {
             existingState.currentRepositoryPath = currentRepositoryPath;
+            existingState.pendingSelectedRepositoryPath = selectedRepositoryPath;
             this.updatePanelTitle(existingState.panel, currentRepositoryPath);
             existingState.panel.reveal(vscode.ViewColumn.Active);
             await this.pushData(existingState, repository);
@@ -91,6 +97,7 @@ export class RepositoryBrowserPanel implements vscode.Disposable {
             panel,
             repositoryRootPath: repository.rootPath,
             currentRepositoryPath,
+            pendingSelectedRepositoryPath: selectedRepositoryPath,
         };
         this.panels.set(repository.rootPath, state);
         this.updatePanelTitle(panel, currentRepositoryPath);
@@ -234,13 +241,18 @@ export class RepositoryBrowserPanel implements vscode.Disposable {
         state: RepositoryBrowserPanelState,
         repository: SvnRepository
     ): Promise<void> {
+        const selectedRepositoryPath = state.pendingSelectedRepositoryPath;
         const browserData = await repository.loadRepositoryBrowserData(state.currentRepositoryPath);
         state.currentRepositoryPath = browserData.currentRepositoryPath;
         this.updatePanelTitle(state.panel, browserData.currentRepositoryPath);
         await state.panel.webview.postMessage({
             type: "browser-data",
-            payload: browserData,
+            payload: {
+                ...browserData,
+                selectedRepositoryPath,
+            },
         } satisfies RepositoryBrowserResponseMessage);
+        state.pendingSelectedRepositoryPath = undefined;
     }
 
     private async pushDirectoryData(

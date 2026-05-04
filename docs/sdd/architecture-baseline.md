@@ -64,7 +64,7 @@ Responsibility:
 
 - Convert SVN status into SCM resource groups.
 - Provide repository-path utilities.
-- Format blame, property, and path-info output.
+- Format blame and property output.
 - Support changelist, property, repository browser, and revision-graph helper logic.
 
 ### History Webview

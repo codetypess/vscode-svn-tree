@@ -996,6 +996,15 @@ function resolveRepositoryBrowserNavigationPath(value: string): string | undefin
                     }
                 }
 
+                const nextSelectedRepositoryPath =
+                    payload.selectedRepositoryPath !== undefined
+                        ? payload.selectedRepositoryPath === payload.currentRepositoryPath
+                            ? undefined
+                            : payload.selectedRepositoryPath
+                        : previous.selectedRepositoryPath === previous.currentRepositoryPath
+                          ? undefined
+                          : previous.selectedRepositoryPath;
+
                 return {
                     ...previous,
                     repositoryLabel: payload.repositoryLabel,
@@ -1008,10 +1017,7 @@ function resolveRepositoryBrowserNavigationPath(value: string): string | undefin
                     breadcrumbs: payload.breadcrumbs,
                     currentActions: payload.currentActions,
                     entries: payload.entries,
-                    selectedRepositoryPath:
-                        previous.selectedRepositoryPath === previous.currentRepositoryPath
-                            ? undefined
-                            : previous.selectedRepositoryPath,
+                    selectedRepositoryPath: nextSelectedRepositoryPath,
                     isLoading: false,
                     error: undefined,
                     directoryDataByPath: nextDirectoryDataByPath,

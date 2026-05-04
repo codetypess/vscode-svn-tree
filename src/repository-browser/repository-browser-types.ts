@@ -20,6 +20,7 @@ export interface RepositoryBrowserBootstrap {
 export interface RepositoryBrowserDataPayload extends RepositoryBrowserViewModel {
     repositoryLabel: string;
     rootPath: string;
+    selectedRepositoryPath?: string;
 }
 
 export interface RepositoryBrowserErrorPayload {
