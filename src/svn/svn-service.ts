@@ -18,6 +18,7 @@ import {
     parseStatusXml,
 } from "./svn-xml-parser";
 import type {
+    SvnConflictAcceptOption,
     SvnCheckoutOptions,
     SvnHistoryFilters,
     SvnLogEntry,
@@ -51,18 +52,9 @@ interface RunSvnOptions {
     actionName?: string;
 }
 
-type SvnResolveAcceptOption =
-    | "working"
-    | "base"
-    | "mine-conflict"
-    | "theirs-conflict"
-    | "mine-full"
-    | "theirs-full"
-    | "postpone";
-
 interface SvnMergeRunOptions {
     readonly dryRun?: boolean;
-    readonly accept?: SvnResolveAcceptOption;
+    readonly accept?: SvnConflictAcceptOption;
 }
 
 interface SvnLogQueryResult {
@@ -333,18 +325,9 @@ export class SvnService {
         paths?: string[],
         options: SvnUpdateOptions = {}
     ): Promise<void> {
-        const targets = this.toRelativeTargets(rootPath, paths);
-        const args = ["update"];
-        if (options.revision) {
-            args.push("-r", options.revision);
-        }
-
-        if (options.depth) {
-            args.push(options.setDepth ? "--set-depth" : "--depth", options.depth);
-        }
-
-        args.push(...targets);
-        await this.runWithoutOutput(args, { cwd: rootPath });
+        await this.runWithoutOutput(this.buildUpdateArgs(rootPath, paths, options), {
+            cwd: rootPath,
+        });
     }
 
     public async blame(rootPath: string, targetPath: string): Promise<string> {
@@ -583,6 +566,25 @@ export class SvnService {
         return args;
     }
 
+    private buildUpdateArgs(
+        rootPath: string,
+        paths?: string[],
+        options: SvnUpdateOptions = {}
+    ): string[] {
+        const targets = this.toRelativeTargets(rootPath, paths);
+        const args = ["update", "--accept", options.accept ?? "postpone"];
+        if (options.revision) {
+            args.push("-r", options.revision);
+        }
+
+        if (options.depth) {
+            args.push(options.setDepth ? "--set-depth" : "--depth", options.depth);
+        }
+
+        args.push(...targets);
+        return args;
+    }
+
     public async lock(rootPath: string, paths: string[]): Promise<void> {
         const targets = this.toRelativeTargets(rootPath, paths);
         await this.runWithoutOutput(["lock", ...targets], { cwd: rootPath });
@@ -618,7 +620,7 @@ export class SvnService {
     public async resolve(
         rootPath: string,
         paths: string[],
-        accept: SvnResolveAcceptOption
+        accept: SvnConflictAcceptOption
     ): Promise<void> {
         const targets = this.toRelativeTargets(rootPath, paths);
         const args = ["resolve", "--accept", accept, ...targets];

@@ -18,11 +18,20 @@ export type SvnWorkingCopyStatus =
 export type SvnRepositoryStatus = "added" | "deleted" | "modified" | "none" | "replaced";
 export type SvnDepth = "empty" | "files" | "immediates" | "infinity" | "exclude";
 export type SvnCheckoutDepth = Exclude<SvnDepth, "exclude">;
+export type SvnConflictAcceptOption =
+    | "working"
+    | "base"
+    | "mine-conflict"
+    | "theirs-conflict"
+    | "mine-full"
+    | "theirs-full"
+    | "postpone";
 
 export interface SvnUpdateOptions {
     revision?: string;
     depth?: SvnDepth;
     setDepth?: boolean;
+    accept?: SvnConflictAcceptOption;
 }
 
 export interface SvnCheckoutOptions {
