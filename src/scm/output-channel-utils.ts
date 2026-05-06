@@ -1,5 +1,7 @@
 import type * as vscode from "vscode";
 
+const repositoryConnectionErrorPattern = /\bUnable to connect to a re(?:s)?pository\b/i;
+
 export function appendOutputSection(
     outputChannel: vscode.OutputChannel,
     header: string,
@@ -30,6 +32,40 @@ export function buildErrorOutputLines(
     const lines = [`${labels.timeLabel}: ${timestamp.toISOString()}`];
     appendErrorDetails(lines, error, labels);
     return lines;
+}
+
+export function shouldOnlyLogErrorToOutput(error: unknown): boolean {
+    let currentError = error;
+    const visited = new Set<unknown>();
+
+    while (currentError !== undefined && currentError !== null && !visited.has(currentError)) {
+        visited.add(currentError);
+
+        if (currentError instanceof Error) {
+            if (repositoryConnectionErrorPattern.test(currentError.message)) {
+                return true;
+            }
+
+            const outputExcerpt = (currentError as Error & { outputExcerpt?: unknown }).outputExcerpt;
+            if (
+                typeof outputExcerpt === "string" &&
+                repositoryConnectionErrorPattern.test(outputExcerpt)
+            ) {
+                return true;
+            }
+
+            currentError = (currentError as Error & { cause?: unknown }).cause;
+            continue;
+        }
+
+        if (typeof currentError === "string") {
+            return repositoryConnectionErrorPattern.test(currentError);
+        }
+
+        break;
+    }
+
+    return false;
 }
 
 function appendErrorDetails(

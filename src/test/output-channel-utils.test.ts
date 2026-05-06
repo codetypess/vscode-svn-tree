@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { buildErrorOutputLines } from "../scm/output-channel-utils";
+import { buildErrorOutputLines, shouldOnlyLogErrorToOutput } from "../scm/output-channel-utils";
 
 const errorOutputLabels = {
     timeLabel: "Time",
@@ -49,4 +49,24 @@ test("buildErrorOutputLines formats non-Error values", () => {
             "Value: plain failure",
         ]
     );
+});
+
+test("shouldOnlyLogErrorToOutput matches repository connection failures", () => {
+    assert.equal(
+        shouldOnlyLogErrorToOutput(
+            new Error("svn: E170013: Unable to connect to a repository at URL 'https://example.test'")
+        ),
+        true
+    );
+
+    assert.equal(
+        shouldOnlyLogErrorToOutput(
+            new Error("svn: E170013: Unable to connect to a respository at URL 'https://example.test'")
+        ),
+        true
+    );
+});
+
+test("shouldOnlyLogErrorToOutput ignores unrelated errors", () => {
+    assert.equal(shouldOnlyLogErrorToOutput(new Error("svn status failed")), false);
 });

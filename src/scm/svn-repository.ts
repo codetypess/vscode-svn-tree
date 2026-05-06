@@ -46,7 +46,11 @@ import type {
 } from "../svn/svn-types";
 import type { MessageKey } from "../i18n";
 import { getI18n } from "../vscode-i18n";
-import { appendOutputSection, buildErrorOutputLines } from "./output-channel-utils";
+import {
+    appendOutputSection,
+    buildErrorOutputLines,
+    shouldOnlyLogErrorToOutput,
+} from "./output-channel-utils";
 import { parseBlameLines, type ParsedBlameLine } from "./svn-blame-utils";
 import { isCommittableStatus } from "./commit-utils";
 import { getRelatedConflictPath } from "./conflict-artifact";
@@ -5485,6 +5489,10 @@ export class SvnRepository implements vscode.Disposable {
         );
 
         const message = error instanceof Error ? error.message : String(error);
+        if (shouldOnlyLogErrorToOutput(error)) {
+            return;
+        }
+
         const showOutputAction = this.i18n.t("showOutputActionLabel");
         void vscode.window.showErrorMessage(message, showOutputAction).then((selection) => {
             if (selection === showOutputAction) {

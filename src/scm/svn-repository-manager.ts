@@ -6,7 +6,11 @@ import { RevisionGraphPanel } from "../revision-graph/revision-graph-panel";
 import { normalizeFileManagerPlatform, type MessageKey } from "../i18n";
 import type { SvnNodeInfo, SvnWorkingCopyInfo } from "../svn/svn-types";
 import { getI18n } from "../vscode-i18n";
-import { appendOutputSection, buildErrorOutputLines } from "./output-channel-utils";
+import {
+    appendOutputSection,
+    buildErrorOutputLines,
+    shouldOnlyLogErrorToOutput,
+} from "./output-channel-utils";
 import {
     buildQuickPickActionCategories,
     type QuickPickActionCategoryDefinition,
@@ -1870,6 +1874,10 @@ export class SvnRepositoryManager implements vscode.Disposable {
         );
 
         const message = error instanceof Error ? error.message : String(error);
+        if (shouldOnlyLogErrorToOutput(error)) {
+            return;
+        }
+
         const showOutputAction = i18n.t("showOutputActionLabel");
         void vscode.window.showErrorMessage(message, showOutputAction).then((selection) => {
             if (selection === showOutputAction) {
