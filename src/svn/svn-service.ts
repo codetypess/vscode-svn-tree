@@ -50,6 +50,7 @@ interface RunSvnOptions {
     captureOutput?: boolean;
     executable?: "svn" | "svnmucc";
     actionName?: string;
+    cancellationToken?: vscode.CancellationToken;
 }
 
 interface SvnMergeRunOptions {
@@ -323,10 +324,12 @@ export class SvnService {
     public async update(
         rootPath: string,
         paths?: string[],
-        options: SvnUpdateOptions = {}
+        options: SvnUpdateOptions = {},
+        runOptions: { cancellationToken?: vscode.CancellationToken } = {}
     ): Promise<void> {
         await this.runWithoutOutput(this.buildUpdateArgs(rootPath, paths, options), {
             cwd: rootPath,
+            cancellationToken: runOptions.cancellationToken,
         });
     }
 
@@ -741,6 +744,10 @@ export class SvnService {
         args: string[],
         options: RunSvnOptions = {}
     ): Promise<{ stdout: string; stderr: string }> {
+        if (options.cancellationToken?.isCancellationRequested) {
+            throw new vscode.CancellationError();
+        }
+
         const totalAttempts = Math.max(1, (options.retryCount ?? 0) + 1);
         const executable = options.executable ?? "svn";
         const actionName = options.actionName ?? args[0] ?? "command";
@@ -756,6 +763,10 @@ export class SvnService {
             try {
                 return await this.spawnProcess(executable, args, options, timeoutMs);
             } catch (error) {
+                if (this.isCancellationError(error)) {
+                    throw error;
+                }
+
                 const message = this.renderError(executable, error, args, timeoutMs);
                 const canRetry = attempt < totalAttempts && this.shouldRetry(error, timeoutMs);
                 const attemptMessage =
@@ -812,9 +823,11 @@ export class SvnService {
             let stderr = "";
             let retainedOutput = "";
             let timedOut = false;
+            let cancelled = false;
             let finished = false;
             let killTimer: NodeJS.Timeout | undefined;
             let forceKillTimer: NodeJS.Timeout | undefined;
+            let cancellationSubscription: vscode.Disposable | undefined;
 
             child.stdout.setEncoding("utf8");
             child.stderr.setEncoding("utf8");
@@ -827,6 +840,8 @@ export class SvnService {
                 if (forceKillTimer) {
                     clearTimeout(forceKillTimer);
                 }
+
+                cancellationSubscription?.dispose();
             };
 
             const finish = (handler: () => void): void => {
@@ -837,6 +852,26 @@ export class SvnService {
                 finished = true;
                 cleanup();
                 handler();
+            };
+
+            const terminateChild = (reason: "cancelled" | "timed-out"): void => {
+                if (finished || child.exitCode !== null || child.signalCode !== null) {
+                    return;
+                }
+
+                if (reason === "cancelled") {
+                    cancelled = true;
+                } else {
+                    timedOut = true;
+                }
+
+                child.kill("SIGTERM");
+
+                if (!forceKillTimer) {
+                    forceKillTimer = setTimeout(() => {
+                        child.kill("SIGKILL");
+                    }, 1000);
+                }
             };
 
             child.stdout.on("data", (chunk: string) => {
@@ -869,6 +904,11 @@ export class SvnService {
 
             child.once("close", (code, signal) => {
                 finish(() => {
+                    if (cancelled) {
+                        reject(new vscode.CancellationError());
+                        return;
+                    }
+
                     if (code === 0 && signal === null) {
                         resolve({ stdout, stderr });
                         return;
@@ -886,14 +926,19 @@ export class SvnService {
                 });
             });
 
+            if (options.cancellationToken) {
+                if (options.cancellationToken.isCancellationRequested) {
+                    terminateChild("cancelled");
+                } else {
+                    cancellationSubscription = options.cancellationToken.onCancellationRequested(() => {
+                        terminateChild("cancelled");
+                    });
+                }
+            }
+
             if (typeof timeoutMs === "number" && timeoutMs > 0) {
                 killTimer = setTimeout(() => {
-                    timedOut = true;
-                    child.kill("SIGTERM");
-
-                    forceKillTimer = setTimeout(() => {
-                        child.kill("SIGKILL");
-                    }, 1000);
+                    terminateChild("timed-out");
                 }, timeoutMs);
             }
         });
@@ -975,6 +1020,14 @@ export class SvnService {
         };
 
         return timedOutError.killed === true || /timed out/i.test(error.message);
+    }
+
+    private isCancellationError(error: unknown): boolean {
+        if (error instanceof vscode.CancellationError) {
+            return true;
+        }
+
+        return error instanceof Error && error.name === "Canceled";
     }
 
     private getHistoryLogTimeoutMs(

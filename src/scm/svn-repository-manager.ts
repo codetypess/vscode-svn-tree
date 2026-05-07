@@ -1860,6 +1860,10 @@ export class SvnRepositoryManager implements vscode.Disposable {
     }
 
     private showError(error: unknown): void {
+        if (error instanceof vscode.CancellationError) {
+            return;
+        }
+
         const i18n = getI18n();
         appendOutputSection(
             this.outputChannel,

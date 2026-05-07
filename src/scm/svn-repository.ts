@@ -142,6 +142,10 @@ interface RefreshOptions {
     allowWhileBusy?: boolean;
 }
 
+interface NotificationProgressOptions {
+    readonly cancellable?: boolean;
+}
+
 interface RepositoryMutationFinalizationOptions {
     readonly invalidateRevisionGraphCaches?: boolean;
     readonly clearCommitInput?: boolean;
@@ -591,13 +595,18 @@ export class SvnRepository implements vscode.Disposable {
         }
     }
 
-    private async runNotificationProgress<T>(title: string, action: () => Promise<T>): Promise<T> {
+    private async runNotificationProgress<T>(
+        title: string,
+        action: (token: vscode.CancellationToken) => Promise<T>,
+        options: NotificationProgressOptions = {}
+    ): Promise<T> {
         return vscode.window.withProgress(
             {
                 location: vscode.ProgressLocation.Notification,
                 title,
+                cancellable: options.cancellable ?? false,
             },
-            action
+            (_progress, token) => action(token)
         );
     }
 
@@ -671,13 +680,14 @@ export class SvnRepository implements vscode.Disposable {
             "update",
             this.i18n.t("updateWorkingCopyProgress", { label: this.label }),
             this.i18n.t("updateWorkingCopyCompleted", { label: this.label }),
-            async () => {
-                await this.svnService.update(this.rootPath, paths);
+            async (token) => {
+                await this.svnService.update(this.rootPath, paths, {}, { cancellationToken: token });
                 await this.finalizeRepositoryMutation({
                     refreshOptions: { forceRemote: true, allowWhileBusy: true },
                     refreshHistory: true,
                 });
-            }
+            },
+            { cancellable: true }
         );
     }
 
@@ -699,16 +709,19 @@ export class SvnRepository implements vscode.Disposable {
                 label: targetLabel,
                 depth: depthLabel,
             }),
-            async () => {
+            async (token) => {
                 await this.svnService.update(this.rootPath, selectedPaths, {
                     depth,
                     setDepth: true,
+                }, {
+                    cancellationToken: token,
                 });
                 await this.finalizeRepositoryMutation({
                     refreshOptions: { forceRemote: true, allowWhileBusy: true },
                     refreshHistory: true,
                 });
-            }
+            },
+            { cancellable: true }
         );
     }
 
@@ -952,15 +965,18 @@ export class SvnRepository implements vscode.Disposable {
                 label: this.label,
                 revision,
             }),
-            async () => {
+            async (token) => {
                 await this.svnService.update(this.rootPath, selectedPaths, {
                     revision: String(revision),
+                }, {
+                    cancellationToken: token,
                 });
                 await this.finalizeRepositoryMutation({
                     refreshOptions: { forceRemote: true, allowWhileBusy: true },
                     refreshHistory: true,
                 });
-            }
+            },
+            { cancellable: true }
         );
     }
 
@@ -1203,15 +1219,18 @@ export class SvnRepository implements vscode.Disposable {
                 label: this.label,
                 revision,
             }),
-            async () => {
+            async (token) => {
                 await this.svnService.update(this.rootPath, undefined, {
                     revision: String(revision),
+                }, {
+                    cancellationToken: token,
                 });
                 await this.finalizeRepositoryMutation({
                     refreshOptions: { forceRemote: true, allowWhileBusy: true },
                     refreshHistory: true,
                 });
-            }
+            },
+            { cancellable: true }
         );
     }
 
@@ -4764,7 +4783,8 @@ export class SvnRepository implements vscode.Disposable {
         operation: RepositoryUiOperation,
         progressTitle: string,
         completedMessage: string,
-        action: () => Promise<void>
+        action: (token: vscode.CancellationToken) => Promise<void>,
+        options: NotificationProgressOptions = {}
     ): Promise<void> {
         if (this.activeOperation) {
             void vscode.window.showInformationMessage(
@@ -4782,11 +4802,16 @@ export class SvnRepository implements vscode.Disposable {
         this.updateStatusBarCommands(this.remoteChangeCount);
 
         try {
-            await this.runNotificationProgress(progressTitle, async () => {
-                await action();
-            });
+            await this.runNotificationProgress(progressTitle, action, options);
 
             void vscode.window.showInformationMessage(completedMessage);
+        } catch (error) {
+            if (error instanceof vscode.CancellationError) {
+                this.queueRefresh({ forceRemote: true, allowWhileBusy: true });
+                return;
+            }
+
+            throw error;
         } finally {
             this.activeOperation = undefined;
             this.updateStatusBarCommands(this.remoteChangeCount);
