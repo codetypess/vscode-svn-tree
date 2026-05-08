@@ -67,7 +67,8 @@ Most commands are context-sensitive and are available from the Source Control vi
 
 ## Development
 
-- SDD baseline and spec template: [docs/sdd/README.md](docs/sdd/README.md)
+- SDD workflow: [docs/spec-driven-development.md](docs/spec-driven-development.md)
+- SDD baselines and spec index: [docs/sdd/README.md](docs/sdd/README.md)
 
 ## Notes
 

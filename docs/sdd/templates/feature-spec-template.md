@@ -1,56 +1,39 @@
-# Feature Spec Template
+# <Work Item Name>
 
-## Metadata
+Status: Draft
+Date: YYYY-MM-DD
+Owner: <name or team>
+Scope: <short boundary>
+Related issue: <optional>
 
-- Feature name:
-- Owner:
-- Date:
-- Status:
-- Related issue:
+## 1. Context
 
-## Summary
+Describe the current behavior, why the change is needed, and which constraints matter. Link the relevant baseline docs and nearby specs instead of re-discovering the product from scratch.
 
-Describe the feature in 2 to 4 sentences.
-
-## Problem Statement
-
-- What user problem does this solve?
-- What is broken, missing, or too costly in the current workflow?
-- Why should this be solved now?
-
-## Goals
+## 2. Goals
 
 - Goal:
 - Goal:
 
-## Non-Goals
+## 3. Non-Goals
 
 - Non-goal:
 - Non-goal:
 
-## Affected Workflow
+## 4. Current Behavior
 
-State which baseline workflow this feature extends:
+- User-facing behavior:
+- Technical behavior:
+- Known gap or failure mode:
 
-- Working copy maintenance
-- History inspection
-- Repository navigation
-- Reference and merge operations
-- Other:
-
-## User Stories
-
-- As a ..., I want ..., so that ...
-- As a ..., I want ..., so that ...
-
-## Proposed UX
+## 5. Proposed Behavior
 
 ### Entry Points
 
 - Command palette:
-- SCM title/menu:
+- SCM title or menus:
 - Resource context menu:
-- Webview action:
+- Webview or panel action:
 - Other:
 
 ### Happy Path
@@ -59,47 +42,34 @@ State which baseline workflow this feature extends:
 2. Step
 3. Step
 
-### Error And Edge Cases
+### Edge Cases
 
 - Case:
-- Expected behavior:
-
+  Expected behavior:
 - Case:
-- Expected behavior:
+  Expected behavior:
 
-## Functional Requirements
-
-- Requirement:
-- Requirement:
-
-## Out Of Scope
-
-- Item:
-- Item:
-
-## Command And Setting Impact
+## 6. Commands, Settings, Output, And Localization Impact
 
 - New commands:
 - Updated commands:
 - New settings:
 - Updated settings:
-
-## Localization Impact
-
+- Output or progress behavior:
 - New i18n keys:
 - Updated copy:
 
-## Technical Design
+## 7. Design
 
 ### Modules Affected
 
 - `src/...`
 - `src/...`
 
-### Proposed Changes
+### Key Decisions
 
-- Change:
-- Change:
+- Decision:
+- Decision:
 
 ### Data Or Message Flow
 
@@ -110,32 +80,28 @@ State which baseline workflow this feature extends:
 ### Alternatives Considered
 
 - Alternative:
-- Why rejected:
+  Why rejected:
 
-## Testing Plan
+## 8. Testing Plan
 
 - Unit tests:
 - Integration or command-path tests:
 - Manual verification:
 
-## Risks
+## 9. Acceptance Criteria
+
+- Criterion:
+- Criterion:
+
+## 10. Risks And Follow-Up
 
 - Risk:
-- Mitigation:
+  Mitigation:
+- Follow-up:
 
-## Rollout Notes
+## 11. Baseline Updates
 
-- Migration needed:
-- Backward compatibility concern:
-- Follow-up work:
+- Project baseline changes required:
+- Architecture baseline changes required:
 
-## Open Questions
-
-- Question:
-- Question:
-
-## Implementation Tasks
-
-- [ ] Task
-- [ ] Task
-- [ ] Task
+Create a sibling `tasks.md` file for the implementation checklist. That file should track phases, exit criteria, and completion state.
