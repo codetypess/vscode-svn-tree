@@ -4804,7 +4804,9 @@ export class SvnRepository implements vscode.Disposable {
         try {
             await this.runNotificationProgress(progressTitle, action, options);
 
-            void vscode.window.showInformationMessage(completedMessage);
+            this.showCompletedMessage(completedMessage, {
+                showOutputAction: operation === "update",
+            });
         } catch (error) {
             if (error instanceof vscode.CancellationError) {
                 this.queueRefresh({ forceRemote: true, allowWhileBusy: true });
@@ -5520,6 +5522,25 @@ export class SvnRepository implements vscode.Disposable {
 
         const showOutputAction = this.i18n.t("showOutputActionLabel");
         void vscode.window.showErrorMessage(message, showOutputAction).then((selection) => {
+            if (selection === showOutputAction) {
+                this.outputChannel.show(true);
+            }
+        });
+    }
+
+    private showCompletedMessage(
+        message: string,
+        options: {
+            readonly showOutputAction?: boolean;
+        } = {}
+    ): void {
+        if (!options.showOutputAction) {
+            void vscode.window.showInformationMessage(message);
+            return;
+        }
+
+        const showOutputAction = this.i18n.t("showOutputActionLabel");
+        void vscode.window.showInformationMessage(message, showOutputAction).then((selection) => {
             if (selection === showOutputAction) {
                 this.outputChannel.show(true);
             }
