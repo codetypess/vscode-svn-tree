@@ -56,3 +56,4 @@ Optional files:
 - [SVN Externals Editor](./2026-05-02-svn-externals-editor/spec.md)
 - [Patch Workflows](./2026-05-04-patch-workflows/spec.md)
 - [Repository SDD Mechanism](./2026-05-08-repository-sdd-mechanism/spec.md)
+- [Update Re-Click Output Access](./2026-05-08-update-notification-output-action/spec.md)

@@ -4787,6 +4787,11 @@ export class SvnRepository implements vscode.Disposable {
         options: NotificationProgressOptions = {}
     ): Promise<void> {
         if (this.activeOperation) {
+            if (operation === "update" && this.activeOperation === "update") {
+                this.outputChannel.show(true);
+                return;
+            }
+
             void vscode.window.showInformationMessage(
                 this.i18n.t("operationAlreadyRunning", {
                     action: this.i18n.t(
@@ -4803,10 +4808,7 @@ export class SvnRepository implements vscode.Disposable {
 
         try {
             await this.runNotificationProgress(progressTitle, action, options);
-
-            this.showCompletedMessage(completedMessage, {
-                showOutputAction: operation === "update",
-            });
+            this.showCompletedMessage(completedMessage);
         } catch (error) {
             if (error instanceof vscode.CancellationError) {
                 this.queueRefresh({ forceRemote: true, allowWhileBusy: true });
@@ -5528,23 +5530,8 @@ export class SvnRepository implements vscode.Disposable {
         });
     }
 
-    private showCompletedMessage(
-        message: string,
-        options: {
-            readonly showOutputAction?: boolean;
-        } = {}
-    ): void {
-        if (!options.showOutputAction) {
-            void vscode.window.showInformationMessage(message);
-            return;
-        }
-
-        const showOutputAction = this.i18n.t("showOutputActionLabel");
-        void vscode.window.showInformationMessage(message, showOutputAction).then((selection) => {
-            if (selection === showOutputAction) {
-                this.outputChannel.show(true);
-            }
-        });
+    private showCompletedMessage(message: string): void {
+        void vscode.window.showInformationMessage(message);
     }
 
     private async promptPropertyAction(

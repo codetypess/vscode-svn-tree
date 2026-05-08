@@ -1,8 +1,8 @@
 {
   "name": "svn-tree",
-  "displayName": "%displayName%",
-  "description": "%description%",
-  "version": "1.6.3",
+  "displayName": "SVN Tree",
+  "description": "SVN source control and history viewer for Visual Studio Code.",
+  "version": "1.6.4",
   "publisher": "codetypess",
   "license": "MIT",
   "icon": "media/icon.png",
