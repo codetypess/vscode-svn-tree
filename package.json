@@ -2,7 +2,7 @@
   "name": "svn-tree",
   "displayName": "SVN Tree",
   "description": "SVN source control and history viewer for Visual Studio Code.",
-  "version": "1.6.4",
+  "version": "1.6.5",
   "publisher": "codetypess",
   "license": "MIT",
   "icon": "media/icon.png",

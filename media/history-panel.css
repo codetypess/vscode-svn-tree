@@ -25,6 +25,9 @@
     --focus-border: var(--vscode-focusBorder, var(--graph-node));
     --row-hover: var(--vscode-list-hoverBackground, rgba(255, 255, 255, 0.04));
     --row-active: var(--vscode-list-inactiveSelectionBackground, rgba(255, 255, 255, 0.06));
+    --expanded-bg: var(--surface-bg);
+    --expanded-row-bg: var(--row-active);
+    --commit-row-horizontal-padding: 16px;
     --graph-node: var(--vscode-textLink-foreground, #3794ff);
     --graph-column-width: 56px;
     --graph-center: calc(var(--graph-column-width) / 2);
@@ -561,7 +564,7 @@ button.secondary:hover {
 }
 
 .commit-row {
-    padding: 0 16px;
+    padding: 0 var(--commit-row-horizontal-padding);
     min-height: 24px;
     cursor: pointer;
     transition: background-color 120ms ease;
@@ -572,11 +575,11 @@ button.secondary:hover {
 }
 
 .commit.expanded > .commit-row {
-    background: var(--row-active);
+    background: var(--expanded-row-bg);
 }
 
 .commit.expanded {
-    background: var(--details-bg);
+    background: transparent;
 }
 
 .graph-column {
@@ -727,8 +730,10 @@ button.secondary:hover {
 .details-row {
     display: grid;
     grid-template-columns: var(--graph-column-width) minmax(0, 1fr);
-    gap: 10px;
-    padding: 0 16px 0;
+    gap: 0;
+    padding: 0;
+    border-top: 1px solid color-mix(in srgb, var(--details-border) 74%, transparent);
+    border-bottom: 1px solid color-mix(in srgb, var(--details-border) 74%, transparent);
 }
 
 .details-rail {
@@ -738,7 +743,7 @@ button.secondary:hover {
 .details-rail::before {
     content: "";
     position: absolute;
-    left: var(--graph-center);
+    left: calc(var(--graph-center) + var(--commit-row-horizontal-padding));
     transform: translateX(-50%);
     top: 0;
     bottom: 0;
@@ -753,17 +758,14 @@ button.secondary:hover {
 
 .details-panel {
     display: grid;
-    grid-template-columns: minmax(300px, 0.95fr) minmax(420px, 1.25fr);
-    border: 1px solid var(--details-border);
-    border-radius: 10px;
-    background: color-mix(in srgb, var(--details-bg) 92%, var(--surface-bg));
-    box-shadow: inset 0 1px 0 color-mix(in srgb, white 4%, transparent);
-    overflow: hidden;
+    grid-template-columns: minmax(208px, 0.6fr) minmax(0, 1.4fr);
+    background: transparent;
+    border-right: 1px solid color-mix(in srgb, var(--details-border) 74%, transparent);
 }
 
 .details-summary-panel {
-    padding: 14px 16px 16px;
-    border-right: 1px solid var(--details-border);
+    padding: 14px 16px 16px 32px;
+    border-right: 1px solid color-mix(in srgb, var(--details-border) 72%, transparent);
 }
 
 .details-title-row {
@@ -1084,7 +1086,7 @@ button.secondary:hover {
     }
 
     .details-panel {
-        grid-template-columns: minmax(260px, 0.9fr) minmax(360px, 1.1fr);
+        grid-template-columns: minmax(196px, 0.56fr) minmax(0, 1.44fr);
     }
 
     .filter-grid {
@@ -1125,8 +1127,9 @@ button.secondary:hover {
     }
 
     .details-summary-panel {
+        padding-left: 16px;
         border-right: 0;
-        border-bottom: 1px solid var(--details-border);
+        border-bottom: 1px solid color-mix(in srgb, var(--details-border) 72%, transparent);
     }
 
     .change-body {
