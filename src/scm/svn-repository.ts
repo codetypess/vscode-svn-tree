@@ -52,7 +52,7 @@ import {
     shouldOnlyLogErrorToOutput,
 } from "./output-channel-utils";
 import { parseBlameLines, type ParsedBlameLine } from "./svn-blame-utils";
-import { isCommittableStatus } from "./commit-utils";
+import { buildCommitQuickPickItems, isCommittableStatus } from "./commit-utils";
 import { getRelatedConflictPath } from "./conflict-artifact";
 import {
     getCheckoutDepthOptions,
@@ -932,13 +932,10 @@ export class SvnRepository implements vscode.Disposable {
         }
 
         const pickedResources = await vscode.window.showQuickPick<CommitQuickPickItem>(
-            resources.map((resource) => ({
-                label: resource.status.relativePath,
-                description: this.i18n.formatSvnStatus(resource.status.wcStatus),
-                detail: this.i18n.formatNodeKind(resource.status.kind),
-                picked: true,
-                absolutePath: resource.status.absolutePath,
-            })),
+            buildCommitQuickPickItems(
+                this.i18n,
+                resources.map((resource) => resource.status)
+            ),
             {
                 canPickMany: true,
                 title: this.i18n.t("commitSelectFilesTitle"),

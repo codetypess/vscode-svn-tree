@@ -39,7 +39,7 @@ Optional files:
 
 ## Active
 
-- None currently.
+- [History Panel Expanded Surface Polish](./2026-05-09-history-panel-expanded-surface-polish/spec.md)
 
 ## Done
 
@@ -57,3 +57,4 @@ Optional files:
 - [Patch Workflows](./2026-05-04-patch-workflows/spec.md)
 - [Repository SDD Mechanism](./2026-05-08-repository-sdd-mechanism/spec.md)
 - [Update Re-Click Output Access](./2026-05-08-update-notification-output-action/spec.md)
+- [Commit Picker Hide Unknown Kind](./2026-05-09-commit-picker-hide-unknown-kind/spec.md)
